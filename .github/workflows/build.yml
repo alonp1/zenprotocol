@@ -55,13 +55,23 @@ jobs:
           set -o pipefail
           mono .paket/paket.exe restore 2>&1 | tee /tmp/paket.log || { tail -40 /tmp/paket.log | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=paket::/'; exit 1; }
 
+      - name: Install .NET SDK
+        shell: bash
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet
+          echo "/usr/share/dotnet" >> $GITHUB_PATH
+          echo "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1" >> $GITHUB_ENV
+          echo "DOTNET_CLI_TELEMETRY_OPTOUT=1" >> $GITHUB_ENV
+
       - name: Build
         shell: bash
         run: |
           chmod +x packages/zen_z3_linux/output/z3-linux
           chmod +x packages/SpecFlow/tools/specflow.exe || true
+          dotnet --version
           set -o pipefail
-          msbuild src/zenprotocol.sln 2>&1 | tee /tmp/build.log || { grep -E "error|Error" /tmp/build.log | tail -40 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=msbuild::/'; exit 1; }
+          dotnet build src/zenprotocol.sln -c Debug -v minimal -nologo 2>&1 | tee /tmp/build.log || { grep -E "error" /tmp/build.log | sort -u | head -40 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=build::/'; exit 1; }
 
       - name: Test
         shell: bash
