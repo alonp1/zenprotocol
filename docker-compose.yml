@@ -14,4 +14,9 @@ services:
       - "9655:9655"               # P2P - open to the world
       - "127.0.0.1:11567:11567"   # API - this machine only, never expose
     volumes:
-      - ./zen-data:/data          # chain + wallet live here - back it up
+      # chain + wallet. Default: ./zen-data folder. On Windows set ZEN_DATA=zen-data in .env
+      # to use a Docker volume instead - a Windows folder is very slow for the database.
+      - ${ZEN_DATA:-./zen-data}:/data
+
+volumes:
+  zen-data:
