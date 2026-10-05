@@ -33,7 +33,10 @@ jobs:
           sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list
           sed -i '/buster-updates/d' /etc/apt/sources.list
           apt-get -o Acquire::Check-Valid-Until=false update -y
-          apt-get install -y -qq git fsharp libgomp1 libstdc++6 liblmdb0
+          apt-get install -y -qq git fsharp libgomp1 libstdc++6 liblmdb0 ca-certificates curl
+          # Mono keeps its own cert store; refresh it with a current Mozilla bundle
+          curl -fsSL https://curl.se/ca/cacert.pem -o /tmp/cacert.pem
+          cert-sync /tmp/cacert.pem
 
       - uses: actions/checkout@v4
 
@@ -44,6 +47,7 @@ jobs:
           mono .paket/paket.exe restore 2>&1 | tee /tmp/paket.log || { tail -40 /tmp/paket.log | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=paket::/'; exit 1; }
 
       - name: Build
+        shell: bash
         run: |
           chmod +x packages/zen_z3_linux/output/z3-linux
           chmod +x packages/SpecFlow/tools/specflow.exe || true
@@ -51,6 +55,7 @@ jobs:
           msbuild src/zenprotocol.sln 2>&1 | tee /tmp/build.log || { grep -E "error|Error" /tmp/build.log | tail -40 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=msbuild::/'; exit 1; }
 
       - name: Test
+        shell: bash
         run: |
           cp packages/zen_secp256k1_linux/output/libsecp256k1.so /usr/lib
           set -o pipefail
