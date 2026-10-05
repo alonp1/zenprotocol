@@ -20,7 +20,7 @@ echo "== Downloading snapshot (resumable)"
 curl -fL -C - -o zen-node.zip "$URL"
 
 echo "== Checking archive"
-unzip -tq zen-node.zip
+unzip -tq zen-node.zip || { rm -f zen-node.zip; echo "Archive is corrupt - deleted it. Run this script again to download a fresh copy."; exit 1; }
 
 echo "== Extracting"
 rm -rf extract && mkdir extract
