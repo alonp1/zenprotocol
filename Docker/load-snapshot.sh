@@ -26,20 +26,23 @@ echo "== Extracting"
 rm -rf extract && mkdir extract
 unzip -q zen-node.zip -d extract
 
-SRC=$(find extract -type d -name blockchain -path "*/$CHAIN/blockchain" | head -1)
-[ -n "$SRC" ] || { echo "No $CHAIN/blockchain folder found in the snapshot:"; find extract -maxdepth 4 -type d; exit 1; }
+# the chain folder holds blockchaindb (+ contracts, addressdb...); find it by its database folder
+SRC=$(find extract -type d -path "*/$CHAIN/blockchain*" | head -1)
+[ -n "$SRC" ] || { echo "No $CHAIN/blockchain* folder found in the snapshot:"; find extract -maxdepth 4 -type d; exit 1; }
 SRC_CHAIN=$(dirname "$SRC")
 echo "snapshot chain folder: $SRC_CHAIN"
-ls "$SRC_CHAIN"
+ls -la "$SRC_CHAIN"
 
 echo "== Replacing chain data (wallet kept)"
 mkdir -p "$DATA/$CHAIN"
-for d in blockchain contracts addressdb; do
-  if [ -d "$SRC_CHAIN/$d" ]; then
-    rm -rf "${DATA:?}/$CHAIN/$d"
-    mv "$SRC_CHAIN/$d" "$DATA/$CHAIN/$d"
-    echo "loaded $d"
-  fi
+for item in "$SRC_CHAIN"/*; do
+  name=$(basename "$item")
+  case "$name" in
+    wallet*) echo "skipped $name (wallet)"; continue;;
+  esac
+  rm -rf "${DATA:?}/$CHAIN/$name"
+  mv "$item" "$DATA/$CHAIN/$name"
+  echo "loaded $name"
 done
 
 cd "$DATA" && rm -rf "$TMP"
