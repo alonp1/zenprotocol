@@ -5,6 +5,8 @@ services:
       dockerfile: Docker/Dockerfile
     container_name: zen-node
     restart: unless-stopped
+    cpus: "${ZEN_CPUS:-1.0}"        # cap CPU so other services on the host stay responsive
+    mem_limit: "${ZEN_MEM:-2g}"
     environment:
       MINER_THREADS: "${MINER_THREADS:-0}"   # e.g. MINER_THREADS=2
       EXTERNAL_IP: "${EXTERNAL_IP:-}"        # public IP, optional
