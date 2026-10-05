@@ -2,6 +2,10 @@ name: snapshot-test
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - Docker/load-snapshot.sh
+      - .github/workflows/snapshot-test.yml
 
 jobs:
   snapshot:
