@@ -20,8 +20,10 @@ function start(args) {
         });
     }
     else {
+        // inherit the console so output is shown and interactive prompts (passwords) work on Windows
         node = proc.spawn(nodePath,args, {
-            cwd: workingDirectory
+            cwd: workingDirectory,
+            stdio: 'inherit'
         });
     }
 
