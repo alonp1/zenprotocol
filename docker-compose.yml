@@ -1,0 +1,15 @@
+services:
+  zen-node:
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile
+    container_name: zen-node
+    restart: unless-stopped
+    environment:
+      MINER_THREADS: "${MINER_THREADS:-0}"   # e.g. MINER_THREADS=2
+      EXTERNAL_IP: "${EXTERNAL_IP:-}"        # public IP, optional
+    ports:
+      - "9655:9655"               # P2P - open to the world
+      - "127.0.0.1:11567:11567"   # API - this machine only, never expose
+    volumes:
+      - ./zen-data:/data          # chain + wallet live here - back it up

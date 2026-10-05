@@ -1,12 +1,29 @@
-FROM mono
+# Zen Protocol node (+ optional CPU miner) - official release 1.0.13 (no version expiry)
+#
+# Stage 1: fetch the released binaries from the Zen npm registry
+FROM node:20-bookworm-slim AS fetch
+ARG ZEN_VERSION=1.0.13
+RUN npm config set @zen:registry https://www.myget.org/F/zenprotocol/npm/ \
+ && npm install -g --ignore-scripts "@zen/zen-node@${ZEN_VERSION}" \
+ && cp -r "$(npm root -g)/@zen/zen-node/Release" /zen
 
-RUN curl -sL https://deb.nodesource.com/setup_12.x | bash -
-RUN apt-get update && apt-get install -y nodejs liblmdb0 unzip wget libgomp1
-RUN /usr/bin/npm i -g npm
+# Stage 2: runtime on Mono 6.12
+FROM mono:6.12
+RUN sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list \
+ && sed -i '/buster-updates/d' /etc/apt/sources.list \
+ && apt-get -o Acquire::Check-Valid-Until=false update \
+ && apt-get install -y --no-install-recommends liblmdb0 libgomp1 curl \
+ && rm -rf /var/lib/apt/lists/*
 
-RUN /usr/bin/npm config set @zen:registry https://www.myget.org/F/zenprotocol/npm/
-RUN /usr/bin/npm install @zen/zen-node@latest -g
+COPY --from=fetch /zen /zen
+COPY Docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh /zen/z3-linux 2>/dev/null || chmod +x /entrypoint.sh
 
-CMD ["zen-node"]
+WORKDIR /zen
+VOLUME /data
+EXPOSE 9655 11567
 
+HEALTHCHECK --interval=2m --timeout=10s --start-period=10m \
+  CMD curl -fs http://127.0.0.1:11567/blockchain/info >/dev/null || exit 1
 
+ENTRYPOINT ["/entrypoint.sh"]

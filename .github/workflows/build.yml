@@ -1,0 +1,57 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build node image
+        run: docker build -f Docker/Dockerfile -t zen-node:ci .
+      - name: Smoke test - node starts and syncs
+        run: |
+          docker run -d --name zn zen-node:ci
+          sleep 120
+          docker logs zn 2>&1 | tail -60
+          docker exec zn curl -fs http://127.0.0.1:11567/blockchain/info
+
+  build:
+    runs-on: ubuntu-latest
+    container: mono:6.12
+    timeout-minutes: 90
+    steps:
+      - name: Point Debian buster apt to the archive (buster is EOL)
+        run: |
+          sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list
+          sed -i '/buster-updates/d' /etc/apt/sources.list
+          apt-get -o Acquire::Check-Valid-Until=false update -y
+          apt-get install -y -qq git fsharp libgomp1 libstdc++6 liblmdb0
+
+      - uses: actions/checkout@v4
+
+      - name: Restore packages (paket)
+        run: mono .paket/paket.exe restore
+
+      - name: Build
+        run: |
+          chmod +x packages/zen_z3_linux/output/z3-linux
+          chmod +x packages/SpecFlow/tools/specflow.exe || true
+          msbuild src/zenprotocol.sln
+
+      - name: Test
+        run: |
+          cp packages/zen_secp256k1_linux/output/libsecp256k1.so /usr/lib
+          ./run-tests
+
+      - name: Upload node binaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zen-node-bin
+          path: src/Node/bin/Debug/
+          if-no-files-found: ignore
