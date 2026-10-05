@@ -67,11 +67,11 @@ docker compose exec zen-node mono zen-cli.exe address
 
 `wallet-create` לא מציג את 24 המילים; `mnemonicphrase` מציג אותן. לרשום על נייר.
 
-6. להאיץ את הסנכרון בזמן ההמתנה: `Set-Content .env "ZEN_CPUS=3.0"` ואז `docker compose up -d`
+6. להגדיר volume ולהאיץ את הסנכרון: `Set-Content .env "ZEN_CPUS=3.0`nZEN_DATA=zen-data"`, לטעון את הגיבוי (בפרק הבא), ואז `docker compose up -d`
 7. אחרי שהסנכרון מסתיים, להפעיל כרייה:
 
 ```
-Set-Content .env "MINER_THREADS=2`nZEN_CPUS=2.0"
+Set-Content .env "MINER_THREADS=2`nZEN_CPUS=2.0`nZEN_DATA=zen-data"
 docker compose up -d
 ```
 
@@ -79,6 +79,25 @@ docker compose up -d
 
 - Settings ← System ← Power ← Sleep: **Never** כשהמחשב מחובר לחשמל
 - Docker Desktop ← Settings ← General: לסמן **Start Docker Desktop when you sign in**
+
+## קיצור הסנכרון עם גיבוי (מומלץ)
+
+גיבוי רשמי של הבלוקצ'יין מפברואר 2023 (1.8GB) מקצר את הסנכרון הראשוני ב-58%: ה-node עולה בבלוק 606,824 במקום 0. הטעינה לא נוגעת בארנק. מריצים בחלון אחד בלבד – שתי הורדות במקביל משחיתות את הקובץ.
+
+```
+docker compose down
+docker compose build
+docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
+docker compose up -d
+```
+
+ב-Windows: לוודא קודם ש-`.env` כולל `ZEN_DATA=zen-data`, כדי שהנתונים יישמרו ב-volume של Docker ולא בתיקיית Windows האיטית. אם ארנק המיינר נוצר לפני המעבר ל-volume, לייבא אותו מחדש:
+
+```
+docker compose exec zen-node mono zen-cli.exe import
+```
+
+אם מתקבלת השגיאה `invalid compressed data`, הקובץ פגום ונמחק אוטומטית – להריץ שוב את פקודת הטעינה.
 
 ## פקודות שימושיות
 
