@@ -1,6 +1,6 @@
 # Running a Zen node / miner with Docker
 
-Works on Linux, macOS and Windows (Docker Desktop). Uses the official 1.0.13 release (no version expiry).
+Works on Linux, macOS and Windows (Docker Desktop). On Windows use Docker - the native Windows node fails to create wallets ('cannot derive'). Uses the official 1.0.13 release (no version expiry).
 
 ## 1. Start the node
 
@@ -23,9 +23,10 @@ The miner pays rewards to the node's own wallet. Use a **new** wallet here, not 
 
 ```bash
 docker compose exec zen-node mono zen-cli.exe wallet-create
+docker compose exec zen-node mono zen-cli.exe mnemonicphrase
 docker compose exec zen-node mono zen-cli.exe address
 ```
-Write down the 24-word phrase it prints, offline. Anyone with it controls the rewards.
+`wallet-create` does not print the words - `mnemonicphrase` does. Write down the 24 words, offline. Anyone with it controls the rewards.
 
 ## 3. Turn on mining
 
