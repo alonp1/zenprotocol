@@ -17,7 +17,10 @@ RUN sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|
 
 COPY --from=fetch /zen /zen
 COPY Docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh /zen/z3-linux 2>/dev/null || chmod +x /entrypoint.sh
+# strip Windows CRLF (git autocrlf on Windows checkouts) so bash can run the script
+RUN sed -i "s/\r$//" /entrypoint.sh \
+ && chmod +x /entrypoint.sh \
+ && (chmod +x /zen/z3-linux 2>/dev/null || true)
 
 WORKDIR /zen
 VOLUME /data
