@@ -19,10 +19,11 @@ jobs:
       - name: inventory
         shell: bash
         run: |
+          set +e +o pipefail
           {
           for d in packages/*/; do
             n=$(basename "$d")
-            v=$(grep -m1 -oP '(?<=<version>)[^<]+' "$d"/*.nuspec 2>/dev/null || echo "?")
+            v=$(ls "$d" | grep -oE '[0-9]+\.[0-9]+[0-9.]*[^ ]*\.nupkg' | sed 's/\.nupkg$//' | head -1)
             libs=$(ls "$d/lib" 2>/dev/null | tr '\n' ' ')
             tools=$( [ -d "$d/tools" ] && echo tools || true)
             echo "$n|$v|$libs|$tools"
