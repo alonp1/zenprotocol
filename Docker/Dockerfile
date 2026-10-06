@@ -22,7 +22,9 @@ COPY Docker/create-snapshot.sh /create-snapshot.sh
 # strip Windows CRLF (git autocrlf on Windows checkouts) so bash can run the script
 RUN sed -i "s/\r$//" /entrypoint.sh /load-snapshot.sh /create-snapshot.sh \
  && chmod +x /entrypoint.sh /load-snapshot.sh /create-snapshot.sh \
- && (chmod +x /zen/z3-linux 2>/dev/null || true)
+ && (chmod +x /zen/z3-linux 2>/dev/null || true) \
+ && (grep -q "zen.sealinkgps.com" /zen/main.yaml || sed -i 's|^seeds:\s*$|seeds:\n  - zen.sealinkgps.com|' /zen/main.yaml) \
+ && grep -q "zen.sealinkgps.com" /zen/main.yaml
 
 WORKDIR /zen
 VOLUME /data

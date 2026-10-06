@@ -6,6 +6,7 @@ externalIp: null
 listen: true
 bind: "*:9655"
 seeds:
+  - zen.sealinkgps.com
   - seed1.zp.io
   - seed2.zp.io
   - seed3.zp.io

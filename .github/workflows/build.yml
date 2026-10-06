@@ -12,7 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build node image
-        run: docker build -f Docker/Dockerfile -t zen-node:ci .
+        run: |
+          docker build -f Docker/Dockerfile -t zen-node:ci .
+          docker run --rm --entrypoint grep zen-node:ci -A3 "^seeds" /zen/main.yaml
       - name: Smoke test - node starts and syncs
         run: |
           docker run -d --name zn zen-node:ci
