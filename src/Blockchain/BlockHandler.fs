@@ -11,7 +11,7 @@ open Blockchain.Tally.Repository
 open Messaging
 open Events
 open State
-open Logary.Message
+open Infrastructure.LogEvent
 open Environment
 
 module ExtHeader = ExtendedBlockHeader

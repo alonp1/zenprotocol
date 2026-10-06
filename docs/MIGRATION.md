@@ -11,7 +11,7 @@ Run the node on .NET 8 instead of Mono 6.12 (unmaintained, Debian 10 base withou
 | # | Stage | Risk | Status |
 | --- | --- | --- | --- |
 | 1 | Convert all 23 projects to SDK-style, still `net47` on Mono | Low | Done – builds with the .NET 8 SDK, all tests pass |
-| 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | In progress (dependency map below) |
+| 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | In progress: 4 of 9 done (map below). CI now builds the node from source and syncs it against mainnet |
 | 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Planned – needs a dedicated runner (>6 h job) |
 | 4 | Retarget libraries and node to `net8.0`; F\* keeps running as an external tool on Mono | Medium | Planned |
 | 5 | Contract pipeline on .NET 8: F# compiler service, in-memory contract loading | High | Planned |
@@ -30,9 +30,9 @@ Argu 5.1, AsyncIO, NetMQ 4, FsPickler 5.2, FSharp.Data 3, FSharp.Control.Reactiv
 | --- | --- | --- | --- |
 | FSharp.Core | 4.3.4 | everywhere | Upgrade to 8.x |
 | FSharp.Configuration | 1.5.0 | – | Done: replaced by a small YAML loader in `Node/Program.fs` |
-| Base58Check | 0.2.0 | 0 / 0 | Unused – remove |
-| Logary | 4.2.1 (`net452`) | 33 / 0 files | Route all logging through `Infrastructure/Log.fs`, then swap the backend (Logary 5 or Microsoft.Extensions.Logging) |
-| NodaTime | 1.3.2 | via Logary | Goes with Logary |
+| Base58Check | 0.2.0 | 0 / 0 | Done: removed (unused) |
+| Logary | 4.2.1 (`net452`) | 33 / 0 files | Done: replaced by `Infrastructure.LogEvent` + `Infrastructure.Log` (same API and output format) |
+| NodaTime | 1.3.2 | via Logary | Done: removed with Logary |
 | FsNetMQ | 0.2.8 (`net452`) | 19 / 12 files | Upgrade to a `netstandard2.0` release, or vendor the source |
 | FSharpx.Extras / Async / Collections | 2.2 / 1.13 / 1.17 | 8 / 0 files | Upgrade to current `netstandard2.0` releases |
 | FsBech32 | 0.1.5 (`net47`) | 18 / 7 files | Zen Protocol library with public source – rebuild for `netstandard2.0` |

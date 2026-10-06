@@ -6,7 +6,7 @@ open Consensus
 open Blockchain.EffectsWriter
 open Infrastructure
 open Infrastructure.Timestamp
-open Logary.Message
+open Infrastructure.LogEvent
 
 let treshhold = 500ul
 

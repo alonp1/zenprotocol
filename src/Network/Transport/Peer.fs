@@ -3,7 +3,7 @@ module Network.Transport.Peer
 open FsNetMQ
 open Network
 open Infrastructure
-open Logary.Message
+open Infrastructure.LogEvent
 
 module RoutingId =
     let toBytes (FsNetMQ.RoutingId.RoutingId bytes) = bytes

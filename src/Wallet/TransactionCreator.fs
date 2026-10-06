@@ -11,7 +11,7 @@ open Result
 open Wallet
 open Types
 open Serialization
-open Logary.Message
+open Infrastructure.LogEvent
 
 module ZData = Zen.Types.Data
 module Cost = Zen.Cost.Realized

@@ -5,7 +5,7 @@ open Infrastructure
 open Consensus
 open Consensus.Chain
 open Endpoint
-open Logary.Message
+open Infrastructure.LogEvent
 
 module Actor = FsNetMQ.Actor
 

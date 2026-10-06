@@ -11,7 +11,7 @@ open Types
 open Crypto
 open Messaging.Services.AddressDB
 open Result
-open Logary.Message
+open Infrastructure.LogEvent
 
 type ActorStatus =
     | Running of View.T

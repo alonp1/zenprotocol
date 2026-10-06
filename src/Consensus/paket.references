@@ -3,5 +3,4 @@ FSharp.Core redirects: on
 FSharp.Compiler.Tools
 FsNetMQ
 FSharpx.Extras
-Logary
 Zulib

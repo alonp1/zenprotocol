@@ -4,7 +4,7 @@ open Blockchain
 open Consensus
 open Types
 open Infrastructure
-open Logary.Message
+open Infrastructure.LogEvent
 open Environment
 open Blockchain.Tally
 

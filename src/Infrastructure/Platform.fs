@@ -1,4 +1,4 @@
-﻿module Infrastructure.Platform
+module Infrastructure.Platform
 
 open System
 open System.IO
@@ -6,7 +6,7 @@ open System.Text
 open System.Diagnostics
 open System.Runtime.InteropServices
 open Exception
-open Logary.Message
+open Infrastructure.LogEvent
 
 [<DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true )>]
 extern uint16 GetShortPathName(

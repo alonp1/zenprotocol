@@ -12,7 +12,7 @@ open Crypto
 open Messaging.Services.Wallet
 open Result
 open System
-open Logary.Message
+open Infrastructure.LogEvent
 open Wallet
 
 type AccountStatus =

@@ -8,7 +8,7 @@ open Miner
 open Consensus.Serialization
 open Consensus.Types
 open System
-open Logary.Message
+open Infrastructure.LogEvent
 
 type private State =
     | Exit

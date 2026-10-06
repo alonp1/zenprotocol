@@ -1,4 +1,4 @@
-﻿module Infrastructure.ZFStar
+module Infrastructure.ZFStar
 
 open System
 open System.Reflection
@@ -6,7 +6,7 @@ open System.IO
 open Microsoft.FSharp.Compiler.SourceCodeServices
 open Exception
 open Infrastructure.Result
-open Logary.Message
+open Infrastructure.LogEvent
 open FSharpx.Functional.Prelude
 
 let private fsChecker = FSharpChecker.Create()

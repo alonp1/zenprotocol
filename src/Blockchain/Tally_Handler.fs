@@ -7,7 +7,7 @@ open Consensus
 open Chain
 open Consensus
 open Infrastructure
-open Logary.Message
+open Infrastructure.LogEvent
 open Types
 open UtxoSet
 open Functional

@@ -1,4 +1,4 @@
-﻿module Network.Main
+module Network.Main
 
 open System.Net
 open FSharp.Control
@@ -15,7 +15,7 @@ open Network.Message
 open Network.Transport
 open Serialization
 open Consensus.Chain
-open Logary.Message
+open Infrastructure.LogEvent
 
 type State = Connector.T * TransactionPublisher.T * string option
 
