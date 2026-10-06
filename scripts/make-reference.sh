@@ -44,7 +44,7 @@ cp "$STATE"/*.json "$OUT"/
 
 : > "$OUT/blocks.txt"
 for h in $(seq "$STEP" "$STEP" "$H") "$H"; do
-  hash=$(curl -fs "http://$API/blockchain/block?blockNumber=$h" | grep -o '"hash":"[0-9a-f]*"' | head -1 | cut -d'"' -f4)
+  hash=$(curl -fs "http://$API/blockchain/block?blockNumber=$h" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hash"])' || true)
   [ -n "$hash" ] || { echo "no hash for block $h"; exit 1; }
   echo "$h $hash" >> "$OUT/blocks.txt"
 done
