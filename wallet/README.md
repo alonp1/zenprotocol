@@ -11,13 +11,16 @@ Built on audited libraries: `@scure/bip39`, `@scure/bip32`, `@noble/curves` (sec
 | Recovery phrase | BIP39, 24 words, no passphrase | `test/keys.test.js` |
 | Keys | BIP32 secp256k1, account `m/44'/258'/0'`, receive `…/0/i`, change `…/1/i` | same address as zen-node 1.0.13 for the CI test phrase |
 | Address | bech32, hrp `zen`, version 0, SHA3-256 of the compressed public key | round trip |
+| Serialization | port of `src/Consensus/Serialization.fs` (VarInt, amount encoding, assets, locks, witnesses, contract data) | 202 real mainnet transactions from 101 blocks re-serialize byte for byte (`test/fixtures/blocks.json`) |
+| Transaction hash | SHA3-256 of the transaction without witnesses | 473 mainnet signatures verify against our hashes |
+| Signing | secp256k1 ECDSA, RFC6979, low-S, 64-byte compact; one `TxHash` PK witness per input; no fee output | `test/tx.test.js` |
 
 ## Plan
 
 1. Keys and addresses - done
-2. Transaction serialization and signing, checked byte for byte against the node
+2. Transaction serialization and signing, checked byte for byte against mainnet - done
 3. Balance, history, send, receive through the public node
-4. CGP voting (allocation and payout ballots)
+4. CGP voting: contract witness to the voting contract, command `Allocation` / `Payout` / `Nomination`, message body `{<command>: hex(ballot), Signature: {pk: sig}}`, signatures over SHA3(hex(U32 interval) + hex(String phase) + hex(String ballot)) - see `src/Blockchain/Tally_VoteParser.fs`
 5. UI, security review, release
 
 ```
