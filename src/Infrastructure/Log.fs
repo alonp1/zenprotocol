@@ -18,7 +18,7 @@ let private gate = obj ()
 
 let private placeholder = Regex(@"\{([A-Za-z0-9_]+)\}", RegexOptions.Compiled)
 
-let private render (event: Event) =
+let private render (event: LogEntry) =
     placeholder.Replace(event.template, fun m ->
         match List.tryFind (fun (name, _) -> name = m.Groups.[1].Value) event.fields with
         | Some (_, null) -> "null"
@@ -42,7 +42,7 @@ let private file =
             Some writer
         with _ -> None)
 
-let private write level (build: LogLevel -> Event) =
+let private write level (build: LogLevel -> LogEntry) =
     if level >= minLevel then
         let line = sprintf "[%s %s] %s" (DateTime.Now.ToString "HH:mm:ss") (tag level) (render (build level))
         lock gate (fun () ->

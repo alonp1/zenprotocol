@@ -9,7 +9,7 @@ type LogLevel =
     | Warn = 3
     | Error = 4
 
-type Event =
+type LogEntry =
     {
         level: LogLevel
         template: string
@@ -17,9 +17,9 @@ type Event =
     }
 
 /// Start an event from a message template with {placeholders}.
-let eventX (template: string) (level: LogLevel) : Event =
+let eventX (template: string) (level: LogLevel) : LogEntry =
     { level = level; template = template; fields = [] }
 
 /// Set the value of a {placeholder}. A later value for the same name wins.
-let setField (name: string) (value: 'a) (event: Event) : Event =
+let setField (name: string) (value: 'a) (event: LogEntry) : LogEntry =
     { event with fields = (name, box value) :: event.fields }
