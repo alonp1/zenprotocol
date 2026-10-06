@@ -2,7 +2,7 @@
 
 Works on Linux, macOS and Windows (Docker Desktop). On Windows use Docker – the native Windows node fails to create wallets (`cannot derive`). Uses the official 1.0.13 release (no version expiry).
 
-Full guide (server, home miner, snapshots, troubleshooting): [docs/SETUP.md](../docs/SETUP.md)
+Full guide (server, home miner, snapshots, troubleshooting): [docs/SETUP.md](../docs/SETUP.md) · .NET 8 migration plan: [docs/MIGRATION.md](../docs/MIGRATION.md)
 
 Network status, seed and snapshots: **https://zen.sealinkgps.com**
 
