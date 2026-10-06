@@ -7,7 +7,7 @@
 set -euo pipefail
 : "${TOKEN:?set TOKEN from the GitHub 'New self-hosted runner' page}"
 REPO="${REPO:-alonp1/zenprotocol}"
-VER="${RUNNER_VERSION:-2.328.0}"
+VER="${RUNNER_VERSION:-2.337.0}"
 
 apt-get update -y && apt-get install -y curl git
 command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
