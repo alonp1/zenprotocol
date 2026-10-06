@@ -130,6 +130,16 @@ docker compose exec zen-node mono zen-cli.exe wallet-create
 
 `removewallet` asks for the current wallet's password.
 
+**Desktop Zen Wallet on the home node.** The wallet's default remote node (`mainnet-nodes.zp.io`) disconnects often ("Node is inaccessible"). Point it at your own node:
+
+```
+Add-Content .env "WALLET_API=1"
+docker compose up -d
+docker compose logs -f | Select-String "AddressDB"
+```
+
+Wait for `AddressDB synced to block ...`, then in the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**. The wallet keeps its own keys; the node only serves chain data.
+
 ## Useful commands
 
 Run from the `zenprotocol` folder. On Windows use `curl.exe` instead of `curl`.
@@ -168,4 +178,5 @@ In sync when `blocks` equals `headers` and `initialBlockDownload` is `false`. Co
 | `no configuration file provided` | Command run outside `zenprotocol` | `cd zenprotocol` |
 | `account already exist` | Node already has a wallet | `removewallet`, then `wallet-create` |
 | Slow sync on Windows | Data in a Windows folder | `ZEN_DATA=zen-data` in `.env`, reload the snapshot |
+| Desktop wallet: `Node is inaccessible` | Remote node `mainnet-nodes.zp.io` unreliable | `WALLET_API=1`, switch wallet to Local Node |
 | Versions before 1.0.13 stop working | Built-in expiry date | Use 1.0.13 only |
