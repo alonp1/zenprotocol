@@ -36,6 +36,36 @@ let eventHandler client event dataAccess session status =
         |> Running
     | status -> status
 
+/// Initial build / long catch-up in batches, one commit per batch. GetAllBlocks would load the
+/// whole chain into memory at once, which a 1M+ block chain does not survive. Stops at the first
+/// block that does not extend the AddressDB tip (fork) and leaves the rest to `sync`.
+let private catchUp databaseContext dataAccess client =
+    let batch = 5000
+    let rec loop () =
+        match Blockchain.getTip client with
+        | Some (_, tipHeader) ->
+            let account =
+                use session = DatabaseContext.createSession databaseContext
+                DataAccess.Tip.tryGet dataAccess session
+                |> Option.defaultValue Repository.empty
+            if tipHeader.blockNumber > account.blockNumber + uint32 batch then
+                let blocks =
+                    Blockchain.getMainBlocks client (int account.blockNumber) batch
+                    |> List.map (fun b -> Serialization.Block.deserialize b |> Option.get)
+                match blocks with
+                | first :: _ when first.header.parent = account.blockHash ->
+                    use session = DatabaseContext.createSession databaseContext
+                    blocks |> List.iter (Repository.addBlock dataAccess session)
+                    Session.commit session
+                    eventX "AddressDB catch-up at block #{blockNumber} of #{tip}"
+                    >> setField "blockNumber" (account.blockNumber + uint32 (List.length blocks))
+                    >> setField "tip" tipHeader.blockNumber
+                    |> Log.info
+                    loop ()
+                | _ -> ()
+        | None -> ()
+    loop ()
+
 let private sync dataAccess session client =
     match Blockchain.getTip client with
     | Some (tipBlockHash, tipHeader) ->
@@ -179,23 +209,26 @@ let main dataPath busName chain (isRunning:bool) (wipe:Wipe) =
         let dataAccess = DataAccess.init databaseContext
 
         let client = ServiceBus.Client.create busName
+        if isRunning then
+            if wipe = Reset then
+                eventX "Resetting AddressDB" |> Log.info
+                use session = DatabaseContext.createSession databaseContext
+                Repository.reset dataAccess session
+                Session.commit session
+            else
+                use session = DatabaseContext.createSession databaseContext
+                if Option.isNone (DataAccess.Tip.tryGet dataAccess session) then
+                    eventX "Creating AddressDB" |> Log.info
+                    Repository.init dataAccess session
+                    Session.commit session
+            catchUp databaseContext dataAccess client
         let status =
             use session = DatabaseContext.createSession databaseContext
             let status =
                 if isRunning then
-                    match wipe, DataAccess.Tip.tryGet dataAccess session with
-                    | Reset, Some _ ->
-                        eventX "Resetting AddressDB"
-                        |> Log.info
-                        Repository.reset dataAccess session
-                    | _, Some _ ->
-                        eventX "Syncing AddressDB"
-                        |> Log.info
-                    | _, None -> 
-                        eventX "Creating AddressDB"
-                        |> Log.info
-                        Repository.init dataAccess session
-                        
+                    // reset / init were done before the batched catch-up above
+                    eventX "Syncing AddressDB"
+                    |> Log.info
                     sync dataAccess session client
                 else
                     Stop

@@ -15,7 +15,7 @@ All installs use the official 1.0.13 release, the first without a version expiry
 
 ### Public node for wallets
 
-Light wallets need a node with an address index (AddressDB). The first index build loads every block into memory (8+ GB RAM), so it is built once on a large machine and shipped inside the snapshot.
+Light wallets need a node with an address index (AddressDB). Release 1.0.13 cannot build it from scratch on today's chain (it loads every block into one message and crashes), so the index is built once with the source build, which indexes in batches, and shipped inside the snapshot. Release nodes then keep it up to date block by block.
 
 1. On a machine with 16 GB RAM and a synced node volume (the replay runner): push to the `make-addressdb` branch, or run `bash scripts/make-addressdb-snapshot.sh`. The snapshot lands in `~/zen-out` (runner: `/home/runner/zen-out`).
 2. Serve it temporarily from that machine: `cd /home/runner/zen-out && python3 -m http.server 8000` (allow TCP 8000 in its firewall).
@@ -153,15 +153,15 @@ docker compose exec zen-node mono zen-cli.exe wallet-create
 
 `removewallet` asks for the current wallet's password.
 
-**Desktop Zen Wallet on the home node.** The wallet's default remote node (`mainnet-nodes.zp.io`) disconnects often ("Node is inaccessible"). Point it at your own node:
+**Desktop Zen Wallet on the home node.** The wallet's default remote node (`mainnet-nodes.zp.io`) disconnects often ("Node is inaccessible"). Point it at your own node. First load a snapshot that already contains the address index (see *Public node for wallets*; release 1.0.13 cannot build the index from scratch and restarts in a loop), then:
 
 ```
-Add-Content .env "WALLET_API=1`nZEN_MEM=7g"
+Add-Content .env "WALLET_API=1"
 docker compose up -d
 docker compose logs -f | Select-String "AddressDB"
 ```
 
-The first index build loads every block into memory, hence `ZEN_MEM=7g` (needs 16 GB RAM in the PC). Wait for `AddressDB synced to block ...`, then in the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**. The wallet keeps its own keys; the node only serves chain data.
+Wait for `AddressDB synced to block ...`, then in the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**. The wallet keeps its own keys; the node only serves chain data.
 
 ## Useful commands
 
@@ -201,5 +201,6 @@ In sync when `blocks` equals `headers` and `initialBlockDownload` is `false`. Co
 | `no configuration file provided` | Command run outside `zenprotocol` | `cd zenprotocol` |
 | `account already exist` | Node already has a wallet | `removewallet`, then `wallet-create` |
 | Slow sync on Windows | Data in a Windows folder | `ZEN_DATA=zen-data` in `.env`, reload the snapshot |
-| Desktop wallet: `Node is inaccessible` | Remote node `mainnet-nodes.zp.io` unreliable | `WALLET_API=1`, switch wallet to Local Node |
+| Desktop wallet: `Node is inaccessible` | Remote node `mainnet-nodes.zp.io` unreliable | Snapshot with address index, `WALLET_API=1`, switch wallet to Local Node |
+| Node restarts every ~10 min after `Creating AddressDB` | 1.0.13 cannot index the full chain at once | Remove `WALLET_API`/`PUBLIC_NODE`, load a snapshot with the index |
 | Versions before 1.0.13 stop working | Built-in expiry date | Use 1.0.13 only |

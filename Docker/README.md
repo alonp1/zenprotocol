@@ -60,7 +60,7 @@ Or put `MINER_THREADS=2` and `ZEN_CPUS=2.0` in `.env`. Most cloud providers (Het
 
 The desktop wallet's default remote node (`mainnet-nodes.zp.io`) is no longer reliable. To use your own node instead:
 
-1. Add `WALLET_API=1` and `ZEN_MEM=7g` to `.env` and run `docker compose up -d`. The first start builds an address index and loads every block into memory, so it needs several GB of RAM (or load a snapshot that already contains the index). Watch for `AddressDB synced` in the log.
+1. Load a snapshot that contains the address index (release 1.0.13 cannot build it from scratch; see `docs/SETUP.md`), add `WALLET_API=1` to `.env` and run `docker compose up -d`. Watch for `AddressDB synced` in the log.
 2. In the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**.
 
 The wallet keeps its own keys; the node only serves chain data. The API stays bound to localhost.
