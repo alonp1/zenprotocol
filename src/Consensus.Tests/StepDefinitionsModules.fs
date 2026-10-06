@@ -129,7 +129,7 @@ let mutable testingState = {
     assets    = Map.empty
 }
 
-    module Keys =
+module Keys =
         let tryFindKey keyLabel = Map.tryFind keyLabel testingState.keys
 
         let findKey keyLabel =
@@ -168,7 +168,7 @@ let mutable testingState = {
                 | _ -> false)
 
     
-    module Contract =
+module Contract =
 
         module MessageBody =
             let initData dataLabel data =
@@ -287,7 +287,7 @@ let mutable testingState = {
                 |> Some
 
 
-    module Transaction =
+module Transaction =
 
         let updateTx txLabel tx =
             testingState <- { testingState with txs = Map.add txLabel tx testingState.txs }
@@ -433,7 +433,7 @@ let mutable testingState = {
             { tx with outputs = tx.outputs @ outputs }
             |> updateTx txLabel
     
-    module Asset =
+module Asset =
 
         let updateAsset assetLabel asset =
             testingState <- { testingState with assets = Map.add assetLabel asset testingState.assets }
@@ -473,7 +473,7 @@ let mutable testingState = {
                 let contractId, _ = Contract.getContractRecord value
                 Asset (contractId, Hash.zero)
 
-    module Amount =
+module Amount =
         let getAmount asset amount =
             if asset = Asset.Zen then
                 amount * 100_000_000UL
@@ -498,7 +498,7 @@ let mutable testingState = {
                 |> foldOutputs
             inputsTotal - outputsTotal
 
-    module Block =
+module Block =
         
         let createGenesis rootTxLabels =
             let rootTxs =
@@ -577,7 +577,7 @@ let mutable testingState = {
             |> Map.map (fun _ bk -> bk.header)
             |> Map.tryFindKey (fun _ block' -> block = block')
 
-    module Lock =
+module Lock =
         let getLock label =
             match Contract.tryFindContract label with
             | Some (contractId, _) ->
@@ -589,7 +589,7 @@ let mutable testingState = {
                 |> PublicKey.hash
                 |> Lock.PK
                 
-    module UtxoSet =
+module UtxoSet =
         
         /// fold on mentioned txs, fold on their outputs
         let fromTxs txs =
@@ -604,17 +604,17 @@ let mutable testingState = {
                 ) utxoset
             ) state.memoryState.utxoSet
 
-    module Spend =
+module Spend =
         let getSpend amount asset =
             [{ amount = amount; asset = asset }]
 
-    module Output =
+module Output =
         let getOutput amount asset keyLabel = {
             spend = List.head (Spend.getSpend amount (Asset.getAsset asset))
             lock = Lock.getLock keyLabel
         }
 
-    module Chain =
+module Chain =
         let extendChain' newBlockLabel txs parentBlockLabel (includeInChain : bool) =
 
             let block = Block.createBlock parentBlockLabel txs state
