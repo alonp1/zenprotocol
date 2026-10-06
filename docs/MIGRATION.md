@@ -12,7 +12,7 @@ Run the node on .NET 8 instead of Mono 6.12 (unmaintained, Debian 10 base withou
 | --- | --- | --- | --- |
 | 1 | Convert all 23 projects to SDK-style, still `net47` on Mono | Low | Done – builds with the .NET 8 SDK, all tests pass |
 | 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | 4 of 9 done. The rest are compiled into contracts or drag in FSharp.Core – gated on stage 3 |
-| 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Harness ready (`scripts/replay-test.sh`, `Docker/Dockerfile.source`); waiting for a self-hosted runner |
+| 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Done 2026-10-06: PASS from genesis to block 1,052,885; reference stored (see Reference file) |
 | 4 | Retarget libraries and node to `net8.0`; F\* keeps running as an external tool on Mono | Medium | Planned |
 | 5 | Contract pipeline on .NET 8: F# compiler service, in-memory contract loading | High | Planned |
 
@@ -62,17 +62,42 @@ Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, 
 
 ### Reference file
 
-The first full run compares the official 1.0.13 release and the source build side by side. After it passes, a reference is built from the release node's synced data so later runs can check a single node against it.
+**What it is.** A small record of the real mainnet as the official 1.0.13 node sees it: block hashes every 1000 blocks up to a fixed height, plus the CGP and supply state at that height. It is the yardstick for every later change to the node.
 
-1. While the replay server still exists, push to the `make-reference` branch. `reference.yml` runs `scripts/make-reference.sh` on the replay runner.
-2. The result is committed to the `reference-data` branch under `replay/reference/mainnet-<height>/`, so it lives in the repository and does not depend on any server or domain:
-   - `blocks.txt` – `<height> <hash>` every 1000 blocks plus the tip. The tip hash alone pins the whole chain (every header commits to its parent); the samples locate a divergence quickly.
-   - `cgp.json`, `cgp-history.json`, `totalzp.json`, `winner.json` – chain state at that height
-   - `README.txt` (source version, height, date) and `SHA256SUMS`
-3. Only after the reference is on `reference-data`, delete the replay server.
+**Why it matters.** Each block header contains the hash of its parent, so a matching hash at block N proves the whole chain up to N is identical. A node built from changed code (new dependencies, .NET 8, refactoring) that reproduces these hashes validated every historical block exactly like the original. Without the reference, each test would need the old node again: a second full sync, 10+ hours on a rented server.
+
+**Current reference**
+
+| | |
+| --- | --- |
+| Location | branch [`reference-data`](https://github.com/alonp1/zenprotocol/tree/reference-data/replay/reference), folder `replay/reference/mainnet-1052892/` |
+| Height | 1,052,892, tip hash `000000000041063146a68a17344bc87f1e37351bb497167ec6251bfc5fa1c686` |
+| Source | official zen-node 1.0.13 (npm release), synced from genesis on the replay server |
+| Created | 2026-10-06, right after the replay test passed (release and source build identical) |
+
+| File | Content |
+| --- | --- |
+| `blocks.txt` | `<height> <block hash>`, every 1000 blocks and the tip (1,053 lines). The tip hash pins the whole chain; the samples locate a divergence quickly |
+| `cgp.json`, `cgp-history.json` | CGP allocation and payout state at the reference height |
+| `totalzp.json` | total ZP issued at the reference height |
+| `winner.json` | last CGP vote result |
+| `README.txt` | source, height, creation time |
+| `SHA256SUMS` | checksums of all files above |
+
+**Where it lives and why there.** In the git repository, not on a server or the community domain, so it survives deleting the replay server, moving the website or changing domains. Every clone and fork of the repository carries it. Never edit it; a new reference goes in a new `mainnet-<height>` folder.
+
+**How to use it.** Sync the node under test (any build, any platform) past the reference height, then:
+
+```
+API=127.0.0.1:11567 bash scripts/check-against-reference.sh
+```
+
+The script fetches the newest reference from `reference-data`, verifies its checksums and compares all 1,053 block hashes with the node; when the node is exactly at the reference height it also compares the CGP and supply state. `RESULT: node matches the reference` (exit 0) is the gate for merging a node change.
+
+**How it was made, and making a new one.** `scripts/make-reference.sh` reads a synced official node; `.github/workflows/reference.yml` runs it on the replay runner when the `make-reference` branch is pushed and commits the result to `reference-data`. Make a reference only from the official release node, never from a modified build.
 
 ## Consensus safety rules
 
 - No change to serialization, hashing, difficulty, rewards, contract cost or CGP/tally logic as part of the migration.
-- A stage is merged only when CI is green and, from stage 4 on, the replay test reaches the same tip hash and CGP state as release 1.0.13.
+- A stage is merged only when CI is green and, from stage 4 on, the node passes `scripts/check-against-reference.sh` (same block hashes and CGP state as release 1.0.13).
 - Contract execution results (including cost) must be identical for every contract already on chain.
