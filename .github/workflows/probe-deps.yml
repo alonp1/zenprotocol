@@ -31,3 +31,6 @@ jobs:
           } > /tmp/inv.txt
           cat /tmp/inv.txt
           sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' /tmp/inv.txt | sed 's/^/::notice title=inventory::/'
+          grep -iE '^(z|system\.valuetuple)' /tmp/inv.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::notice title=zen::/'
+          for p in ZFStar Zen.FSharp.Compiler.Service ZFS-Tools Zulib; do echo "== $p"; find packages/$p -maxdepth 3 | head -30; done > /tmp/z.txt
+          sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' /tmp/z.txt | sed 's/^/::notice title=ztree::/'
