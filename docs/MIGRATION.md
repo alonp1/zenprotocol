@@ -11,8 +11,8 @@ Run the node on .NET 8 instead of Mono 6.12 (unmaintained, Debian 10 base withou
 | # | Stage | Risk | Status |
 | --- | --- | --- | --- |
 | 1 | Convert all 23 projects to SDK-style, still `net47` on Mono | Low | Done – builds with the .NET 8 SDK, all tests pass |
-| 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | In progress: 4 of 9 done (map below). CI now builds the node from source and syncs it against mainnet |
-| 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Planned – needs a dedicated runner (>6 h job) |
+| 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | 4 of 9 done. The rest are compiled into contracts or drag in FSharp.Core – gated on stage 3 |
+| 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Harness ready (`scripts/replay-test.sh`, `Docker/Dockerfile.source`); waiting for a self-hosted runner |
 | 4 | Retarget libraries and node to `net8.0`; F\* keeps running as an external tool on Mono | Medium | Planned |
 | 5 | Contract pipeline on .NET 8: F# compiler service, in-memory contract loading | High | Planned |
 
@@ -48,6 +48,17 @@ Argu 5.1, AsyncIO, NetMQ 4, FsPickler 5.2, FSharp.Data 3, FSharp.Control.Reactiv
 | ZFS-Tools 0.0.24 | Contract tooling | Source in the zenprotocol organisation; rebuild |
 | CGPContract 0.0.3 | Compiled CGP contract assembly | Must stay byte-compatible; verify with the replay test |
 | zen_z3_*, zen_secp256k1_* | Native Z3 and secp256k1 binaries | Native, framework-independent; keep |
+
+## Why the remaining stage-2 packages wait for stage 3
+
+Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, `FsBech32`, `BouncyCastle.Crypto`, `FSharp.Compatibility.OCaml` and `Zulib` (see `Infrastructure/ZFStar.fs`), and the CGP tally uses `FSharpx.Extras`. Changing any of them can change contract results or vote counting, so they are only touched once the replay test can prove identical behaviour. `FsNetMQ` 0.3.6 supports `netstandard2.0` but requires a newer `FSharp.Core`, so it goes with that upgrade. `net452` assemblies may also load unchanged on .NET 8; stage 4 will tell.
+
+## Running the replay test
+
+1. Create a server with 4+ dedicated cores, 16 GB RAM, 160 GB disk (Ubuntu 24.04). Hourly-billed; delete it after the run.
+2. GitHub → repository Settings → Actions → Runners → New self-hosted runner → copy the token.
+3. On the server: `TOKEN=<token> bash scripts/setup-replay-runner.sh`
+4. Push the commit to test to the `replay` branch. The report is uploaded as the `replay-report` artifact.
 
 ## Consensus safety rules
 
