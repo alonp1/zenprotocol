@@ -157,7 +157,7 @@ out = {
     "totalZP": total / 1e8 if total is not None else None,
     "targetBlockTime": TARGET_BLOCK_S,
     "avgBlockTime24h": round(avg_bt_24h, 1) if avg_bt_24h else None,
-    "blocks24h": len(day) - 1 if len(day) > 1 else 0,
+    "blocks24h": len(day),
     "hashrate24h": round(hashrate_24h) if hashrate_24h else None,
     "series": series,
     "miners24h": miners,
