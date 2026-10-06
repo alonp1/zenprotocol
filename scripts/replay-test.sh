@@ -22,6 +22,10 @@ log "== Building images"
 docker build -q -f Docker/Dockerfile -t zen-node:release . >/dev/null || { log "release image build failed"; exit 2; }
 docker build -q -f Docker/Dockerfile.source -t zen-node:source . >/dev/null || { log "source image build failed"; exit 2; }
 
+docker builder prune -af >/dev/null 2>&1 || true   # free build cache (disk is small)
+docker image prune -f >/dev/null 2>&1 || true
+log "free disk after build: $(df -h --output=avail / | tail -1)"
+
 for n in release source; do docker rm -f "replay-$n" >/dev/null 2>&1; docker volume rm -f "replay-$n" >/dev/null 2>&1; done
 docker run -d --name replay-release -v replay-release:/data -p 127.0.0.1:11601:11567 zen-node:release >/dev/null
 docker run -d --name replay-source  -v replay-source:/data  -p 127.0.0.1:11602:11567 zen-node:source  >/dev/null
@@ -37,7 +41,8 @@ while true; do
   R=$(info 11601); S=$(info 11602)
   rb=$(field "$R" blocks); sb=$(field "$S" blocks); hd=$(field "$R" headers)
   ribd=$(field "$R" initialBlockDownload); sibd=$(field "$S" initialBlockDownload)
-  log "release=${rb:-?} source=${sb:-?} headers=${hd:-?}"
+  log "release=${rb:-?} source=${sb:-?} headers=${hd:-?} disk_free=$(df -h --output=avail / | tail -1 | tr -d ' ')"
+  if [ "$(df --output=avail / | tail -1)" -lt 1048576 ]; then log "FAIL: less than 1 GB disk left"; exit 3; fi
   now=$(date +%s)
   if [ -n "$sb" ] && [ "$sb" != "$last_src" ]; then last_src=$sb; last_src_t=$now; fi
   if [ $(( (now - last_src_t) / 60 )) -ge "$STALL_MIN" ] && [ "${rb:-0}" -gt "${sb:-0}" ]; then
