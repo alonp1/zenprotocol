@@ -72,11 +72,10 @@ systemctl start zen-stats.service || echo "stats not built yet (node busy or syn
 
 echo "== HTTPS"
 if ! command -v certbot >/dev/null; then apt-get install -y certbot python3-certbot-nginx; fi
-if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect
-else
-  echo "certificate exists"
-fi
+# Always run: copying nginx-zen.conf above replaces the HTTPS block certbot added last time.
+# With an existing certificate this only re-installs it (no new issuance).
+certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email \
+  --redirect --keep-until-expiring
 
 echo "== Check"
 curl -fsS "https://$DOMAIN/api/info" && echo
