@@ -15,6 +15,7 @@ Run the node on .NET 8 instead of Mono 6.12 (unmaintained, Debian 10 base withou
 | 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Done 2026-10-06: PASS from genesis to block 1,052,885; reference stored (see Reference file) |
 | 4 | Retarget libraries and node to `net8.0`; F\* keeps running as an external tool on Mono | Medium | Planned |
 | 5 | Contract pipeline on .NET 8: F# compiler service, in-memory contract loading | High | Planned |
+| 6 | Load test on a private network: real throughput limit of Mono vs .NET 8 nodes | None (test only) | Planned, see Capacity and load test |
 
 ## Dependency map
 
@@ -95,6 +96,22 @@ API=127.0.0.1:11567 bash scripts/check-against-reference.sh
 The script fetches the newest reference from `reference-data`, verifies its checksums and compares all 1,053 block hashes with the node; when the node is exactly at the reference height it also compares the CGP and supply state. `RESULT: node matches the reference` (exit 0) is the gate for merging a node change.
 
 **How it was made, and making a new one.** `scripts/make-reference.sh` reads a synced official node; `.github/workflows/reference.yml` runs it on the replay runner when the `make-reference` branch is pushed and commits the result to `reference-data`. Make a reference only from the official release node, never from a modified build.
+
+## Capacity and load test
+
+**Theory (from the consensus code).** `maxBlockWeight` is 8,000,000,000 and a block comes every ~237 s (`Chain.fs`). A simple transfer (1 input, 2 outputs, ~250 bytes) weighs ~125,000: 100,000 for the PK witness plus 100 per byte (`Weight.fs`). That allows ~64,000 transfers per block, ~270 per second. Contract calls weigh 100 × their execution cost, so far fewer fit.
+
+**Practice: unknown.** Mainnet carries about 500 transactions a day, so the limit has never been reached. A full block would be ~16 MB. The likely bottlenecks are block validation speed (F# on Mono), propagation of large blocks between nodes, mempool handling and LMDB writes. The consensus limit is not the question; the question is how many transactions per second nodes validate and relay without falling behind.
+
+**Plan (stage 6, after stage 4 so both runtimes can be compared)**
+
+1. Private network: 3–5 nodes in Docker on one rented server, on the `local` chain (`--local`, debug build: 60 s blocks, minimal difficulty), one node mining with the built-in CPU miner. No mainnet coins involved.
+2. Funding: mine a few hundred blocks, then split the rewards into thousands of small outputs so many transactions can be signed in parallel.
+3. Load generator: a script on the wallet library (`wallet/src/tx.js`, already verified byte for byte against mainnet) that signs transfers and posts them to `/blockchain/publishtransaction` at a fixed rate, stepping up: 1, 10, 50, 100, 250 tx/s.
+4. Measure at each step: transactions accepted to the mempool per second, transactions per block, block validation time (node log), time for a block to reach the other nodes, CPU, RAM and disk per node, and whether any node falls behind the tip.
+5. Repeat with the .NET 8 build and compare. Publish the results in this file and on the stats page.
+
+Pass criterion for the network: the sustained rate at which every node stays at the tip, with block propagation well under the block interval.
 
 ## Consensus safety rules
 
