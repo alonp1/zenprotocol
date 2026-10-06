@@ -1,9 +1,9 @@
 {
-  "name": "zp-web-wallet",
+  "name": "zp-wallet",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Non-custodial web wallet for the ZP network (community project, not affiliated with Zen Protocol Ltd.)",
+  "description": "ZP Wallet - non-custodial web wallet for the ZP network (community project, not affiliated with Zen Protocol Ltd.)",
   "license": "MIT",
   "scripts": {
     "test": "node --test test/*.test.js",

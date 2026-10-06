@@ -1,4 +1,4 @@
-# ZP web wallet (work in progress)
+# ZP Wallet (work in progress)
 
 Non-custodial browser wallet for the ZP network. Keys are derived and kept in the browser; the wallet talks to a public node (`/node/` on the community site) only for balances and to broadcast signed transactions.
 
