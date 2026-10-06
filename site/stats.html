@@ -33,6 +33,7 @@
   @media (max-width: 760px) { .grid, .grid.four { grid-template-columns: repeat(2, 1fr); } .stat .v { font-size: 20px; } }
   .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
   .two > section { margin-bottom: 0; }
+  .two + .two, .two + details { margin-top: 18px; }
   .stat .k { font-size: 13px; color: var(--muted); }
   .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .stat .s { font-size: 13px; color: var(--muted); }
@@ -55,6 +56,9 @@
   td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td.r, th.r { text-align: right; }
   .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
+  .supply { height: 12px; border-radius: 6px; background: var(--grid); overflow: hidden; margin: 4px 0 6px; }
+  .supply div { height: 100%; background: var(--series); border-radius: 6px 0 0 6px; }
+  .supply-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .phase { display: flex; gap: 2px; margin: 14px 0 6px; height: 10px; }
   .phase div { background: var(--grid); border-radius: 2px; position: relative; }
   .phase div.done { background: var(--series); }
@@ -71,13 +75,15 @@
   <p class="lead" id="updated">Loading…</p>
 
   <section>
-    <div class="grid">
+    <div class="grid four">
       <div class="stat"><div class="k">Block height</div><div class="v" id="height">–</div><div class="s" id="tipage"></div></div>
       <div class="stat"><div class="k">Hashrate (24h)</div><div class="v" id="hr">–</div><div class="s">estimated from difficulty</div></div>
+      <div class="stat"><div class="k">Difficulty</div><div class="v" id="diff">–</div><div class="s" id="diffchg"></div></div>
       <div class="stat"><div class="k">Avg block time (24h)</div><div class="v" id="bt">–</div><div class="s" id="bttarget"></div></div>
       <div class="stat"><div class="k">Blocks (24h)</div><div class="v" id="b24">–</div><div class="s" id="b24exp"></div></div>
-      <div class="stat"><div class="k">ZP issued</div><div class="v" id="zp">–</div><div class="s">total supply so far</div></div>
+      <div class="stat"><div class="k">Transactions (24h)</div><div class="v" id="tx24">–</div><div class="s">excluding block rewards</div></div>
       <div class="stat"><div class="k">Active miners (24h)</div><div class="v" id="mc">–</div><div class="s">distinct reward addresses</div></div>
+      <div class="stat"><div class="k">ZP issued</div><div class="v" id="zp">–</div><div class="s" id="zpof"></div></div>
     </div>
   </section>
 
@@ -87,12 +93,33 @@
       <div class="chart" id="c-hr"></div>
     </section>
     <section>
+      <h2>Difficulty · 7 days</h2>
+      <div class="chart" id="c-df"></div>
+    </section>
+    <section>
       <h2>Block time · 7 days</h2>
       <div class="chart" id="c-bt"></div>
       <div class="note">Each point averages 4 hours. Dashed line: protocol target (<span id="tgt"></span>).</div>
     </section>
+    <section>
+      <h2>Transactions per day</h2>
+      <div class="chart" id="c-tx"></div>
+      <div class="note">UTC days, block rewards excluded. The last bar is today so far.</div>
+    </section>
   </div>
   <details style="margin:10px 0 18px"><summary>Chart data as a table</summary><div class="scroll" id="series-table"></div></details>
+
+  <section>
+    <h2>Supply</h2>
+    <div class="supply"><div id="sup-bar"></div></div>
+    <div class="supply-l"><span id="sup-l"></span><span id="sup-r"></span></div>
+    <div class="grid four" style="margin-top:16px">
+      <div class="stat"><div class="k">Mined</div><div class="v" id="sup-mined">–</div><div class="s">plus 20,000,000 at genesis</div></div>
+      <div class="stat"><div class="k">Left to mine</div><div class="v" id="sup-left">–</div><div class="s" id="sup-leftpct"></div></div>
+      <div class="stat"><div class="k">Block reward</div><div class="v" id="sup-rw">–</div><div class="s" id="sup-split"></div></div>
+      <div class="stat"><div class="k">Next halving at block</div><div class="v" id="sup-hv">–</div><div class="s" id="sup-hveta"></div></div>
+    </div>
+  </section>
 
   <section>
     <h2>CGP voting cycle</h2>
@@ -133,6 +160,14 @@ const fmtHr = h => {
   while (h >= 1000 && i < u.length - 1) { h /= 1000; i++; }
   return h.toFixed(h < 10 ? 2 : h < 100 ? 1 : 0) + ' ' + u[i];
 };
+const fmtNum = (v, axis, step) => {
+  if (axis && step) {                       // enough decimals to tell neighbouring ticks apart
+    const unit = v >= 1e6 ? 1e6 : v >= 1e3 ? 1e3 : 1, suf = unit === 1e6 ? 'M' : unit === 1e3 ? 'k' : '';
+    return (v / unit).toFixed(Math.max(0, Math.min(4, -Math.floor(Math.log10(step / unit))))) + suf;
+  }
+  return v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(2) + 'k' : v.toFixed(1);
+};
+const fmtZP = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : fmt(Math.round(v));
 const fmtDur = s => s == null ? '–' : (s >= 3600 ? (s/3600).toFixed(1) + ' h' : (s/60).toFixed(1) + ' min');
 const ago = ms => { const s = (Date.now() - ms) / 1000;
   return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' :
@@ -163,9 +198,10 @@ function lineChart(el, pts, { y, fmtY, label, ref }) {
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label);
   let s = '';
-  for (const v of niceTicks(lo, hi, 4)) {
+  const ticks = niceTicks(lo, hi, 4), tstep = ticks.length > 1 ? ticks[1] - ticks[0] : 1;
+  for (const v of ticks) {
     s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
-    s += `<text class="axis" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v, true)}</text>`;
+    s += `<text class="axis" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v, true, tstep)}</text>`;
   }
   const day = 86400000, every = Math.max(1, Math.ceil(56 / ((W - m.l - m.r) / ((x1 - x0) / day))));
   for (let t = Math.ceil(x0 / day) * day, k = 0; t <= x1; t += day, k++) if (k % every === 0)
@@ -197,10 +233,51 @@ function lineChart(el, pts, { y, fmtY, label, ref }) {
   svg.addEventListener('pointerdown', move);
 }
 
+// Single-series bar chart (one bar per day) with hover tooltip.
+function barChart(el, pts, { y, fmtY, label, tipText }) {
+  el.innerHTML = '';
+  if (!pts.length) { el.textContent = 'Collecting data – fills in over the next hours.'; return; }
+  const W = el.clientWidth || 400, H = 220, m = { l: 52, r: 10, t: 10, b: 24 };
+  const hi = Math.max(1, ...pts.map(y)) * 1.08;
+  const step = (W - m.l - m.r) / pts.length, bw = Math.max(4, Math.min(48, step * 0.7));
+  const Y = v => H - m.b - v / hi * (H - m.t - m.b);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label);
+  let s = '';
+  for (const v of niceTicks(0, hi, 4)) {
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text class="axis" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v)}</text>`;
+  }
+  pts.forEach((p, i) => {
+    const cx = m.l + step * (i + 0.5), v = y(p), top = Y(v), h = Math.max(0, H - m.b - top), r = Math.min(4, bw / 2, h);
+    s += `<path data-i="${i}" d="M${cx - bw / 2} ${H - m.b} V${top + r} q0 ${-r} ${r} ${-r} H${cx + bw / 2 - r} q${r} 0 ${r} ${r} V${H - m.b} Z" fill="var(--series)" opacity="${p.partial ? 0.45 : 1}"/>`;
+    s += `<rect data-i="${i}" x="${cx - step / 2}" y="${m.t}" width="${step}" height="${H - m.t - m.b}" fill="transparent"/>`;
+    if ((pts.length - 1 - i) % Math.ceil(46 / step) === 0) s += `<text class="axis" x="${cx}" y="${H - 6}" text-anchor="middle">${new Date(p.t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</text>`;
+  });
+  svg.innerHTML = s;
+  const tip = document.createElement('div'); tip.className = 'tip';
+  el.append(svg, tip);
+  svg.addEventListener('pointermove', e => {
+    const i = e.target.getAttribute && e.target.getAttribute('data-i');
+    if (i == null) { tip.style.display = 'none'; return; }
+    const p = pts[+i], r = svg.getBoundingClientRect();
+    tip.innerHTML = tipText(p); tip.style.display = 'block';
+    const left = (m.l + step * (+i + 0.5)) * r.width / W, tw = tip.offsetWidth;
+    tip.style.left = Math.min(Math.max(0, left - tw / 2), r.width - tw) + 'px';
+    tip.style.top = Math.max(0, Y(y(p)) * r.height / H - tip.offsetHeight - 10) + 'px';
+  });
+  svg.addEventListener('pointerleave', () => tip.style.display = 'none');
+}
+
 let data = null;
 function drawCharts() {
   if (!data) return;
   lineChart($('c-hr'), data.series, { y: p => p.hashrate, fmtY: fmtHr, label: 'Hashrate, 4-hour averages, last 7 days' });
+  lineChart($('c-df'), data.series, { y: p => p.difficulty, fmtY: (v, axis, step) => fmtNum(v, axis, step),
+    label: 'Mining difficulty, 4-hour averages, last 7 days' });
+  barChart($('c-tx'), data.daily || [], { y: p => p.txs, fmtY: v => fmt(Math.round(v)),
+    label: 'Transactions per day', tipText: p => `${new Date(p.t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}${p.partial ? ' (so far)' : ''}<br><b>${fmt(p.txs)} transactions</b> · ${fmt(p.blocks)} blocks` });
   lineChart($('c-bt'), data.series, { y: p => p.blockTime / 60,
     fmtY: (v, axis) => axis ? v.toFixed(v < 10 ? 1 : 0) : v.toFixed(1) + ' min',
     label: 'Average block time in minutes, 4-hour averages, last 7 days', ref: data.targetBlockTime / 60 });
@@ -217,12 +294,35 @@ function render(d) {
   $('tgt').textContent = fmtDur(d.targetBlockTime);
   $('b24').textContent = fmt(d.blocks24h);
   $('b24exp').textContent = 'expected ' + Math.round(86400 / d.targetBlockTime);
-  $('zp').textContent = d.totalZP != null ? fmt(Math.round(d.totalZP)) : '–';
+  $('diff').textContent = fmt(Math.round(d.difficulty));
+  if (d.series.length > 1) {
+    const a = d.series[0].difficulty, b = d.series[d.series.length - 1].difficulty;
+    $('diffchg').textContent = (b >= a ? '+' : '') + ((b / a - 1) * 100).toFixed(0) + '% in 7 days';
+  }
+  $('tx24').textContent = d.txs24h != null ? fmt(d.txs24h) : '…';
+  const sp = d.supply;
+  if (d.totalZP != null && sp) {
+    const pct = d.totalZP / sp.max * 100;
+    $('zp').textContent = fmtZP(d.totalZP);
+    $('zpof').textContent = 'of ' + fmtZP(sp.max) + ' max (' + pct.toFixed(1) + '%)';
+    $('sup-bar').style.width = pct.toFixed(2) + '%';
+    $('sup-l').textContent = fmt(Math.round(d.totalZP)) + ' ZP issued (' + pct.toFixed(1) + '%)';
+    $('sup-r').textContent = fmt(Math.round(sp.max)) + ' ZP max';
+    $('sup-mined').textContent = fmtZP(d.totalZP - sp.genesis);
+    $('sup-left').textContent = fmtZP(sp.max - d.totalZP);
+    $('sup-leftpct').textContent = (100 - pct).toFixed(1) + '% of the max supply';
+    $('sup-rw').textContent = sp.blockReward + ' ZP';
+    $('sup-split').textContent = sp.minerShare != null
+      ? `${(sp.blockReward * sp.minerShare / 100).toFixed(2)} to the miner · ${(sp.blockReward * (100 - sp.minerShare) / 100).toFixed(2)} to the CGP` : '';
+    $('sup-hv').textContent = fmt(sp.nextHalving.block);
+    $('sup-hveta').textContent = 'reward ' + sp.nextHalving.reward + ' ZP · around ' +
+      new Date(sp.nextHalving.eta).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  }
   $('mc').textContent = d.miners24h.length;
   drawCharts();
 
-  $('series-table').innerHTML = '<table><tr><th>4 hours from</th><th class="r">Blocks</th><th class="r">Block time</th><th class="r">Hashrate</th></tr>' +
-    d.series.slice().reverse().map(p => `<tr><td>${dateTime(p.t)}</td><td class="r">${p.blocks}</td><td class="r">${fmtDur(p.blockTime)}</td><td class="r">${fmtHr(p.hashrate)}</td></tr>`).join('') + '</table>';
+  $('series-table').innerHTML = '<table><tr><th>4 hours from</th><th class="r">Blocks</th><th class="r">Block time</th><th class="r">Hashrate</th><th class="r">Difficulty</th></tr>' +
+    d.series.slice().reverse().map(p => `<tr><td>${dateTime(p.t)}</td><td class="r">${p.blocks}</td><td class="r">${fmtDur(p.blockTime)}</td><td class="r">${fmtHr(p.hashrate)}</td><td class="r">${fmtNum(p.difficulty)}</td></tr>`).join('') + '</table>';
 
   const c = d.cgp;
   $('cgp-int').textContent = c.interval;

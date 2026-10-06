@@ -12,6 +12,10 @@ import argparse, json, os, time, urllib.request
 TARGET_BLOCK_S = 236.682          # Chain.fs blockInterval (ms) / 1000
 INTERVAL, SNAPSHOT, NOMINATION = 10000, 9000, 500
 HEADERS_TAKE = 2600               # ~7 days of headers
+MAX_FETCH = 800                   # block bodies fetched per run (first run fills the cache gradually)
+GENESIS_ZP = 20_000_000
+INITIAL_REWARD = 50 * 10**8       # kalapas, halves every PERIOD blocks
+PERIOD = 800_000
 BUCKET_S = 4 * 3600               # ~60 blocks per point; hourly is too noisy
 
 ap = argparse.ArgumentParser()
@@ -37,6 +41,13 @@ def hashes_per_block(target_hex):
     return 2 ** 256 // (int(target_hex, 16) + 1)
 
 
+def difficulty(compact_hex):
+    """Same formula as the node's /blockchain/info (Bitcoin-style difficulty)."""
+    c = int(compact_hex, 16)
+    shift, diff = (c >> 24) & 0xff, 0xffff / max(1, c & 0xffffff)
+    return diff * 256.0 ** (29 - shift)
+
+
 info = get("/blockchain/info")
 tip = info["blocks"]
 now_ms = int(time.time() * 1000)
@@ -44,7 +55,8 @@ now_ms = int(time.time() * 1000)
 # --- headers: block times, hashrate --------------------------------------------------------
 headers = get(f"/blockchain/headers?blockNumber={tip}&take={HEADERS_TAKE}", timeout=180)
 headers.sort(key=lambda h: h["blockNumber"])
-hs = [(h["blockNumber"], h["timestamp"], hashes_per_block(h["target"])) for h in headers]
+hs = [(h["blockNumber"], h["timestamp"], hashes_per_block(h["target"]), difficulty(h["difficulty"]))
+      for h in headers]
 
 def window_stats(rows):
     if len(rows) < 2:
@@ -65,21 +77,23 @@ if hs:
     start = (hs[0][1] // hour + 1) * hour
     buckets = {}
     for i in range(1, len(hs)):
-        _, t, w = hs[i]
+        _, t, w, d = hs[i]
         if t < start:
             continue
-        b = buckets.setdefault(t // hour * hour, [0, 0])
+        b = buckets.setdefault(t // hour * hour, [0, 0, 0.0])
         b[0] += 1
         b[1] += w
+        b[2] += d
     for t in sorted(buckets):
-        n, w = buckets[t]
+        n, w, d = buckets[t]
         series.append({"t": t, "blocks": n,
                        "blockTime": round(BUCKET_S / n, 1),
-                       "hashrate": round(w / BUCKET_S)})
+                       "hashrate": round(w / BUCKET_S),
+                       "difficulty": round(d / n, 2)})
     if series and now_ms - series[-1]["t"] < BUCKET_S * 1000:
         series.pop()                     # current bucket is still incomplete
 
-# --- miners of the last 24h (block bodies, cached by height) -------------------------------
+# --- block bodies (cached by height): miners of the last 24h, transactions per day ---------
 cache = {}
 try:
     with open(a.cache) as f:
@@ -89,8 +103,11 @@ except Exception:
 
 recent = []
 day_heights = [r[0] for r in day] or [tip]
-for h in range(tip, min(day_heights) - 1, -1):
-    if h not in cache:
+oldest = hs[0][0] if hs else tip
+fetched = 0
+for h in range(tip, oldest - 1, -1):
+    if h not in cache and fetched < MAX_FETCH:
+        fetched += 1
         blk = safe(f"/blockchain/block?blockNumber={h}")
         if not blk:
             continue
@@ -104,7 +121,7 @@ for h in range(tip, min(day_heights) - 1, -1):
                         reward += int(o["spend"]["amount"])
         cache[h] = {"m": miner, "r": reward, "n": txs,
                     "t": blk["header"]["timestamp"], "hash": blk["hash"]}
-cache = {h: v for h, v in cache.items() if h >= tip - 2000}
+cache = {h: v for h, v in cache.items() if h >= oldest}
 os.makedirs(os.path.dirname(a.cache), exist_ok=True)
 with open(a.cache, "w") as f:
     json.dump(cache, f)
@@ -116,6 +133,20 @@ for h in day_heights:
         counts[m] = counts.get(m, 0) + 1
 miners = sorted(({"address": k, "blocks": v} for k, v in counts.items()),
                 key=lambda x: -x["blocks"])
+# transactions per UTC day (coinbase excluded); only days fully covered by cached blocks
+DAY = 86400 * 1000
+covered_from = min((h for h in cache), default=tip)
+days = {}
+for h, c in cache.items():
+    d = days.setdefault(c["t"] // DAY * DAY, [0, 0])
+    d[0] += 1
+    d[1] += max(0, c["n"] - 1)
+first_full = (cache[covered_from]["t"] // DAY + 1) * DAY if cache else now_ms
+daily = [{"t": t, "blocks": v[0], "txs": v[1], "partial": t + DAY > now_ms}
+         for t, v in sorted(days.items()) if t >= first_full]
+txs24h = sum(max(0, cache[h]["n"] - 1) for h in day_heights if h in cache)
+txs24h_complete = all(h in cache for h in day_heights)
+
 for h in range(tip, tip - 12, -1):
     c = cache.get(h)
     if c:
@@ -147,6 +178,19 @@ except Exception:
     pass
 
 total = safe("/blockchain/totalzp")
+max_kalapas = GENESIS_ZP * 10**8 + PERIOD * sum(INITIAL_REWARD >> k for k in range(64))
+period = (tip - 2) // PERIOD if tip >= 2 else 0
+next_halving = (period + 1) * PERIOD + 2
+alloc = (cgp["state"] or {}).get("allocation")
+block_reward = (INITIAL_REWARD >> period) / 1e8
+supply = {
+    "max": max_kalapas / 1e8,
+    "genesis": GENESIS_ZP,
+    "blockReward": block_reward,
+    "minerShare": None if alloc is None else 100 - alloc,
+    "nextHalving": {"block": next_halving, "eta": now_ms + int((next_halving - tip) * bt * 1000),
+                    "reward": block_reward / 2},
+}
 out = {
     "updated": now_ms,
     "height": tip,
@@ -159,6 +203,9 @@ out = {
     "avgBlockTime24h": round(avg_bt_24h, 1) if avg_bt_24h else None,
     "blocks24h": len(day),
     "hashrate24h": round(hashrate_24h) if hashrate_24h else None,
+    "txs24h": txs24h if txs24h_complete else None,
+    "daily": daily,
+    "supply": supply,
     "series": series,
     "miners24h": miners,
     "recent": recent,
