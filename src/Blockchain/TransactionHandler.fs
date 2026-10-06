@@ -8,7 +8,7 @@ open Consensus
 open Consensus.ValidationError
 open Consensus.Types
 open State
-open Logary.Message
+open Infrastructure.LogEvent
 open Zen.Types.Main
 open Result
 

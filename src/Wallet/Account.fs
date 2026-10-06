@@ -10,7 +10,7 @@ open Wallet
 open Wallet.DataAccess
 open Wallet.Types
 open Messaging.Services.Wallet
-open Logary.Message
+open Infrastructure.LogEvent
 open Infrastructure
 
 // TODO: handle history

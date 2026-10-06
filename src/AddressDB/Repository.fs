@@ -4,7 +4,7 @@ open Blockchain.Tally.Types
 open Consensus
 open Types
 open Hash
-open Logary.Message
+open Infrastructure.LogEvent
 open Infrastructure
 open Messaging.Services
 open Messaging.Services.Wallet

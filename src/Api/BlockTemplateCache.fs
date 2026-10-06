@@ -7,7 +7,7 @@ open Infrastructure
 open Http
 open Api.Types
 open Messaging.Services
-open Logary.Message
+open Infrastructure.LogEvent
 open Hash
 
 [<Literal>]

@@ -12,7 +12,7 @@ open Result
 open Blockchain.State
 
 open Consensus.CGP
-open Logary.Message
+open Infrastructure.LogEvent
 
 module ZData = Zen.Types.Data
 

@@ -5,5 +5,4 @@ FsNetMQ
 FSharp.Control.Reactive
 System.Reactive.Compatibility
 FSharp.Data
-Logary
 Zulib

@@ -11,7 +11,7 @@ open EffectsWriter
 open Consensus.Types
 open State
 open DatabaseContext
-open Logary.Message
+open Infrastructure.LogEvent
 open Chain
 open Environment
 
