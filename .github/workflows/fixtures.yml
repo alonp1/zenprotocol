@@ -1,0 +1,24 @@
+name: fixtures
+# Collect real mainnet blocks with transactions as wallet test fixtures and commit them to
+# the `fixtures` branch. Trigger: push to the `make-fixtures` branch.
+on:
+  push:
+    branches: [make-fixtures]
+permissions:
+  contents: write
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p wallet/test/fixtures
+          python3 scripts/fetch-tx-fixtures.py https://zen.sealinkgps.com/node wallet/test/fixtures/blocks.json
+      - run: |
+          git config user.name "zp-fixtures-bot"
+          git config user.email "zp-fixtures-bot@users.noreply.github.com"
+          git checkout -B fixtures
+          git add -f wallet/test/fixtures/blocks.json
+          git commit -m "Wallet test fixtures: mainnet blocks with transactions"
+          git push -f origin fixtures
