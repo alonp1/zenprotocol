@@ -1,0 +1,32 @@
+name: probe-deps
+on:
+  push:
+    branches: [probe-deps]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    container: mono:6.12
+    steps:
+      - name: apt
+        run: |
+          sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list
+          sed -i '/buster-updates/d' /etc/apt/sources.list
+          apt-get -o Acquire::Check-Valid-Until=false update -y
+          apt-get install -y -qq git ca-certificates curl
+          curl -fsSL https://curl.se/ca/cacert.pem -o /tmp/cacert.pem && cert-sync /tmp/cacert.pem
+      - uses: actions/checkout@v4
+      - run: mono .paket/paket.exe restore
+      - name: inventory
+        shell: bash
+        run: |
+          {
+          for d in packages/*/; do
+            n=$(basename "$d")
+            v=$(grep -m1 -oP '(?<=<version>)[^<]+' "$d"/*.nuspec 2>/dev/null || echo "?")
+            libs=$(ls "$d/lib" 2>/dev/null | tr '\n' ' ')
+            tools=$( [ -d "$d/tools" ] && echo tools || true)
+            echo "$n|$v|$libs|$tools"
+          done
+          } > /tmp/inv.txt
+          cat /tmp/inv.txt
+          sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' /tmp/inv.txt | sed 's/^/::notice title=inventory::/'
