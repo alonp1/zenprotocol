@@ -55,10 +55,21 @@ Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, 
 
 ## Running the replay test
 
-1. Create a server with 4+ dedicated cores, 16 GB RAM, 160 GB disk (Ubuntu 24.04). Hourly-billed; delete it after the run.
-2. GitHub → repository Settings → Actions → Runners → New self-hosted runner → copy the token.
-3. On the server: `TOKEN=<token> bash scripts/setup-replay-runner.sh`
-4. Push the commit to test to the `replay` branch. The report is uploaded as the `replay-report` artifact.
+1. Create a server with 4+ dedicated cores and 16 GB RAM (Ubuntu 24.04), e.g. Hetzner CCX23. Hourly-billed; delete it after the run. 40 GB disk is enough: the script frees the Docker build cache, logs free space every 5 minutes and stops with a clear error below 1 GB.
+2. GitHub → repository Settings → Actions → Runners → New self-hosted runner → copy the token (valid 1 hour).
+3. On the server: `TOKEN=<token> bash scripts/setup-replay-runner.sh` (installs Docker and the runner as a service with the label `replay`).
+4. Push the commit to test to the `replay` branch. The run takes 10–20 hours. The report is uploaded as the `replay-report` artifact (kept 90 days).
+
+### Reference file
+
+The first full run compares the official 1.0.13 release and the source build side by side. After it passes, a reference is built from the release node's synced data so later runs can check a single node against it.
+
+1. While the replay server still exists, push to the `make-reference` branch. `reference.yml` runs `scripts/make-reference.sh` on the replay runner.
+2. The result is committed to the `reference-data` branch under `replay/reference/mainnet-<height>/`, so it lives in the repository and does not depend on any server or domain:
+   - `blocks.txt` – `<height> <hash>` every 1000 blocks plus the tip. The tip hash alone pins the whole chain (every header commits to its parent); the samples locate a divergence quickly.
+   - `cgp.json`, `cgp-history.json`, `totalzp.json`, `winner.json` – chain state at that height
+   - `README.txt` (source version, height, date) and `SHA256SUMS`
+3. Only after the reference is on `reference-data`, delete the replay server.
 
 ## Consensus safety rules
 
