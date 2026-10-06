@@ -24,7 +24,8 @@ trap 'docker rm -f addr-build >/dev/null 2>&1 || true' EXIT
 echo "== Building AddressDB on volume $VOLUME (max ${MAX_HOURS}h)"
 docker run -d --name addr-build -v "$VOLUME":/data -p 127.0.0.1:11604:11567 "$IMAGE" --addressdb >/dev/null
 START=$(date +%s)
-until docker logs addr-build 2>&1 | grep -q "AddressDB synced to block"; do
+synced() { docker logs addr-build 2>&1 | grep "AddressDB synced to block" > /dev/null || [ "${PIPESTATUS[1]}" = 0 ]; }
+until synced; do
   docker inspect -f '{{.State.Running}}' addr-build | grep -q true || { echo "node stopped:"; docker logs --tail 50 addr-build; exit 1; }
   [ $(( ($(date +%s) - START) / 3600 )) -lt "$MAX_HOURS" ] || { echo "timeout"; exit 1; }
   echo "[$(date -u +%H:%M)] $(docker logs addr-build 2>&1 | grep -o 'catch-up at block.*' | tail -1) mem $(docker stats --no-stream --format '{{.MemUsage}}' addr-build)"
