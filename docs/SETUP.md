@@ -19,16 +19,19 @@ Light wallets need a node with an address index (AddressDB). Release 1.0.13 cann
 
 1. On a machine with 16 GB RAM and a synced node volume (the replay runner): push to the `make-addressdb` branch, or run `bash scripts/make-addressdb-snapshot.sh`. The snapshot lands in `~/zen-out` (runner: `/home/runner/zen-out`).
 2. Serve it temporarily from that machine: `cd /home/runner/zen-out && python3 -m http.server 8000` (allow TCP 8000 in its firewall).
-3. On the community server:
+3. On the community server (needs about 20 GB free during the load):
 
 ```
 cd ~/zenprotocol && git pull
+F=<file>.zip
+mkdir -p zen-data/snapshots
+curl -o zen-data/snapshots/$F http://<runner-ip>:8000/$F
+curl -o zen-data/snapshots/$F.sha256 http://<runner-ip>:8000/$F.sha256
+(cd zen-data/snapshots && sha256sum -c $F.sha256)
 docker compose down
-docker compose run --rm --no-deps -e SNAPSHOT_URL=http://<runner-ip>:8000/<file>.zip --entrypoint /load-snapshot.sh zen-node
-echo "PUBLIC_NODE=1" >> .env
+docker compose run --rm --no-deps -e SNAPSHOT_URL=/data/snapshots/$F --entrypoint /load-snapshot.sh zen-node
+grep -q PUBLIC_NODE .env 2>/dev/null || echo "PUBLIC_NODE=1" >> .env
 docker compose up -d --build
-mkdir -p zen-data/snapshots && curl -o zen-data/snapshots/<file>.zip http://<runner-ip>:8000/<file>.zip
-curl -o zen-data/snapshots/<file>.zip.sha256 http://<runner-ip>:8000/<file>.zip.sha256
 bash site/setup-site.sh
 curl -s https://zen.sealinkgps.com/node/blockchain/info
 ```

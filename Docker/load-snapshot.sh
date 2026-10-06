@@ -1,6 +1,7 @@
 #!/bin/bash
 # Load a blockchain snapshot into /data so the node skips most of the initial sync. The wallet is never touched.
 #
+# SNAPSHOT_URL may also be a file path inside the container, e.g. /data/snapshots/<file>.zip
 # Run with the node STOPPED, from the zenprotocol folder:
 #   docker compose down
 #   docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
@@ -18,7 +19,10 @@ mkdir -p "$TMP"
 cd "$TMP"
 
 echo "== Downloading snapshot (resumable)"
-curl -fL -C - -o zen-node.zip "$URL" || { echo "Primary snapshot unavailable, using official Feb-2023 snapshot"; rm -f zen-node.zip; curl -fL -o zen-node.zip "$FALLBACK"; }
+if [ -f "$URL" ]; then
+  # a snapshot already on this disk (e.g. /data/snapshots/...): hard link, no extra space
+  ln -f "$URL" zen-node.zip 2>/dev/null || cp "$URL" zen-node.zip
+else curl -fL -C - -o zen-node.zip "$URL"; fi || { echo "Primary snapshot unavailable, using official Feb-2023 snapshot"; rm -f zen-node.zip; curl -fL -o zen-node.zip "$FALLBACK"; }
 
 echo "== Checking archive"
 unzip -tq zen-node.zip || { rm -f zen-node.zip; echo "Archive is corrupt - deleted it. Run this script again to download a fresh copy."; exit 1; }
