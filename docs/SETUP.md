@@ -225,4 +225,5 @@ In sync when `blocks` equals `headers` and `initialBlockDownload` is `false`. Co
 | Slow sync on Windows | Data in a Windows folder | `ZEN_DATA=zen-data` in `.env`, reload the snapshot |
 | Desktop wallet: `Node is inaccessible` | Remote node `mainnet-nodes.zp.io` unreliable | Snapshot with address index, `WALLET_API=1`, switch wallet to Local Node |
 | Node restarts every ~10 min after `Creating AddressDB` | 1.0.13 cannot index the full chain at once | Remove `WALLET_API`/`PUBLIC_NODE`, load a snapshot with the index |
+| Public node: `/node/addressdb/balance` returns 504 for some addresses | Addresses with very many outputs (e.g. a miner's) take longer than nginx's 60 s; requests are served one at a time, so a heavy one delays the rest | Planned before launch: per-request time limit and a separate queue for heavy queries |
 | Versions before 1.0.13 stop working | Built-in expiry date | Use 1.0.13 only |
