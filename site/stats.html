@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Network Stats</title>
+<meta name="description" content="Live statistics of the ZP mainnet: hashrate, block times, miners and the CGP voting cycle.">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --faint: #9a9890;
+    --line: #e3e1da; --grid: #eeece6; --accent: #1f6f5c; --series: #00866c;
+    --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890; --faint: #6b6a64;
+            --line: #2c2d2a; --grid: #252623; --accent: #5cc3a6; --series: #22a985;
+            --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  nav { font-size: 14px; margin-bottom: 18px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+       margin: 0 0 14px; font-weight: 600; }
+  p.lead { margin: 0 0 24px; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 20px; margin-bottom: 18px; min-width: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid.four { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 760px) { .grid, .grid.four { grid-template-columns: repeat(2, 1fr); } .stat .v { font-size: 20px; } }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
+  .two > section { margin-bottom: 0; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 13px; color: var(--muted); }
+  a { color: var(--accent); }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+         white-space: nowrap; display: none; z-index: 2; }
+  .tip b { font-variant-numeric: tabular-nums; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase;
+       letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
+  .phase { display: flex; gap: 2px; margin: 14px 0 6px; height: 10px; }
+  .phase div { background: var(--grid); border-radius: 2px; position: relative; }
+  .phase div.done { background: var(--series); }
+  .phase div.now { background: linear-gradient(90deg, var(--series) var(--p), var(--grid) var(--p)); }
+  .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
+  .phase-l span { position: absolute; top: 0; white-space: nowrap; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="/">← Community node</a></nav>
+  <h1>ZP Network Stats</h1>
+  <p class="lead" id="updated">Loading…</p>
+
+  <section>
+    <div class="grid">
+      <div class="stat"><div class="k">Block height</div><div class="v" id="height">–</div><div class="s" id="tipage"></div></div>
+      <div class="stat"><div class="k">Hashrate (24h)</div><div class="v" id="hr">–</div><div class="s">estimated from difficulty</div></div>
+      <div class="stat"><div class="k">Avg block time (24h)</div><div class="v" id="bt">–</div><div class="s" id="bttarget"></div></div>
+      <div class="stat"><div class="k">Blocks (24h)</div><div class="v" id="b24">–</div><div class="s" id="b24exp"></div></div>
+      <div class="stat"><div class="k">ZP issued</div><div class="v" id="zp">–</div><div class="s">total supply so far</div></div>
+      <div class="stat"><div class="k">Active miners (24h)</div><div class="v" id="mc">–</div><div class="s">distinct reward addresses</div></div>
+    </div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>Hashrate · 7 days</h2>
+      <div class="chart" id="c-hr"></div>
+    </section>
+    <section>
+      <h2>Block time · 7 days</h2>
+      <div class="chart" id="c-bt"></div>
+      <div class="note">Each point averages 4 hours. Dashed line: protocol target (<span id="tgt"></span>).</div>
+    </section>
+  </div>
+  <details style="margin:10px 0 18px"><summary>Chart data as a table</summary><div class="scroll" id="series-table"></div></details>
+
+  <section>
+    <h2>CGP voting cycle</h2>
+    <div class="grid four">
+      <div class="stat"><div class="k">Interval</div><div class="v" id="cgp-int">–</div><div class="s" id="cgp-range"></div></div>
+      <div class="stat"><div class="k">Phase</div><div class="v" id="cgp-phase">–</div></div>
+      <div class="stat"><div class="k" id="cgp-next-k">Next</div><div class="v" id="cgp-next">–</div><div class="s" id="cgp-eta"></div></div>
+      <div class="stat"><div class="k">Current allocation</div><div class="v" id="cgp-alloc">–</div><div class="s">of block rewards to the CGP</div></div>
+    </div>
+    <div class="phase" id="phase"></div>
+    <div class="phase-l"><span style="left:0">Interval start</span><span style="right:0">snapshot → nomination → voting</span></div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>Miners · last 24h</h2>
+      <div class="scroll" id="miners">–</div>
+    </section>
+    <section>
+      <h2>Latest blocks</h2>
+      <div class="scroll" id="recent">–</div>
+    </section>
+  </div>
+
+  <footer>
+    Data from the community node at zen.sealinkgps.com, refreshed every 5 minutes.
+    Hashrate is an estimate: work implied by each block's target divided by elapsed time.
+    Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.
+  </footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n).toLocaleString('en-US');
+const fmtHr = h => {
+  if (h == null) return '–';
+  const u = ['H/s','kH/s','MH/s','GH/s','TH/s','PH/s']; let i = 0;
+  while (h >= 1000 && i < u.length - 1) { h /= 1000; i++; }
+  return h.toFixed(h < 10 ? 2 : h < 100 ? 1 : 0) + ' ' + u[i];
+};
+const fmtDur = s => s == null ? '–' : (s >= 3600 ? (s/3600).toFixed(1) + ' h' : (s/60).toFixed(1) + ' min');
+const ago = ms => { const s = (Date.now() - ms) / 1000;
+  return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' :
+         s < 172800 ? Math.round(s/3600) + ' h ago' : Math.round(s/86400) + ' d ago'; };
+const dateTime = ms => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const short = a => a ? a.slice(0, 10) + '…' + a.slice(-6) : '–';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function niceTicks(min, max, n) {
+  const span = max - min || 1, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => span / s <= n) || 10 * mag;
+  const out = []; for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(v);
+  return out;
+}
+
+// Single-series line chart with crosshair tooltip. ref = optional dashed reference value.
+function lineChart(el, pts, { y, fmtY, label, ref }) {
+  el.innerHTML = '';
+  if (pts.length < 2) { el.textContent = 'Not enough data yet.'; return; }
+  const W = el.clientWidth || 400, H = 220, m = { l: 52, r: 10, t: 10, b: 24 };
+  const xs = pts.map(p => p.t), ys = pts.map(y);
+  let lo = Math.min(...ys, ref ?? Infinity), hi = Math.max(...ys, ref ?? -Infinity);
+  lo = Math.max(0, lo - (hi - lo) * 0.08); hi = hi + (hi - lo) * 0.08;
+  const x0 = xs[0], x1 = xs[xs.length - 1];
+  const X = t => m.l + (t - x0) / (x1 - x0) * (W - m.l - m.r);
+  const Y = v => H - m.b - (v - lo) / (hi - lo || 1) * (H - m.t - m.b);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', label);
+  let s = '';
+  for (const v of niceTicks(lo, hi, 4)) {
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
+    s += `<text class="axis" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v, true)}</text>`;
+  }
+  const day = 86400000, every = Math.max(1, Math.ceil(56 / ((W - m.l - m.r) / ((x1 - x0) / day))));
+  for (let t = Math.ceil(x0 / day) * day, k = 0; t <= x1; t += day, k++) if (k % every === 0)
+    s += `<text class="axis" x="${X(t)}" y="${H - 6}" text-anchor="middle">${new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</text>`;
+  if (ref != null)
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  s += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(y(p)).toFixed(1)).join('')}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  s += `<line id="xh" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+  s += `<circle id="dot" r="4.5" fill="var(--series)" stroke="var(--card)" stroke-width="2" visibility="hidden"/>`;
+  svg.innerHTML = s;
+  const tip = document.createElement('div'); tip.className = 'tip';
+  el.append(svg, tip);
+  const xh = svg.querySelector('#xh'), dot = svg.querySelector('#dot');
+  const move = e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) * W / r.width;
+    let i = 0, best = Infinity;
+    pts.forEach((p, j) => { const d = Math.abs(X(p.t) - px); if (d < best) { best = d; i = j; } });
+    const p = pts[i], cx = X(p.t), cy = Y(y(p));
+    xh.setAttribute('x1', cx); xh.setAttribute('x2', cx); xh.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('visibility', 'visible');
+    tip.innerHTML = `${dateTime(p.t)}<br><b>${fmtY(y(p))}</b> · ${p.blocks} blocks`;
+    tip.style.display = 'block';
+    const left = cx * r.width / W, tw = tip.offsetWidth;
+    tip.style.left = Math.min(Math.max(0, left - tw / 2), r.width - tw) + 'px';
+    tip.style.top = Math.max(0, cy * r.height / H - tip.offsetHeight - 12) + 'px';
+  };
+  const leave = () => { tip.style.display = 'none'; xh.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); };
+  svg.addEventListener('pointermove', move); svg.addEventListener('pointerleave', leave);
+  svg.addEventListener('pointerdown', move);
+}
+
+let data = null;
+function drawCharts() {
+  if (!data) return;
+  lineChart($('c-hr'), data.series, { y: p => p.hashrate, fmtY: fmtHr, label: 'Hashrate, 4-hour averages, last 7 days' });
+  lineChart($('c-bt'), data.series, { y: p => p.blockTime / 60,
+    fmtY: (v, axis) => axis ? v.toFixed(v < 10 ? 1 : 0) : v.toFixed(1) + ' min',
+    label: 'Average block time in minutes, 4-hour averages, last 7 days', ref: data.targetBlockTime / 60 });
+}
+
+function render(d) {
+  data = d;
+  $('updated').textContent = 'Updated ' + ago(d.updated) + (d.synced ? '' : ' · node is syncing, figures may lag');
+  $('height').textContent = fmt(d.height);
+  $('tipage').textContent = d.tipTime ? 'last block ' + ago(d.tipTime) : '';
+  $('hr').textContent = fmtHr(d.hashrate24h);
+  $('bt').textContent = fmtDur(d.avgBlockTime24h);
+  $('bttarget').textContent = 'target ' + fmtDur(d.targetBlockTime);
+  $('tgt').textContent = fmtDur(d.targetBlockTime);
+  $('b24').textContent = fmt(d.blocks24h);
+  $('b24exp').textContent = 'expected ' + Math.round(86400 / d.targetBlockTime);
+  $('zp').textContent = d.totalZP != null ? fmt(Math.round(d.totalZP)) : '–';
+  $('mc').textContent = d.miners24h.length;
+  drawCharts();
+
+  $('series-table').innerHTML = '<table><tr><th>4 hours from</th><th class="r">Blocks</th><th class="r">Block time</th><th class="r">Hashrate</th></tr>' +
+    d.series.slice().reverse().map(p => `<tr><td>${dateTime(p.t)}</td><td class="r">${p.blocks}</td><td class="r">${fmtDur(p.blockTime)}</td><td class="r">${fmtHr(p.hashrate)}</td></tr>`).join('') + '</table>';
+
+  const c = d.cgp;
+  $('cgp-int').textContent = c.interval;
+  $('cgp-range').textContent = 'blocks ' + fmt(c.intervalEnd - 9999) + '–' + fmt(c.intervalEnd);
+  $('cgp-phase').textContent = c.phase;
+  $('cgp-next-k').textContent = c.next.name;
+  $('cgp-next').textContent = 'in ' + fmt(c.next.block - d.height) + ' blocks';
+  $('cgp-eta').textContent = 'block ' + fmt(c.next.block) + ' · around ' + new Date(c.next.eta).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  $('cgp-alloc').textContent = c.state && c.state.allocation != null ? c.state.allocation + '%' : '–';
+  const start = c.intervalEnd - 10000, segs = [[start, c.snapshotBlock], [c.snapshotBlock, c.nominationEnd], [c.nominationEnd, c.intervalEnd]];
+  $('phase').innerHTML = segs.map(([a, b]) => {
+    const w = (b - a) / 100, cls = d.height >= b ? 'done' : d.height > a ? 'now' : '';
+    const p = cls === 'now' ? ((d.height - a) / (b - a) * 100).toFixed(1) + '%' : '0%';
+    return `<div class="${cls}" style="flex:${w};--p:${p}" title="blocks ${fmt(a + 1)}–${fmt(b)}"></div>`;
+  }).join('');
+
+  const total = d.miners24h.reduce((a, m) => a + m.blocks, 0) || 1, top = d.miners24h[0]?.blocks || 1;
+  $('miners').innerHTML = d.miners24h.length ? '<table><tr><th>Reward address</th><th class="r">Blocks</th><th class="r">Share</th><th style="width:30%"></th></tr>' +
+    d.miners24h.slice(0, 12).map(m => `<tr><td class="mono" title="${esc(m.address)}">${esc(short(m.address))}</td><td class="r">${m.blocks}</td><td class="r">${(m.blocks / total * 100).toFixed(1)}%</td><td><div class="bar" style="width:${m.blocks / top * 100}%"></div></td></tr>`).join('') + '</table>' : 'No data yet.';
+
+  $('recent').innerHTML = '<table><tr><th class="r">Block</th><th>Time</th><th>Miner</th><th class="r">Txs</th></tr>' +
+    d.recent.map(b => `<tr><td class="r" title="${esc(b.hash)}">${fmt(b.height)}</td><td>${ago(b.time)}</td><td class="mono" title="${esc(b.miner || '')}">${esc(short(b.miner))}</td><td class="r">${b.txs}</td></tr>`).join('') + '</table>';
+}
+
+async function load() {
+  try { render(await (await fetch('/stats.json', { cache: 'no-store' })).json()); }
+  catch (e) { $('updated').textContent = 'Statistics are not available right now.'; }
+}
+load(); setInterval(load, 60000);
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(drawCharts, 150); });
+</script>
+</body>
+</html>

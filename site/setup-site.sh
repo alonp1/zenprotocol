@@ -19,6 +19,7 @@ echo "$DOMAIN -> ${IP:-<no DNS yet>}"
 echo "== Files"
 mkdir -p "$WEB/snapshots"
 cp "$REPO/site/index.html" "$WEB/index.html"
+cp "$REPO/site/stats.html" "$WEB/stats.html"
 
 echo "== Publish newest snapshot (hard link, no extra disk)"
 LATEST=$(ls -1t "$SNAPDIR"/zen-node-*.zip 2>/dev/null | head -1 || true)
@@ -47,6 +48,27 @@ sed -i "s/zen.sealinkgps.com/$DOMAIN/g" "/etc/nginx/sites-available/$DOMAIN"
 ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 nginx -t
 systemctl reload nginx
+
+echo "== Stats (stats.json every 5 minutes)"
+cat > /etc/systemd/system/zen-stats.service <<UNIT
+[Unit]
+Description=Build ZP network stats.json for the public stats page
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 $REPO/site/update-stats.py --out $WEB/stats.json
+UNIT
+cat > /etc/systemd/system/zen-stats.timer <<UNIT
+[Unit]
+Description=Refresh ZP network stats every 5 minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now zen-stats.timer
+systemctl start zen-stats.service || echo "stats not built yet (node busy or syncing) - the timer retries every 5 minutes"
 
 echo "== HTTPS"
 if ! command -v certbot >/dev/null; then apt-get install -y certbot python3-certbot-nginx; fi

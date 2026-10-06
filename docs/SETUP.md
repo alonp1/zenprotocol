@@ -42,6 +42,7 @@ curl -s https://zen.sealinkgps.com/node/blockchain/info
 | Network status and downloads | [zen.sealinkgps.com](https://zen.sealinkgps.com) |
 | Seed node | `zen.sealinkgps.com:9655` (pre-configured in the image) |
 | Public node for wallets | `https://zen.sealinkgps.com/node` (planned, see below) |
+| Network stats | [zen.sealinkgps.com/stats.html](https://zen.sealinkgps.com/stats.html) |
 | Latest snapshot | [zen.sealinkgps.com/snapshots](https://zen.sealinkgps.com/snapshots/) |
 | Source | [github.com/alonp1/zenprotocol](https://github.com/alonp1/zenprotocol/tree/node-upgrade-script) |
 
@@ -82,7 +83,7 @@ cd ~/zenprotocol
 DOMAIN=your.domain bash site/setup-site.sh
 ```
 
-The script adds a separate Nginx site (existing sites are untouched), publishes the newest snapshot and issues an auto-renewing HTTPS certificate. Without `DOMAIN` it uses `zen.sealinkgps.com`.
+The script adds a separate Nginx site (existing sites are untouched), publishes the newest snapshot, installs the `zen-stats` timer (rebuilds `stats.json` for the stats page every 5 minutes from the local API; visitors never reach the node) and issues an auto-renewing HTTPS certificate. Without `DOMAIN` it uses `zen.sealinkgps.com`.
 
 ### Refreshing the snapshot (monthly)
 
