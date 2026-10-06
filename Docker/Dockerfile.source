@@ -20,8 +20,8 @@ COPY . .
 RUN mono .paket/paket.exe restore \
  && chmod +x packages/zen_z3_linux/output/z3-linux \
  && (chmod +x packages/SpecFlow/tools/specflow.exe || true) \
- && dotnet build src/Node/Node.fsproj -c Release -v minimal -nologo \
- && dotnet build src/Cli/Cli.fsproj -c Release -v minimal -nologo \
+ && dotnet build src/Node/Node.fsproj -c Release -v minimal -nologo -p:SolutionDir=/src/src/ \
+ && dotnet build src/Cli/Cli.fsproj -c Release -v minimal -nologo -p:SolutionDir=/src/src/ \
  && mkdir -p /out \
  && cp -r src/Node/bin/Release/. /out/ \
  && cp -rn src/Cli/bin/Release/. /out/ \
