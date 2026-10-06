@@ -8,7 +8,7 @@ open Infrastructure.BigInteger
 open Consensus
 open Crypto
 open NBitcoin
-open Logary.Message
+open Infrastructure.LogEvent
 open Infrastructure
 
 let private result = new ResultBuilder<string>()

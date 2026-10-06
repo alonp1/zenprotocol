@@ -1,4 +1,4 @@
-﻿module Blockchain.Main
+module Blockchain.Main
 
 open Blockchain
 open FsNetMQ
@@ -9,7 +9,7 @@ open Messaging.Events
 open Consensus
 open Consensus.Chain
 open State
-open Logary.Message
+open Infrastructure.LogEvent
 
 let wipeDirectory path =
     if System.IO.Directory.Exists path then

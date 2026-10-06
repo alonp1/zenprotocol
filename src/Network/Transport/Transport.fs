@@ -6,7 +6,7 @@ open Network
 open Infrastructure
 open Network.Transport
 open Network.Transport.Peer
-open Logary.Message
+open Infrastructure.LogEvent
 
 // Random number for sending addresses
 let random = (new System.Random()).Next()

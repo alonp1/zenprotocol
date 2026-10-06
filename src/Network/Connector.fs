@@ -4,7 +4,7 @@ open Network
 open Network.Transport
 open System
 open Infrastructure
-open Logary.Message
+open Infrastructure.LogEvent
 
 type ConnectionStatus =
     | Connected

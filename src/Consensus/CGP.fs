@@ -4,7 +4,7 @@ open System
 open Chain
 open Consensus
 open Consensus.Types
-open Logary.Message
+open Infrastructure.LogEvent
 open Infrastructure
 
 module ZData = Zen.Types.Data

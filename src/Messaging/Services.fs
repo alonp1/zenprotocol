@@ -63,6 +63,7 @@ module Blockchain =
         | GetCGP
         | GetWinner
         | GetCgpHistory
+        | GetMainBlocks of from: int * take: int
 
     type Response = unit
     
@@ -124,6 +125,11 @@ module Blockchain =
         GetAllBlocks from
         |> sendRequest<Map<Hash.Hash, byte array>> client
     
+    /// main-chain blocks #from+1 .. #from+take, ascending (serialized)
+    let getMainBlocks client from take =
+        GetMainBlocks (from, take)
+        |> sendRequest<List<byte array>> client
+
     let getBlocks client take blockNumber  =
         GetBlocks (blockNumber, take)
         |> sendRequest<List<uint32 * byte array>> client

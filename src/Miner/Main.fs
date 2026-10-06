@@ -9,7 +9,7 @@ open Consensus.Difficulty
 open Consensus.Serialization
 open FSharp
 open System
-open Logary.Message
+open Infrastructure.LogEvent
 
 let handleEvent client publisher event =
     Wallet.getAddressPKHash client

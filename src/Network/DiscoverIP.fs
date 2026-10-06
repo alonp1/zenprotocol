@@ -4,7 +4,7 @@ open System.Net
 open FsNetMQ
 open Infrastructure
 open FSharp.Data
-open Logary.Message
+open Infrastructure.LogEvent
 
 let maxRetries = 5
 

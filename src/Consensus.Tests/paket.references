@@ -3,7 +3,6 @@ FsCheck.NUnit
 FSharp.Compiler.Tools
 zen_secp256k1_linux
 zen_secp256k1_osx
-Logary
 FsNetMQ
 FSharp.Core redirects: on
 SpecFlow.NUnit

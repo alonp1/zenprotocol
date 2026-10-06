@@ -1,0 +1,22 @@
+{
+  "name": "zp-wallet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ZP Wallet - non-custodial web wallet for the ZP network (community project, not affiliated with Zen Protocol Ltd.)",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "build": "esbuild src/app.js --bundle --minify --format=esm --outfile=dist/app.js"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0",
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

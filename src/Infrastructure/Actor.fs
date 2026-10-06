@@ -2,7 +2,7 @@ module Infrastructure.Actor
 
 open FSharp.Control.Reactive
 open Infrastructure
-open Logary.Message
+open Infrastructure.LogEvent
 open FsNetMQ
 
 type ActorFunction<'command,'request,'event,'result> = 

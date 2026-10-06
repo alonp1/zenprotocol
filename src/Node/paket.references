@@ -3,9 +3,7 @@ FSharp.Core
 FSharp.Compiler.Tools
 FSharp.Control.Reactive
 System.Reactive.Compatibility
-FSharp.Configuration
 Argu
 zen_secp256k1_linux
 zen_secp256k1_osx
-Logary
 Zulib

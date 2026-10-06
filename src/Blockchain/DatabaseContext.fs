@@ -12,7 +12,7 @@ open Result
 open Serialization
 open Serialization
 open Blockchain.Tally.Types
-open Logary.Message
+open Infrastructure.LogEvent
 open Wallet
 
 [<Literal>]

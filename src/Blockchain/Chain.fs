@@ -8,7 +8,7 @@ open Infrastructure
 open Blockchain.EffectsWriter
 open Blockchain.Tally.Repository
 open State
-open Logary.Message
+open Infrastructure.LogEvent
 
 module ExtHeader = ExtendedBlockHeader
 

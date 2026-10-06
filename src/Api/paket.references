@@ -4,5 +4,4 @@ FSharp.Data
 FSharp.Compiler.Tools
 FSharp.Core redirects: on
 Newtonsoft.Json
-Logary
 Zulib

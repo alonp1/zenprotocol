@@ -327,6 +327,13 @@ let main argv =
                     let words = NBitcoin.Mnemonic(NBitcoin.Wordlist.English, NBitcoin.WordCount.TwentyFour).Words
                     import getUri words password1
                     |> printResponse
+                    // Only reached if the import succeeded - show the words so the user can back them up
+                    printfn ""
+                    printfn "Your 24-word recovery phrase. Write it down offline and never share it:"
+                    printfn ""
+                    words |> Array.iteri (fun i w -> printfn "%2d. %s" (i + 1) w)
+                    printfn ""
+                    printfn "Anyone with these words controls this wallet. You can show them again with: zen-cli mnemonicphrase"
             createWallet()
         | Some (Blockchain_Info _) ->
             blockchainInfo getUri

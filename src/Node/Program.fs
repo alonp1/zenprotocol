@@ -1,12 +1,11 @@
-﻿open System
+open System
 open FsNetMQ
-open FSharp.Configuration
 open Argu
 open Infrastructure
 open Consensus
 open Consensus.Chain
 open Endpoint
-open Logary.Message
+open Infrastructure.LogEvent
 
 module Actor = FsNetMQ.Actor
 
@@ -146,7 +145,64 @@ module Init =
 
         
 module Config =
-    type Config = YamlConfig<"scheme.yaml">
+    // Minimal loader for main.yaml / test.yaml (replaces the FSharp.Configuration type
+    // provider, which does not run on the modern F# compiler). Same members and defaults
+    // as the old YamlConfig<"scheme.yaml"> type.
+    type ApiConfig() =
+        member val enabled = false with get, set
+        member val bind = "127.0.0.1:31567" with get, set
+
+    type MinerConfig() =
+        member val enabled = false with get, set
+        member val threads = 1 with get, set
+
+    type Config() =
+        member val chain = "local" with get, set
+        member val dataPath = "./data" with get, set
+        member val externalIp : string = null with get, set
+        member val listen = false with get, set
+        member val bind = "127.0.0.1:29555" with get, set
+        member val seeds = System.Collections.Generic.List<string>() :> System.Collections.Generic.IList<string> with get, set
+        member val api = ApiConfig() with get, set
+        member val miner = MinerConfig() with get, set
+
+        member this.Load(path: string) =
+            let value (raw: string) =
+                let v = raw.Trim()
+                if v = "null" || v = "~" || v = "" then null
+                elif v.Length >= 2 && ((v.StartsWith "\"" && v.EndsWith "\"") || (v.StartsWith "'" && v.EndsWith "'")) then
+                    v.Substring(1, v.Length - 2)
+                else v
+            let mutable section = ""
+            for rawLine in System.IO.File.ReadAllLines path do
+                let line = rawLine.TrimEnd()
+                let trimmed = line.TrimStart()
+                if trimmed <> "" && not (trimmed.StartsWith "#") then
+                    let indented = line.Length > trimmed.Length
+                    if indented && trimmed.StartsWith "- " then
+                        if section = "seeds" then this.seeds.Add(value (trimmed.Substring 2))
+                    else
+                        let i = trimmed.IndexOf ':'
+                        if i > 0 then
+                            let key = trimmed.Substring(0, i).Trim()
+                            let v = value (trimmed.Substring(i + 1))
+                            if not indented then
+                                section <- key
+                                match key with
+                                | "chain" -> this.chain <- v
+                                | "dataPath" -> this.dataPath <- v
+                                | "externalIp" -> this.externalIp <- v
+                                | "listen" -> this.listen <- (v = "true")
+                                | "bind" -> this.bind <- v
+                                | "seeds" -> this.seeds.Clear()
+                                | _ -> ()
+                            else
+                                match section, key with
+                                | "api", "enabled" -> this.api.enabled <- (v = "true")
+                                | "api", "bind" -> this.api.bind <- v
+                                | "miner", "enabled" -> this.miner.enabled <- (v = "true")
+                                | "miner", "threads" -> this.miner.threads <- int v
+                                | _ -> ()
 
     let private getChain (config:Config) =
         match config.chain with

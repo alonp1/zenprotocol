@@ -9,7 +9,7 @@ open Zen.Types.Data
 open Infrastructure
 open Result
 open ValidationError
-open Logary.Message
+open Infrastructure.LogEvent
 
 let private addSpend s m =
     let (+) a b =

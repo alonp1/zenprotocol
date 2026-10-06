@@ -1,7 +1,7 @@
 module Measure
 
 open Infrastructure
-open Logary.Message
+open Infrastructure.LogEvent
 
 let measure<'T> (text:string) (f:Lazy<'T>) : 'T =
     let sw = System.Diagnostics.Stopwatch.StartNew()

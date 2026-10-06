@@ -1,0 +1,15 @@
+name: addressdb-snapshot
+# On the replay runner (16 GB RAM): build the address index from the synced official node
+# data and export a snapshot that includes it (left in /home/runner/zen-out on the runner).
+# Run after `reference`. Trigger: push to the `make-addressdb` branch.
+on:
+  push:
+    branches: [make-addressdb]
+jobs:
+  addressdb:
+    runs-on: [self-hosted, linux, replay]
+    timeout-minutes: 600
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build AddressDB snapshot
+        run: OUT=/home/runner/zen-out bash scripts/make-addressdb-snapshot.sh

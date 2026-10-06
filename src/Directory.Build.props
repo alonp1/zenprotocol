@@ -1,0 +1,30 @@
+<Project>
+  <!-- Shared settings for all SDK-style projects. Still .NET Framework 4.7 / Mono;
+       references come from the paket packages/ folder (hint paths in each .fsproj). -->
+  <PropertyGroup>
+    <TargetFramework>net47</TargetFramework>
+    <!-- paket <Choose> blocks in the projects test these before the SDK infers them -->
+    <TargetFrameworkIdentifier>.NETFramework</TargetFrameworkIdentifier>
+    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>portable</DebugType>
+    <!-- legacy-format leftovers; keep builds quiet but not silent -->
+    <NoWarn>$(NoWarn);MSB3277;MSB3245;NU1603</NoWarn>
+  </PropertyGroup>
+
+  <!-- On Linux/macOS build against Mono's .NET 4.7 reference assemblies -->
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' And Exists('/usr/lib/mono/4.7-api')">
+    <FrameworkPathOverride>/usr/lib/mono/4.7-api/</FrameworkPathOverride>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' And Exists('/Library/Frameworks/Mono.framework/Versions/Current/lib/mono/4.7-api')">
+    <FrameworkPathOverride>/Library/Frameworks/Mono.framework/Versions/Current/lib/mono/4.7-api/</FrameworkPathOverride>
+  </PropertyGroup>
+</Project>

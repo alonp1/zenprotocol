@@ -13,7 +13,7 @@ open Messaging.Services.Wallet
 open Infrastructure.Result
 open Consensus.Crypto
 open Consensus.Types
-open Logary.Message
+open Infrastructure.LogEvent
 open Api.Helpers
 open Consensus.Chain
 open FsBech32

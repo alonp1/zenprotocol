@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Community Node</title>
+<meta name="description" content="Independent community node, seed and blockchain snapshots for the ZP network.">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64;
+    --line: #e3e1da; --accent: #1f6f5c; --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890;
+            --line: #2c2d2a; --accent: #5cc3a6; --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+       margin: 0 0 14px; font-weight: 600; }
+  p.lead { margin: 0; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 22px; margin-bottom: 18px; }
+  .status { display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 18px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  code, .mono { font-family: var(--mono); font-size: 14px; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+        overflow-x: auto; margin: 10px 0; font-family: var(--mono); font-size: 13.5px; }
+  a { color: var(--accent); }
+  .btn { display: inline-block; background: var(--accent); color: var(--card); text-decoration: none;
+         padding: 9px 16px; border-radius: 8px; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; margin: 10px 0; }
+  .hash { word-break: break-all; color: var(--muted); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ZP Community Node</h1>
+    <p class="lead">An independent node, seed and snapshot host that keeps the ZP mainnet reachable.</p>
+  </header>
+
+  <section>
+    <h2>Network</h2>
+    <div class="status"><span class="dot" id="dot"></span><span id="state">Checking…</span></div>
+    <div class="grid">
+      <div class="stat"><div class="k">Block height</div><div class="v" id="height">–</div></div>
+      <div class="stat"><div class="k">Chain time</div><div class="v" id="age">–</div></div>
+      <div class="stat"><div class="k">Peers of this node</div><div class="v" id="peers">–</div></div>
+      <div class="stat"><div class="k">Difficulty</div><div class="v" id="diff">–</div></div>
+    </div>
+    <p style="margin:18px 0 0"><a href="/stats.html">Network stats: hashrate, block times, miners, CGP cycle →</a></p>
+  </section>
+
+  <section>
+    <h2>Blockchain snapshot</h2>
+    <p>Load it into a new node to skip most of the initial sync. Contains chain data only, no wallets.</p>
+    <div id="snap">Loading…</div>
+  </section>
+
+  <section>
+    <h2>Run a node</h2>
+    <p>Docker on Linux, macOS or Windows. Full guide in the repository.</p>
+<pre>git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
+cd zenprotocol
+docker compose build
+docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
+docker compose up -d</pre>
+    <p>Seed address: <code class="host">this-site</code><code>:9655</code></p>
+    <p><a href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script/Docker">Setup guide on GitHub</a></p>
+  </section>
+
+  <footer>
+    Community-run infrastructure. Not affiliated with or endorsed by Zen Protocol Ltd.
+    Software is provided under the Zen Protocol Software License.
+  </footer>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const fmt = n => Number(n).toLocaleString('en-US');
+
+  function ago(ms) {
+    const s = Math.max(0, (Date.now() - ms) / 1000);
+    if (s < 90) return Math.round(s) + ' s ago';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) return Math.round(s / 3600) + ' h ago';
+    return Math.round(s / 86400) + ' d ago';
+  }
+
+  async function refresh() {
+    try {
+      const info = await (await fetch('/api/info', { cache: 'no-store' })).json();
+      $('height').textContent = fmt(info.blocks);
+      $('diff').textContent = Number(info.difficulty).toFixed(0);
+      $('age').textContent = ago(info.medianTime);
+      const lagMin = (Date.now() - info.medianTime) / 60000;
+      let cls = 'ok', text = 'Synced and following the chain';
+      if (info.initialBlockDownload || info.blocks < info.headers) {
+        cls = 'warn'; text = 'Syncing: ' + fmt(info.blocks) + ' / ' + fmt(info.headers);
+      } else if (lagMin > 120) {
+        cls = 'warn'; text = 'No new blocks for ' + Math.round(lagMin) + ' minutes';
+      }
+      $('dot').className = 'dot ' + cls; $('state').textContent = text;
+    } catch (e) {
+      $('dot').className = 'dot bad'; $('state').textContent = 'Node unreachable';
+    }
+    try {
+      const p = await (await fetch('/api/peers', { cache: 'no-store' })).text();
+      $('peers').textContent = p.trim();
+    } catch (e) { $('peers').textContent = '–'; }
+  }
+
+  async function snapshot() {
+    try {
+      const s = await (await fetch('/snapshots/latest.json', { cache: 'no-store' })).json();
+      const gb = (s.bytes / 1e9).toFixed(2);
+      $('snap').innerHTML =
+        '<div class="row"><a class="btn" href="/snapshots/' + s.file + '">Download (' + gb + ' GB)</a>' +
+        '<span>Up to block <b>' + fmt(s.height) + '</b></span><span>Created ' + s.date + '</span></div>' +
+        '<div class="mono hash">SHA-256 ' + s.sha256 + '</div>' +
+        '<p>Or let a Docker node fetch it: <code>SNAPSHOT_URL=' + location.origin + '/snapshots/' + s.file + '</code></p>';
+    } catch (e) { $('snap').textContent = 'No snapshot published yet.'; }
+  }
+
+  document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
+  refresh(); snapshot();
+  setInterval(refresh, 30000);
+</script>
+</body>
+</html>

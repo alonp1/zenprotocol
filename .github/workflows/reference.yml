@@ -1,0 +1,34 @@
+name: reference
+# After a successful replay: build the reference file from the official node's data on the
+# replay runner and commit it to the `reference-data` branch (kept in the repo, independent
+# of any server or domain). Trigger: push to the `make-reference` branch.
+on:
+  push:
+    branches: [make-reference]
+permissions:
+  contents: write
+jobs:
+  reference:
+    runs-on: [self-hosted, linux, replay]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build reference from release node data
+        run: |
+          docker image inspect zen-node:release >/dev/null 2>&1 || docker build -q -f Docker/Dockerfile -t zen-node:release .
+          set -o pipefail
+          bash -x scripts/make-reference.sh 2>&1 | tee ref.log || {
+            tail -40 ref.log | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=make-reference::/'
+            exit 1; }
+      - name: Commit reference
+        run: |
+          git config user.name "zp-replay-bot"
+          git config user.email "zp-replay-bot@users.noreply.github.com"
+          git checkout -B reference-data
+          git add replay/reference
+          git commit -m "Replay reference from official 1.0.13 node"
+          git push -f origin reference-data
+      - uses: actions/upload-artifact@v4
+        with:
+          name: replay-reference
+          path: replay/reference/
