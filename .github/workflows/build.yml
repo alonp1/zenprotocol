@@ -6,6 +6,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  miner:
+    # GPU miner kernel vs Python hashlib, on the CPU OpenCL driver (pocl)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyopencl numpy pocl-binary-distribution
+      - run: python miner/zpminer.py list && python miner/zpminer.py selftest && python miner/zpminer.py bench --seconds 5
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 30
