@@ -12,15 +12,16 @@ FROM mono:6.12
 RUN sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list \
  && sed -i '/buster-updates/d' /etc/apt/sources.list \
  && apt-get -o Acquire::Check-Valid-Until=false update \
- && apt-get install -y --no-install-recommends liblmdb0 libgomp1 curl unzip \
+ && apt-get install -y --no-install-recommends liblmdb0 libgomp1 curl unzip zip \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=fetch /zen /zen
 COPY Docker/entrypoint.sh /entrypoint.sh
 COPY Docker/load-snapshot.sh /load-snapshot.sh
+COPY Docker/create-snapshot.sh /create-snapshot.sh
 # strip Windows CRLF (git autocrlf on Windows checkouts) so bash can run the script
-RUN sed -i "s/\r$//" /entrypoint.sh /load-snapshot.sh \
- && chmod +x /entrypoint.sh /load-snapshot.sh \
+RUN sed -i "s/\r$//" /entrypoint.sh /load-snapshot.sh /create-snapshot.sh \
+ && chmod +x /entrypoint.sh /load-snapshot.sh /create-snapshot.sh \
  && (chmod +x /zen/z3-linux 2>/dev/null || true)
 
 WORKDIR /zen
