@@ -23,6 +23,9 @@ Built on audited libraries: `@scure/bip39`, `@scure/bip32`, `@noble/curves` (sec
 4. CGP voting: contract witness to the voting contract, command `Allocation` / `Payout` / `Nomination`, message body `{<command>: hex(ballot), Signature: {pk: sig}}`, signatures over SHA3(hex(U32 interval) + hex(String phase) + hex(String ballot)) - see `src/Blockchain/Tally_VoteParser.fs`
 5. Smart contracts: tokens issued by contracts (multi-asset balances), list of active contracts (`/contract/active`), execute a contract (command, message body, assets sent with it; the node runs the contract via `/blockchain/contract/execute`, the wallet checks and signs the result), deploy a contract (advanced)
 6. UI, security review, release
+7. Multi-chain: the same recovery phrase derives keys per network (BIP44 coin types: ZP 258, Bitcoin 0, Ethereum 60). Each network is a separate adapter (addresses, balance, build and sign, broadcast) with its own byte-for-byte tests against real transactions; Bitcoin and Ethereum use public APIs with a switchable provider. View-only first, sending after. Swaps are out of scope.
+
+Code is organised per network from the start (`src/` today = the ZP adapter) so more networks plug in without a rewrite.
 
 ```
 npm install
