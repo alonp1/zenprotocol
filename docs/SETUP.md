@@ -35,6 +35,23 @@ curl -s https://zen.sealinkgps.com/node/blockchain/info
 
 `setup-site.sh` also publishes this snapshot (with the index) for everyone. `PUBLIC_NODE=1` runs the node with `--remote`: no node wallet, address index on, CORS open. Never set it on a mining node.
 
+### Moving to a new domain
+
+The pages use whatever domain they are served from, so only the server name, the seed and the default snapshot URL change.
+
+1. DNS: add an A record for the new name pointing at the server (Cloudflare: **DNS only**). Keep the old record for now: nodes already running have the old name as their seed.
+2. On the server, serve both names (one certificate covers both):
+
+```
+cd ~/zenprotocol && git pull
+DOMAIN=new.example.org EXTRA_DOMAINS=zen.sealinkgps.com bash site/setup-site.sh
+```
+
+3. In the repository, add the new name as the first seed in `src/Node/main.yaml` and in `Docker/Dockerfile` (keep the old one below it), and set the default `URL` in `Docker/load-snapshot.sh`. Update the links in `Docker/README.md` and this file.
+4. After a few months, when old installations have updated, drop the old name: run `DOMAIN=new.example.org bash site/setup-site.sh` without `EXTRA_DOMAINS` and remove the old seed and DNS record.
+
+The replay reference lives in the `reference-data` branch of the repository, not on the domain, so it is unaffected.
+
 ## Community infrastructure
 
 | Component | Address |

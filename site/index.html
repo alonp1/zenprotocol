@@ -76,7 +76,7 @@ cd zenprotocol
 docker compose build
 docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
 docker compose up -d</pre>
-    <p>Seed address: <code>zen.sealinkgps.com:9655</code></p>
+    <p>Seed address: <code class="host">this-site</code><code>:9655</code></p>
     <p><a href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script/Docker">Setup guide on GitHub</a></p>
   </section>
 
@@ -129,10 +129,11 @@ docker compose up -d</pre>
         '<div class="row"><a class="btn" href="/snapshots/' + s.file + '">Download (' + gb + ' GB)</a>' +
         '<span>Up to block <b>' + fmt(s.height) + '</b></span><span>Created ' + s.date + '</span></div>' +
         '<div class="mono hash">SHA-256 ' + s.sha256 + '</div>' +
-        '<p>Or let a Docker node fetch it: <code>SNAPSHOT_URL=https://zen.sealinkgps.com/snapshots/' + s.file + '</code></p>';
+        '<p>Or let a Docker node fetch it: <code>SNAPSHOT_URL=' + location.origin + '/snapshots/' + s.file + '</code></p>';
     } catch (e) { $('snap').textContent = 'No snapshot published yet.'; }
   }
 
+  document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
   refresh(); snapshot();
   setInterval(refresh, 30000);
 </script>

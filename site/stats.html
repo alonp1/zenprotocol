@@ -145,7 +145,7 @@
   </div>
 
   <footer>
-    Data from the community node at zen.sealinkgps.com, refreshed every 5 minutes.
+    Data from <span class="host">this site</span>'s community node, refreshed every 5 minutes.
     Hashrate is an estimate: work implied by each block's target divided by elapsed time.
     Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.
   </footer>
@@ -351,6 +351,7 @@ async function load() {
   try { render(await (await fetch('/stats.json', { cache: 'no-store' })).json()); }
   catch (e) { $('updated').textContent = 'Statistics are not available right now.'; }
 }
+document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
 load(); setInterval(load, 60000);
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(drawCharts, 150); });
 </script>

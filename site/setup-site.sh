@@ -7,6 +7,8 @@
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-zen.sealinkgps.com}"
+# Other names served by the same site, e.g. the old domain while moving: EXTRA_DOMAINS="zen.sealinkgps.com"
+EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"
 WEB=/var/www/zen
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SNAPDIR="$REPO/zen-data/snapshots"
@@ -43,8 +45,12 @@ fi
 chmod -R a+rX "$WEB"
 
 echo "== nginx"
+# a site installed earlier under another domain name would clash with this one: disable it
+for f in /etc/nginx/sites-enabled/*; do
+  [ "$(basename "$f")" != "$DOMAIN" ] && grep -q "Community node page" "$f" 2>/dev/null && { echo "disabling old site $f"; rm -f "$f"; }
+done
 cp "$REPO/site/nginx-zen.conf" "/etc/nginx/sites-available/$DOMAIN"
-sed -i "s/zen.sealinkgps.com/$DOMAIN/g" "/etc/nginx/sites-available/$DOMAIN"
+sed -i "s/server_name zen.sealinkgps.com;/server_name $DOMAIN $EXTRA_DOMAINS;/" "/etc/nginx/sites-available/$DOMAIN"
 ln -sf "/etc/nginx/sites-available/$DOMAIN" "/etc/nginx/sites-enabled/$DOMAIN"
 nginx -t
 systemctl reload nginx
@@ -74,7 +80,7 @@ echo "== HTTPS"
 if ! command -v certbot >/dev/null; then apt-get install -y certbot python3-certbot-nginx; fi
 # Always run: copying nginx-zen.conf above replaces the HTTPS block certbot added last time.
 # With an existing certificate this only re-installs it (no new issuance).
-certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email \
+certbot --nginx -d "$DOMAIN" $(for d in $EXTRA_DOMAINS; do echo -n " -d $d"; done) --non-interactive --agree-tos --register-unsafely-without-email \
   --redirect --keep-until-expiring
 
 echo "== Check"
