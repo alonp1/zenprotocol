@@ -29,14 +29,15 @@ curl -o zen-data/snapshots/$F http://<runner-ip>:8000/$F
 curl -o zen-data/snapshots/$F.sha256 http://<runner-ip>:8000/$F.sha256
 (cd zen-data/snapshots && sha256sum -c $F.sha256)
 docker compose down
+docker compose build          # the loader that reads a local file is in the new image
 docker compose run --rm --no-deps -e SNAPSHOT_URL=/data/snapshots/$F --entrypoint /load-snapshot.sh zen-node
 grep -q PUBLIC_NODE .env 2>/dev/null || echo "PUBLIC_NODE=1" >> .env
-docker compose up -d --build
+docker compose up -d
 bash site/setup-site.sh
 curl -s https://zen.sealinkgps.com/node/blockchain/info
 ```
 
-`setup-site.sh` also publishes this snapshot (with the index) for everyone. `PUBLIC_NODE=1` runs the node with `--remote`: no node wallet, address index on, CORS open. Never set it on a mining node.
+`setup-site.sh` also publishes this snapshot (with the index) for everyone. `PUBLIC_NODE=1` runs the node with `--remote`: no node wallet, address index on, CORS open. Never set it on a mining node. Never start it without the loaded index: the log must show `Syncing AddressDB`, not `Creating AddressDB` (release 1.0.13 cannot build the index from scratch).
 
 ### Moving to a new domain
 
