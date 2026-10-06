@@ -1,6 +1,5 @@
 #!/bin/bash
-# Load the official Zen Protocol blockchain snapshot (Feb 2023, ~1.8 GB) into /data,
-# so the node only has to sync blocks from 2023 onwards. The wallet is never touched.
+# Load a blockchain snapshot into /data so the node skips most of the initial sync. The wallet is never touched.
 #
 # Run with the node STOPPED, from the zenprotocol folder:
 #   docker compose down
@@ -8,7 +7,9 @@
 #   docker compose up -d
 set -euo pipefail
 
-URL="${SNAPSHOT_URL:-https://node-backups.s3-eu-west-1.amazonaws.com/zen-node.zip}"
+# community snapshot (current); official Feb-2023 one as fallback
+URL="${SNAPSHOT_URL:-https://zen.sealinkgps.com/snapshots/latest.zip}"
+FALLBACK="https://node-backups.s3-eu-west-1.amazonaws.com/zen-node.zip"
 DATA=/data
 TMP="$DATA/.snapshot-tmp"
 CHAIN="${CHAIN:-main}"
@@ -17,7 +18,7 @@ mkdir -p "$TMP"
 cd "$TMP"
 
 echo "== Downloading snapshot (resumable)"
-curl -fL -C - -o zen-node.zip "$URL"
+curl -fL -C - -o zen-node.zip "$URL" || { echo "Primary snapshot unavailable, using official Feb-2023 snapshot"; rm -f zen-node.zip; curl -fL -o zen-node.zip "$FALLBACK"; }
 
 echo "== Checking archive"
 unzip -tq zen-node.zip || { rm -f zen-node.zip; echo "Archive is corrupt - deleted it. Run this script again to download a fresh copy."; exit 1; }
