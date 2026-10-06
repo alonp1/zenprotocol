@@ -40,7 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build node image from source
-        run: docker build -f Docker/Dockerfile.source -t zen-node:source .
+        run: |
+          set -o pipefail
+          docker build --progress=plain -f Docker/Dockerfile.source -t zen-node:source . > /tmp/b.log 2>&1 || { grep -vE '^#[0-9]+ (sha256|extracting|DONE|CACHED)' /tmp/b.log | tail -40 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=source build::/'; exit 1; }
       - name: Smoke test - source image joins mainnet
         run: |
           docker run -d --name zs zen-node:source
