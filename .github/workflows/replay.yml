@@ -1,0 +1,20 @@
+name: replay
+# Full mainnet replay on a self-hosted runner (job runs for many hours).
+# Trigger: push to the `replay` branch.
+on:
+  push:
+    branches: [replay]
+jobs:
+  replay:
+    runs-on: [self-hosted, linux, replay]
+    timeout-minutes: 2880
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replay test
+        run: bash scripts/replay-test.sh
+      - name: Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-report
+          path: replay-report/
