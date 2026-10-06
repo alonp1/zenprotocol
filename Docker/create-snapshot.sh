@@ -25,6 +25,8 @@ rm -rf "$STAGE" && mkdir -p "$STAGE/zen-node/$CHAIN" "$OUT"
 cp -a "$SRC" "$STAGE/zen-node/$CHAIN/"
 # contracts folder (compiled contracts) speeds up startup; include if present
 [ -d "$DATA/$CHAIN/contracts" ] && cp -a "$DATA/$CHAIN/contracts" "$STAGE/zen-node/$CHAIN/" || true
+# address index (if this node runs with WALLET_API/PUBLIC_NODE) saves hours of indexing
+[ -d "$DATA/$CHAIN/addressdb" ] && cp -a "$DATA/$CHAIN/addressdb" "$STAGE/zen-node/$CHAIN/" || true
 # make sure no wallet data slipped in
 find "$STAGE" -iname "*wallet*" -prune -exec rm -rf {} +
 

@@ -54,12 +54,13 @@ Or put `MINER_THREADS=2` and `ZEN_CPUS=2.0` in `.env`. Most cloud providers (Het
 | `ZEN_DATA` | `./zen-data` | Data location; `zen-data` = Docker volume |
 | `EXTERNAL_IP` | – | Public IP to advertise to peers |
 | `WALLET_API` | `0` | `1` = serve the desktop Zen Wallet (see below) |
+| `PUBLIC_NODE` | `0` | `1` = public node for other wallets (server only, behind `site/nginx-zen.conf`) |
 
 ## Desktop Zen Wallet on this node
 
 The desktop wallet's default remote node (`mainnet-nodes.zp.io`) is no longer reliable. To use your own node instead:
 
-1. Add `WALLET_API=1` to `.env` and run `docker compose up -d`. The node builds an address index on first start (can take a while; watch for `AddressDB synced` in the log).
+1. Add `WALLET_API=1` and `ZEN_MEM=7g` to `.env` and run `docker compose up -d`. The first start builds an address index and loads every block into memory, so it needs several GB of RAM (or load a snapshot that already contains the index). Watch for `AddressDB synced` in the log.
 2. In the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**.
 
 The wallet keeps its own keys; the node only serves chain data. The API stays bound to localhost.

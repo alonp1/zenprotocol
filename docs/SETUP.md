@@ -13,16 +13,39 @@ A node validates and relays the blockchain. A miner is a node that also mines bl
 
 All installs use the official 1.0.13 release, the first without a version expiry date. A new node loads a recent snapshot and is in sync within minutes.
 
+### Public node for wallets
+
+Light wallets need a node with an address index (AddressDB). The first index build loads every block into memory (8+ GB RAM), so it is built once on a large machine and shipped inside the snapshot.
+
+1. On a machine with 16 GB RAM and a synced node volume (the replay runner): push to the `make-addressdb` branch, or run `bash scripts/make-addressdb-snapshot.sh`. The snapshot lands in `~/zen-out` (runner: `/home/runner/zen-out`).
+2. Serve it temporarily from that machine: `cd /home/runner/zen-out && python3 -m http.server 8000` (allow TCP 8000 in its firewall).
+3. On the community server:
+
+```
+cd ~/zenprotocol && git pull
+docker compose down
+docker compose run --rm --no-deps -e SNAPSHOT_URL=http://<runner-ip>:8000/<file>.zip --entrypoint /load-snapshot.sh zen-node
+echo "PUBLIC_NODE=1" >> .env
+docker compose up -d --build
+mkdir -p zen-data/snapshots && curl -o zen-data/snapshots/<file>.zip http://<runner-ip>:8000/<file>.zip
+curl -o zen-data/snapshots/<file>.zip.sha256 http://<runner-ip>:8000/<file>.zip.sha256
+bash site/setup-site.sh
+curl -s https://zen.sealinkgps.com/node/blockchain/info
+```
+
+`setup-site.sh` also publishes this snapshot (with the index) for everyone. `PUBLIC_NODE=1` runs the node with `--remote`: no node wallet, address index on, CORS open. Never set it on a mining node.
+
 ## Community infrastructure
 
 | Component | Address |
 | --- | --- |
 | Network status and downloads | [zen.sealinkgps.com](https://zen.sealinkgps.com) |
 | Seed node | `zen.sealinkgps.com:9655` (pre-configured in the image) |
+| Public node for wallets | `https://zen.sealinkgps.com/node` (planned, see below) |
 | Latest snapshot | [zen.sealinkgps.com/snapshots](https://zen.sealinkgps.com/snapshots/) |
 | Source | [github.com/alonp1/zenprotocol](https://github.com/alonp1/zenprotocol/tree/node-upgrade-script) |
 
-The status page exposes only two read-only node endpoints (`/api/info`, `/api/peers`). The wallet API is not reachable.
+The status page exposes only two read-only node endpoints (`/api/info`, `/api/peers`). The `/node/` path exposes a fixed whitelist of read-only chain and address endpoints plus `publishtransaction` (needed to send and vote), rate-limited. Wallet, mining and resync endpoints are never reachable.
 
 ## Linux server (node only)
 
@@ -133,12 +156,12 @@ docker compose exec zen-node mono zen-cli.exe wallet-create
 **Desktop Zen Wallet on the home node.** The wallet's default remote node (`mainnet-nodes.zp.io`) disconnects often ("Node is inaccessible"). Point it at your own node:
 
 ```
-Add-Content .env "WALLET_API=1"
+Add-Content .env "WALLET_API=1`nZEN_MEM=7g"
 docker compose up -d
 docker compose logs -f | Select-String "AddressDB"
 ```
 
-Wait for `AddressDB synced to block ...`, then in the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**. The wallet keeps its own keys; the node only serves chain data.
+The first index build loads every block into memory, hence `ZEN_MEM=7g` (needs 16 GB RAM in the PC). Wait for `AddressDB synced to block ...`, then in the wallet: ⚙ → Node Connectivity → **Mainnet | Local Node | http://localhost:11567**. The wallet keeps its own keys; the node only serves chain data.
 
 ## Useful commands
 
