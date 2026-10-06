@@ -21,7 +21,8 @@ Built on audited libraries: `@scure/bip39`, `@scure/bip32`, `@noble/curves` (sec
 2. Transaction serialization and signing, checked byte for byte against mainnet - done
 3. Balance, history, send, receive through the public node
 4. CGP voting: contract witness to the voting contract, command `Allocation` / `Payout` / `Nomination`, message body `{<command>: hex(ballot), Signature: {pk: sig}}`, signatures over SHA3(hex(U32 interval) + hex(String phase) + hex(String ballot)) - see `src/Blockchain/Tally_VoteParser.fs`
-5. UI, security review, release
+5. Smart contracts: tokens issued by contracts (multi-asset balances), list of active contracts (`/contract/active`), execute a contract (command, message body, assets sent with it; the node runs the contract via `/blockchain/contract/execute`, the wallet checks and signs the result), deploy a contract (advanced)
+6. UI, security review, release
 
 ```
 npm install
