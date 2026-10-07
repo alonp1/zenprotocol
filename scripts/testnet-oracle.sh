@@ -4,7 +4,7 @@
 # needs: a testnet node with the public test wallet, dotnet 10, the oracle built (src/Oracle/bin/Release)
 set -euo pipefail
 API=${1:-http://127.0.0.1:31567}; PW=${2:-testnet}
-OUT=$(CONTRACT=src/ContractExamples/Oracle.fst EXECUTE=0 bash scripts/testnet-contract.sh "$API" "$PW")
+OUT=$(CONTRACT=src/ContractExamples/Oracle.fst RLIMIT=${RLIMIT:-30000000} EXECUTE=0 bash scripts/testnet-contract.sh "$API" "$PW")
 echo "$OUT" | tail -n 5
 ADDR=$(echo "$OUT" | sed -n 's/^CONTRACT_ADDRESS=//p')
 [ -n "$ADDR" ]
