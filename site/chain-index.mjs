@@ -95,10 +95,17 @@ CREATE TABLE IF NOT EXISTS assets (asset TEXT PRIMARY KEY, contract TEXT, minted
 CREATE TABLE IF NOT EXISTS votes (tx TEXT, block INTEGER, time INTEGER, command TEXT, pk TEXT, ballot TEXT, PRIMARY KEY (tx, pk, command));
 CREATE TABLE IF NOT EXISTS payouts (tx TEXT, block INTEGER, time INTEGER, recipient TEXT, asset TEXT, amount TEXT);
 CREATE TABLE IF NOT EXISTS allocation (interval INTEGER PRIMARY KEY, pct INTEGER, block INTEGER);
-CREATE TABLE IF NOT EXISTS weights (interval INTEGER, pk TEXT, zp TEXT, PRIMARY KEY (interval, pk));`);
+CREATE TABLE IF NOT EXISTS weights (interval INTEGER, pk TEXT, zp TEXT, PRIMARY KEY (interval, pk));
+CREATE TABLE IF NOT EXISTS blocks (number INTEGER PRIMARY KEY, hash TEXT, parent TEXT, time INTEGER, difficulty INTEGER,
+                                   txs INTEGER, reward TEXT, fees TEXT, moved TEXT, miner TEXT);
+CREATE INDEX IF NOT EXISTS blocks_hash ON blocks(hash);
+CREATE TABLE IF NOT EXISTS txs (hash TEXT PRIMARY KEY, block INTEGER, idx INTEGER, inputs TEXT, outputs TEXT, contract TEXT, command TEXT);
+CREATE INDEX IF NOT EXISTS txs_block ON txs(block);`);
 const q = {
   meta: db.prepare('SELECT v FROM meta WHERE k=?'), setMeta: db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)'),
-  utxoGet: db.prepare('SELECT asset FROM utxo WHERE outpoint=?'), utxoDel: db.prepare('DELETE FROM utxo WHERE outpoint=?'),
+  utxoGet: db.prepare('SELECT asset, address, amount FROM utxo WHERE outpoint=?'),
+  blockPut: db.prepare('INSERT OR REPLACE INTO blocks VALUES (?,?,?,?,?,?,?,?,?,?)'),
+  txPut: db.prepare('INSERT OR REPLACE INTO txs VALUES (?,?,?,?,?,?,?)'), utxoDel: db.prepare('DELETE FROM utxo WHERE outpoint=?'),
   utxoPut: db.prepare('INSERT OR REPLACE INTO utxo VALUES (?,?,?,?)'),
   assetNew: db.prepare('INSERT OR IGNORE INTO assets(asset, contract, first_block) VALUES (?,?,?)'),
   assetGet: db.prepare('SELECT minted, destroyed FROM assets WHERE asset=?'),
@@ -122,16 +129,19 @@ function indexBlock(n, raw) {
   const dv = new DataView(blk.header.buffer, blk.header.byteOffset);
   if (dv.getUint32(36) !== n) throw new Error(`block ${n}: header says ${dv.getUint32(36)}`);
   const ts = Number(dv.getBigUint64(72));
-  for (const { tx } of blk.txs) {
-    const th = hex(txHash(tx)), touched = new Set();
+  let reward = 0n, fees = 0n, moved = 0n, blockMiner = null;
+  blk.txs.forEach(({ tx }, txIdx) => {
+    const th = hex(txHash(tx)), touched = new Set(), ins = [], outs = [];
     const cws = tx.witnesses.filter(w => w.type === 'Contract');
     const mintContract = cws[0] ? cidStr(cws[0].contractId) : null;
     for (const inp of tx.inputs) {
       if (inp.type === 'outpoint') {
         const op = hex(inp.outpoint.txHash) + ':' + inp.outpoint.index, row = q.utxoGet.get(op);
-        if (row) { touched.add(row.asset); q.utxoDel.run(op); }
+        if (row) { touched.add(row.asset); q.utxoDel.run(op); ins.push([row.address, row.asset, row.amount]); }
+        else ins.push([null, null, null, hex(inp.outpoint.txHash) + ':' + inp.outpoint.index]);
       } else {
         const a = assetStr(inp.spend.asset); touched.add(a);
+        ins.push(['mint', a, String(inp.spend.amount)]);
         q.assetNew.run(a, mintContract || a.slice(0, 72), n);
         q.assetMint.run(String(BigInt(q.assetGet.get(a).minted) + inp.spend.amount), a);
       }
@@ -147,7 +157,16 @@ function indexBlock(n, raw) {
       }
       const addr = addressOf(o.lock);
       if (addr) q.utxoPut.run(th + ':' + i, a, addr, String(o.spend.amount));
+      outs.push([addr || o.lock.type, a, String(o.spend.amount)]);
+      if (a === '00') {
+        if (o.lock.type === 'Fee') fees += o.spend.amount;
+        else if (o.lock.type === 'Coinbase' || (txIdx === 0 && o.lock.type === 'Contract')) reward += o.spend.amount;
+        else moved += o.spend.amount;
+      }
+      if (o.lock.type === 'Coinbase' && !blockMiner) blockMiner = addr;
     });
+    const cw0 = tx.witnesses.find(w => w.type === 'Contract');
+    q.txPut.run(th, n, txIdx, JSON.stringify(ins), JSON.stringify(outs), tx.contract ? 'deploy' : cw0 ? cidStr(cw0.contractId) : null, cw0 ? cw0.command : null);
     // allocation in force: CGP share of the coinbase of the first block seen in each interval
     if (miner > 0n) {
       const iv = Math.floor((n - 1) / INTERVAL) + 1;
@@ -169,7 +188,12 @@ function indexBlock(n, raw) {
       }
     }
     for (const a of touched) { q.assetNew.run(a, a === '00' ? '' : a.slice(0, 72), n); q.assetTx.run(a); }
-  }
+  });
+  // fees go to the miner inside the coinbase: what the coinbase pays above the block subsidy
+  const subsidy = n < 2 ? 0n : (50n * 100000000n) >> BigInt(Math.floor((n - 2) / 800000));
+  if (reward > subsidy) fees += reward - subsidy;
+  q.blockPut.run(n, hex(pkHash(blk.header)), hex(blk.header.slice(4, 36)), ts, dv.getUint32(80), blk.txs.length,
+                 String(reward), String(fees), String(moved), blockMiner);
 }
 
 // ---- index new blocks ------------------------------------------------------------------------
