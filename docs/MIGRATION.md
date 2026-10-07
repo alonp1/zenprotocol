@@ -17,7 +17,7 @@ Run the node on .NET 10 instead of Mono 6.12 (unmaintained, Debian 10 base witho
 | 1 | Convert all 23 projects to SDK-style, still `net47` on Mono | Low | Done – builds with the .NET SDK, all tests pass |
 | 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | 4 of 9 done. The rest are compiled into contracts or drag in FSharp.Core – gated on stage 3 |
 | 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Done 2026-10-06: PASS from genesis to block 1,052,885; reference stored (see Reference file) |
-| 4 | Retarget libraries and node to `net10.0`; F\* keeps running as an external tool on Mono | Medium | In progress (branch `net10`) |
+| 4 | Retarget libraries and node to `net10.0`; F\* keeps running as an external tool on Mono | Medium | Done: replay matches the reference (1,053 hashes, CGP state); merged |
 | 5 | Contract pipeline on .NET 10 without Mono: F# compiler service, in-memory contract loading | High | Planned |
 | 6 | Load test on a private network: real throughput limit of Mono vs .NET 10 nodes | None (test only) | Planned, see Capacity and load test |
 
@@ -58,7 +58,7 @@ Argu 5.1, AsyncIO, NetMQ 4, FsPickler 5.2, FSharp.Data 3, FSharp.Control.Reactiv
 
 Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, `FsBech32`, `BouncyCastle.Crypto`, `FSharp.Compatibility.OCaml` and `Zulib` (see `Infrastructure/ZFStar.fs`), and the CGP tally uses `FSharpx.Extras`. Changing any of them can change contract results or vote counting, so they are only touched once the replay test can prove identical behaviour. `FsNetMQ` 0.3.6 supports `netstandard2.0` but requires a newer `FSharp.Core`, so it goes with that upgrade. `net452` assemblies may also load unchanged on .NET 10; stage 4 will tell.
 
-## Stage 4: how the node runs on .NET 10 (branch `net10`)
+## Stage 4: how the node runs on .NET 10
 
 **Projects.** All projects target `net10.0` (`src/Directory.Build.props`). Packages come from NuGet as `PackageReference`; `src/Directory.Packages.props` pins every package, including indirect ones, to the exact version in `paket.lock` of release 1.0.13, so the libraries are the same as before. `nuget.config` adds the zenprotocol MyGet feed for `Zulib`, `CGPContract`, `FsBech32` and the native `zen_*` packages. FSharp.Core stays at 4.3.4 (it ships a `netstandard` build).
 
