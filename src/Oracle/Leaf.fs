@@ -32,3 +32,13 @@ let commitMessageBody (rootHash: Hash.Hash) : string =
     Convert.ToHexString(bytes).ToLowerInvariant()
 
 let hex (h: Hash.Hash) = Convert.ToHexString(Hash.bytes h).ToLowerInvariant()
+
+/// The value the Oracle contract commits to and FixedPayout expects: SHA3(root ; uint64 timestamp), built with the
+/// same Zulib function the contracts use (hashCommit in FixedPayout.fst), so the bytes are identical.
+let commitHash (rootHash: Hash.Hash) (timestamp: uint64) : Hash.Hash =
+    let sha3 =
+        Zen.Hash.Sha3.empty
+        |> Zen.Hash.Sha3.updateHash (Hash.bytes rootHash) |> Zen.Cost.Realized.__force
+        |> Zen.Hash.Sha3.updateU64 timestamp |> Zen.Cost.Realized.__force
+        |> Zen.Hash.Sha3.finalize |> Zen.Cost.Realized.__force
+    Hash.Hash sha3

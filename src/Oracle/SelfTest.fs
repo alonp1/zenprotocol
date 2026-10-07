@@ -29,6 +29,9 @@ let run () : bool =
                            | Zen.Types.Data.Hash h -> h = Hash.bytes root
                            | _ -> false))
                | _ -> false)
+          check "the commit hash depends on root and timestamp and is stable"
+              (let a = Leaf.commitHash root 1234UL
+               a = Leaf.commitHash root 1234UL && a <> Leaf.commitHash root 1235UL && a <> root)
           check "the mock provider is deterministic"
               (let m = Providers.Mock() :> Providers.Provider
                let t = DateTimeOffset.FromUnixTimeSeconds 1800000000L
