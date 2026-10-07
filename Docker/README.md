@@ -8,10 +8,18 @@ Network status, seed and snapshots: **https://zen.sealinkgps.com**
 
 ## 1. Install and load a snapshot
 
+One command (Linux, macOS; installs Docker on Linux, loads the verified snapshot, starts the node):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-node.sh | bash
+```
+
+Or step by step (this is also the Windows way):
+
 ```bash
 git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
 cd zenprotocol
-docker compose build
+docker compose pull   # or: docker compose build
 docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
 docker compose up -d
 ```

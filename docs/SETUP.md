@@ -65,7 +65,7 @@ cd ~/zenprotocol && git pull
 DOMAIN=new.example.org EXTRA_DOMAINS=zen.sealinkgps.com bash site/setup-site.sh
 ```
 
-3. In the repository, add the new name as the first seed in `src/Node/main.yaml` and in `Docker/Dockerfile` (keep the old one below it), and set the default `URL` in `Docker/load-snapshot.sh`. Update the links in `Docker/README.md` and this file.
+3. In the repository, edit `network.json`: add the new name first in `seeds`, `snapshotSources` and `publicNodes` (keep the old one below it). Installed nodes read the seeds from it at every start and the snapshot loader reads the sources, so no image or script change is needed. Also add the new seed as the first line of `seeds` in `src/Node/main.yaml` (used when `network.json` cannot be reached). Update the links in `Docker/README.md` and this file.
 4. After a few months, when old installations have updated, drop the old name: run `DOMAIN=new.example.org bash site/setup-site.sh` without `EXTRA_DOMAINS` and remove the old seed and DNS record.
 
 The replay reference lives in the `reference-data` branch of the repository, not on the domain, so it is unaffected.
@@ -83,27 +83,48 @@ The replay reference lives in the `reference-data` branch of the repository, not
 
 The status page exposes only two read-only node endpoints (`/api/info`, `/api/peers`). The `/node/` path exposes a fixed whitelist of read-only chain and address endpoints plus `publishtransaction` (needed to send and vote), rate-limited. Wallet, mining and resync endpoints are never reachable.
 
+## Keeping the chain alive without the original project
+
+The blockchain lives in every node; what can disappear is the infrastructure around it. Everything below is ours, so a node can be installed and built even if the original project's servers (MyGet, `zp.io`, the old seeds, the S3 snapshot) are gone.
+
+| What could disappear | Our copy | Where |
+| --- | --- | --- |
+| The MyGet feed: Zulib, CGPContract, FsBech32, z3, secp256k1 (all versions) | `packages__*.nupkg` | Release `upstream-mirror` |
+| The released node binaries (`@zen/zen-node`, npm on MyGet) | `npm__zen-zen-node-<version>.tgz`; the Dockerfile falls back to it automatically | Release `upstream-mirror` |
+| Source of every repository of the `zenprotocol` GitHub organization (node, compiler, ZFStar, Zulib, wallet, explorer...) | `repos__<name>.bundle` (git bundle, all branches and tags): `git clone repos__<name>.bundle <name>` | Release `upstream-mirror` |
+| A prebuilt node image | `ghcr.io/alonp1/zen-node` | GitHub packages (workflow `image`) |
+| The chain snapshot (original S3 file is from Feb 2023) | Newest snapshot with sha256, from this server **and** from GitHub in pieces | `snapshotSources` in `network.json` |
+| The seeds | Our seed first, the old ones after it; nodes refresh the list from `network.json` at every start | `seeds` in `network.json` |
+| Names of assets and contracts (only on zp.io) | `site/asset-names.json`, `site/contract-names.json` | This repository |
+| Block, transaction, CGP and asset history | The index of this server, rebuilt from any node in a few hours | `site/chain-index.mjs` |
+
+The release `upstream-mirror` is built by the workflow **mirror-upstream** (GitHub Actions: Actions, mirror-upstream, Run workflow). It also runs on the 1st of every month and lists every problem in `MANIFEST.json`. To build the node from the mirror instead of MyGet, download the packages once:
+
+```
+gh release download upstream-mirror -R alonp1/zenprotocol -p 'packages__*' -D packages-mirror
+cd packages-mirror && for f in packages__*; do mv "$f" "${f#packages__}"; done
+dotnet restore --source ./packages-mirror --source https://api.nuget.org/v3/index.json
+```
+
+**Single points of failure left, and what to do:**
+
+1. **One seed server.** A second public node in a different data center (another provider) is the real protection: run `install-node.sh` there with `PUBLIC_NODE=1`, then add its name to `seeds` in `network.json`. Every node then also learns peers from the network itself and keeps them in its address book.
+2. **Snapshots.** After each snapshot refresh run `bash scripts/publish-snapshot-release.sh` on the server (needs `gh auth login` once) to update the GitHub copy. Anyone who runs a node can publish a snapshot the same way.
+3. **The GitHub repository.** Anyone can `git clone` it; keep at least one more clone or fork in another account.
+
+Anyone can verify a snapshot before trusting it: the node validates every block it replays from its own database only up to what it has, so the strongest check is the replay gate (`scripts/check-against-reference.sh`, hashes of the first 1,053 blocks and the CGP state).
+
 ## Linux server (node only)
 
 1. Connect: `ssh root@<server-ip>`
 2. Recommended first: `apt update && apt upgrade -y`, then `reboot`
-3. Install:
+3. Install, in one command:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/setup-zen-node-server.sh -o setup.sh
-bash setup.sh
+curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-node.sh | bash
 ```
 
-The script checks for 20 GB of free disk and free ports 9655 and 11567, installs Docker, clones the code to `~/zenprotocol` and starts a node capped at 1 CPU and 2 GB RAM, so it does not disturb other services on the server.
-
-4. Load the snapshot (instead of a multi-hour sync):
-
-```
-cd ~/zenprotocol
-docker compose down
-docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
-docker compose up -d
-```
+The script (`scripts/install-node.sh`) checks for 20 GB of free disk and free ports 9655 and 11567, installs Docker, clones the code to `~/zenprotocol`, pulls the ready node image (builds it when the registry is unreachable), loads the newest chain snapshot (verified against its sha256, tried from every source in `network.json`), starts a node capped at 1 CPU and 2 GB RAM and shows the sync status. Run it again to update; the chain data is kept. Options: `PUBLIC_NODE=1`, `MINER_THREADS=2` (own hardware only), `SKIP_SNAPSHOT=1`, `DIR=/other/folder`.
 
 **Firewall:** allow inbound TCP 9655 (in the Hetzner Cloud Firewall, if you use one). The API port (11567) stays reachable from the server only.
 
@@ -147,12 +168,12 @@ On Windows run the node only through Docker Desktop: the native npm install fail
 git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
 cd zenprotocol
 Set-Content .env "ZEN_CPUS=3.0`nZEN_DATA=zen-data"
-docker compose build
+docker compose pull
 docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
 docker compose up -d
 ```
 
-`ZEN_DATA=zen-data` keeps the data in a Docker volume. Without it the data lives in a Windows folder and sync is about 4x slower. On macOS/Linux write the same two lines to `.env` with any editor.
+If `docker compose pull` fails (registry not reachable) run `docker compose build` instead. `ZEN_DATA=zen-data` keeps the data in a Docker volume. Without it the data lives in a Windows folder and sync is about 4x slower. On macOS/Linux write the same two lines to `.env` with any editor.
 
 4. Check: `docker compose ps` shows **Up** (not Restarting), and `curl.exe -s http://127.0.0.1:11567/blockchain/info` shows `blocks` equal to `headers`
 5. Create a new wallet for mining rewards (not your main wallet):

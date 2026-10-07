@@ -3,8 +3,11 @@
 # Stage 1: fetch the released binaries from the Zen npm registry
 FROM node:20-bookworm-slim AS fetch
 ARG ZEN_VERSION=1.0.13
+# the original MyGet registry first; if it is gone, our copy of the same release (workflow mirror-upstream)
+ARG MIRROR=https://github.com/alonp1/zenprotocol/releases/download/upstream-mirror
 RUN npm config set @zen:registry https://www.myget.org/F/zenprotocol/npm/ \
- && npm install -g --ignore-scripts "@zen/zen-node@${ZEN_VERSION}" \
+ && (npm install -g --ignore-scripts "@zen/zen-node@${ZEN_VERSION}" \
+     || npm install -g --ignore-scripts "${MIRROR}/npm__zen-zen-node-${ZEN_VERSION}.tgz") \
  && cp -r "$(npm root -g)/@zen/zen-node/Release" /zen
 
 # Stage 2: runtime on Mono 6.12

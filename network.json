@@ -1,0 +1,17 @@
+{
+  "_comment": "Single place for every address a node or an installer needs. Nodes and installers read this file from the repository, so moving to another server only means editing it (see docs/SETUP.md, Moving to a new domain).",
+  "chain": "main",
+  "seeds": [
+    "zen.sealinkgps.com"
+  ],
+  "snapshotSources": [
+    "https://zen.sealinkgps.com/snapshots",
+    "https://github.com/alonp1/zenprotocol/releases/download/snapshot-latest"
+  ],
+  "publicNodes": [
+    "https://zen.sealinkgps.com/node"
+  ],
+  "upstreamMirror": "https://github.com/alonp1/zenprotocol/releases/download/upstream-mirror",
+  "image": "ghcr.io/alonp1/zen-node:latest",
+  "source": "https://github.com/alonp1/zenprotocol"
+}
