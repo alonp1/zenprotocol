@@ -1,6 +1,5 @@
 module Consensus.Weight
 
-open System.Diagnostics.Eventing.Reader
 open Consensus.Types
 open TxSkeleton
 open Infrastructure
