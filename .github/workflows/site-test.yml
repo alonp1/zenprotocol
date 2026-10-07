@@ -1,0 +1,17 @@
+name: site-test
+# Chain index, backfill and explorer API on real mainnet blocks (site/test/explorer.test.mjs), and the wallet tests.
+on:
+  workflow_dispatch:
+  push:
+    paths: ['site/**', 'wallet/src/serialize.js', 'wallet/test/**', '.github/workflows/site-test.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: cd wallet && npm ci --no-audit --no-fund && npm test
+      - run: node --no-warnings --test --test-timeout=120000 site/test/explorer.test.mjs

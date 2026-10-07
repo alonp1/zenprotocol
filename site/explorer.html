@@ -67,6 +67,24 @@
   .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
   .phase-l span { position: absolute; top: 0; white-space: nowrap; }
   footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: -6px 0 16px; }
+  .tabs a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; color: var(--muted); text-decoration: none; }
+  .tabs a.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  form.find { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 14px; margin: 0 0 14px; }
+  form.find label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  form.find input, form.find select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 14px; text-transform: none; letter-spacing: 0; }
+  form.find .wide { grid-column: 1 / -1; }
+  form.find .actions { display: flex; gap: 10px; align-items: center; grid-column: 1 / -1; }
+  form.find button { padding: 8px 18px; border: 1px solid var(--accent); background: var(--accent); color: var(--card); border-radius: 8px; font: inherit; cursor: pointer; }
+  form.jump { display: flex; gap: 8px; align-items: center; margin: 0 0 14px; font-size: 14px; color: var(--muted); flex-wrap: wrap; }
+  form.jump input { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 14px; }
+  form.jump button { padding: 6px 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; font: inherit; font-size: 14px; cursor: pointer; }
+  .pager { align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pager form { display: inline-flex; gap: 6px; align-items: center; }
+  .pager form input { width: 5.5em; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; font-size: 14px; }
+  table.ex { font-size: 13px; } table.ex th, table.ex td { padding: 8px 7px; white-space: nowrap; }
+  .pos { color: var(--ok); } .neg { color: var(--bad, #c0392b); }
+  .total { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
 </style>
 <style>
   input.q { width: 100%; max-width: 360px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
@@ -108,6 +126,7 @@
   <h1 id="title">Explorer</h1>
   <p class="lead" id="sub">Loading…</p>
   <form class="search" id="search"><input name="q" placeholder="Block number, block or transaction hash" aria-label="Search" autocomplete="off"><button>Search</button></form>
+  <div class="tabs" id="tabs"></div>
   <div id="view"></div>
   <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
 </main>
@@ -125,10 +144,18 @@ const API = '/explorer/api';
 let names = {};
 const zp = v => amt(Number(v) / 1e8);
 const assetName = a => a === '00' ? 'ZP' : names[a] || short(a);
+const dts = ms => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const dt = ms => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const link = (kind, id, text) => `<a href="?${kind}=${encodeURIComponent(id)}">${esc(text ?? id)}</a>`;
-const party = a => a == null ? '<span class="sub">earlier output</span>' : a === 'mint' ? '<b>Minted</b>' : /^c?zen1|^c?tzn1/.test(a) ? `<span class="mono" title="${esc(a)}">${esc(short(a))}</span>` : esc(a);
-async function get(p) { const r = await fetch(API + p, { cache: 'no-cache' }); if (!r.ok) throw new Error(r.status === 404 ? 'Not found' : 'The node is busy, try again'); return r.json(); }
+const party = a => a == null ? '<span class="sub">earlier output</span>' : a === 'mint' ? '<b>Minted</b>' : /^c?zen1|^c?tzn1/.test(a) ? `<a class="mono" href="?address=${encodeURIComponent(a)}" title="${esc(a)}">${esc(short(a))}</a>` : esc(a);
+async function get(p) {
+  const r = await fetch(API + p, { cache: 'no-cache' });
+  if (!r.ok) {
+    let m = ''; try { m = (await r.json()).error || ''; } catch { /* not json */ }
+    throw new Error(r.status === 404 ? 'Not found' : (r.status === 400 || r.status === 503) && m ? m[0].toUpperCase() + m.slice(1) : 'The node is busy, try again');
+  }
+  return r.json();
+}
 function txHtml(t) {
   const side = rows => rows.length ? rows.map(r => `<div class="line"><span class="a">${party(r[0])}</span><span>${r[1] ? amt(Number(r[2]) / 1e8) + ' ' + esc(assetName(r[1])) : `<span class="mono sub" title="${esc(r[3] || '')}">${esc(short(r[3] || ''))}</span>`}</span></div>`).join('') : '<div class="line sub">none (block reward)</div>';
   const label = t.index === 0 ? '<span class="pill ok">block reward</span>' : t.contract === 'deploy' ? '<span class="pill">contract deploy</span>' : t.contract ? `<span class="pill">contract ${esc(t.command || '')}</span>` : '';
@@ -165,22 +192,122 @@ async function showBlocks(before) {
   $('title').textContent = 'Latest blocks';
   $('sub').textContent = 'Tip ' + fmt(d.tip) + (d.indexedTo < d.tip - 20 ? ' · history indexed to block ' + fmt(d.indexedTo) + ' (in progress)' : '');
   const last = d.blocks.at(-1)?.number;
-  $('view').innerHTML = '<section><div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
-    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td class="mono" title="${esc(b.miner || '')}">${esc(short(b.miner))}</td></tr>`).join('') +
+  $('view').innerHTML = '<section><form class="jump" id="jump">Go to date <input type="date" name="d" required aria-label="Date"> <button>Go</button> <span id="jumpmsg"></span></form><div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
+    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td>${addrLink(b.miner)}</td></tr>`).join('') +
     `</table></div><div class="pager"><span></span><span>${last > 1 ? `<a href="?before=${last}">Older →</a>` : ''}</span></div></section>`;
 }
+const MAXPAGE = 100000;
+const addrLink = a => a ? `<a class="mono" href="?address=${encodeURIComponent(a)}" title="${esc(a)}">${esc(short(a))}</a>` : '–';
+const netZp = v => { const n = Number(v) / 1e8; return `<span class="${n > 0 ? 'pos' : n < 0 ? 'neg' : ''}">${n > 0 ? '+' : ''}${amt(n)}</span>`; };
+const url = (params, over = {}) => '?' + new URLSearchParams(Object.entries({ ...Object.fromEntries(params), ...over }).filter(([, v]) => v !== '' && v != null)).toString();
+
+// previous / next, page X of Y and a jump to any page; keeps every other search field
+function pager(params, d) {
+  const pages = Math.max(1, Math.ceil(d.total / d.take));
+  const hidden = [...params].filter(([k]) => k !== 'page').map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`).join('');
+  return `<div class="pager"><span>${d.page > 1 ? `<a href="${url(params, { page: d.page - 1 })}">← Newer/previous</a>` : ''}</span>
+    <form>${hidden}Page <input type="number" name="page" min="1" max="${pages}" value="${d.page}" aria-label="Page"> of ${fmt(pages)}${d.capped ? '+' : ''} <button>Go</button></form>
+    <span>${d.page < pages ? `<a href="${url(params, { page: d.page + 1 })}">Next →</a>` : ''}</span></div>`;
+}
+const countLine = (d, what) => `<div class="total">${d.total ? fmt(d.total) + (d.capped ? '+' : '') + ' ' + what : 'Nothing matches these filters'}${d.indexedTo < d.tip - 20 ? ` · history indexed to block ${fmt(d.indexedTo)} (in progress), newer data is not searchable yet` : ''}</div>`;
+const sel = (name, cur, opts) => `<select name="${name}">${opts.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+const field = (label, input, cls = '') => `<label class="${cls}">${label}${input}</label>`;
+const inp = (name, v, extra = '') => `<input name="${name}" value="${esc(v || '')}" ${extra}>`;
+
+function tabs(active) {
+  $('tabs').innerHTML = [['', 'Latest blocks'], ['blocks', 'Search blocks'], ['txs', 'Search transactions']]
+    .map(([k, t]) => `<a href="${k ? '?find=' + k : 'explorer.html'}"${k === active ? ' class="on"' : ''}>${t}</a>`).join('');
+}
+
+function blocksTable(rows) {
+  return '<div class="scroll"><table class="ex"><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
+    rows.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dts(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td>${addrLink(b.miner)}</td></tr>`).join('') + '</table></div>';
+}
+
+function txsTable(rows, withAddress) {
+  const kind = t => t.index === 0 ? '<span class="pill ok">block reward</span>' : t.contract === 'deploy' ? '<span class="pill">contract deploy</span>' : t.contract ? `<span class="pill">contract ${esc(t.command || '')}</span>` : '';
+  return '<div class="scroll"><table class="ex"><tr><th>Time</th><th>Transaction</th><th class="r">Block</th><th></th><th class="r">ZP out</th>' + (withAddress ? '<th class="r">Received</th><th class="r">Sent</th><th class="r">Net</th>' : '') + '</tr>' +
+    rows.map(t => `<tr><td>${dts(t.time)}</td><td class="mono">${link('tx', t.hash, short(t.hash))}</td><td class="r">${link('block', t.block, fmt(t.block))}</td><td>${kind(t)}</td><td class="r">${zp(t.zp)}</td>` +
+      (withAddress ? `<td class="r">${zp(t.received)}</td><td class="r">${zp(t.sent)}</td><td class="r">${netZp(t.received - t.sent)}</td>` : '') + '</tr>').join('') + '</table></div>';
+}
+
+async function showFind(kind) {
+  const p = new URLSearchParams(location.search), isBlocks = kind === 'blocks';
+  tabs(isBlocks ? 'blocks' : 'txs');
+  $('title').textContent = isBlocks ? 'Search blocks' : 'Search transactions';
+  $('sub').textContent = isBlocks ? 'Find blocks by date, number of transactions, ZP transferred or miner.' : 'Find transactions by address, date, ZP amount, asset or type.';
+  const v = k => p.get(k) || '';
+  const take = sel('take', v('take') || '25', [['25', '25 per page'], ['50', '50 per page'], ['100', '100 per page']]);
+  const known = Object.entries(names).sort((x, y) => x[1].localeCompare(y[1]));
+  const assetSel = sel('asset', v('asset'), [['', 'Any asset'], ['00', 'ZP only'], ...known.map(([id, n]) => [id, n]), ...(v('asset') && v('asset') !== '00' && !names[v('asset')] ? [[v('asset'), short(v('asset'))]] : [])]);
+  const form = isBlocks
+    ? `<form class="find"><input type="hidden" name="find" value="blocks">
+        ${field('From date', inp('from', v('from'), 'type="date"'))}${field('To date', inp('to', v('to'), 'type="date"'))}
+        ${field('Min transactions', inp('minTxs', v('minTxs'), 'type="number" min="0" inputmode="numeric"'))}${field('Max transactions', inp('maxTxs', v('maxTxs'), 'type="number" min="0" inputmode="numeric"'))}
+        ${field('Min ZP transferred', inp('minZp', v('minZp'), 'inputmode="decimal" placeholder="e.g. 1000"'))}${field('Max ZP transferred', inp('maxZp', v('maxZp'), 'inputmode="decimal"'))}
+        ${field('Miner address', inp('miner', v('miner'), 'placeholder="zen1…" autocomplete="off"'), 'wide')}
+        ${field('Sort by', sel('order', v('order') || 'newest', [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['txs', 'Most transactions'], ['zp', 'Most ZP transferred']]))}${field('Page size', take)}
+        <div class="actions"><button>Search</button><a href="?find=blocks">Reset</a></div></form>`
+    : `<form class="find"><input type="hidden" name="find" value="txs">
+        ${field('Address (sender or receiver)', inp('address', v('address'), 'placeholder="zen1…" autocomplete="off"'), 'wide')}
+        ${field('From date', inp('from', v('from'), 'type="date"'))}${field('To date', inp('to', v('to'), 'type="date"'))}
+        ${field('Min ZP in outputs', inp('minZp', v('minZp'), 'inputmode="decimal" placeholder="e.g. 100"'))}${field('Max ZP in outputs', inp('maxZp', v('maxZp'), 'inputmode="decimal"'))}
+        ${field('Asset', assetSel)}${field('Type', sel('kind', v('kind') || 'all', [['all', 'All'], ['transfers', 'Transfers (no block rewards)'], ['rewards', 'Block rewards only'], ['contracts', 'Contract transactions']]))}
+        ${field('Sort by', sel('order', v('order') || 'newest', [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['largest', 'Largest ZP amount']]))}${field('Page size', take)}
+        <div class="actions"><button>Search</button><a href="?find=txs">Reset</a></div></form>`;
+  $('view').innerHTML = `<section>${form}<div id="results"></div></section>`;
+  const used = ['from', 'to', 'minTxs', 'maxTxs', 'minZp', 'maxZp', 'miner', 'address', 'asset', 'kind'].some(k => p.get(k));
+  if (!used && !p.get('order')) return;   // nothing asked yet: show the form only
+  const q = new URLSearchParams([...p].filter(([k, x]) => k !== 'find' && x !== ''));
+  const d = await get('/find/' + kind + '?' + q);
+  $('results').innerHTML = countLine(d, isBlocks ? 'blocks' : 'transactions') + (d.total ? (isBlocks ? blocksTable(d.blocks) : txsTable(d.transactions, !!q.get('address'))) + pager(p, d) : '');
+}
+
+async function showAddress(addr) {
+  tabs('');
+  const p = new URLSearchParams(location.search);
+  const q = new URLSearchParams([...p].filter(([k, x]) => k !== 'address' && x !== ''));
+  const d = await get('/address/' + encodeURIComponent(addr) + (q.toString() ? '?' + q : ''));
+  $('title').textContent = 'Address';
+  $('sub').innerHTML = `<span class="mono">${esc(d.address)}</span>`;
+  const sm = d.summary, v = k => p.get(k) || '';
+  const bal = d.balances == null ? '<span class="sub">unavailable right now</span>'
+    : d.balances.length ? d.balances.map(b => `${b.asset === '00' ? zp(b.amount) : amt(Number(b.amount) / 1e8)} <b>${esc(assetName(b.asset))}</b>`).join('<br>') : '0 ZP';
+  const rows = [['Balance now', bal], ['Transactions', fmt(sm.transactions)],
+    ['First activity', sm.firstBlock ? link('block', sm.firstBlock, 'block ' + fmt(sm.firstBlock)) + ' · ' + dt(sm.firstTime) : '–'],
+    ['Last activity', sm.lastBlock ? link('block', sm.lastBlock, 'block ' + fmt(sm.lastBlock)) + ' · ' + dt(sm.lastTime) : '–'],
+    ['ZP received', zp(sm.receivedZp) + ' ZP'], ['ZP sent', zp(sm.sentZp) + ' ZP']];
+  const filter = `<form class="find"><input type="hidden" name="address" value="${esc(d.address)}">
+      ${field('From date', inp('from', v('from'), 'type="date"'))}${field('To date', inp('to', v('to'), 'type="date"'))}
+      ${field('Min ZP in outputs', inp('minZp', v('minZp'), 'inputmode="decimal"'))}${field('Max ZP in outputs', inp('maxZp', v('maxZp'), 'inputmode="decimal"'))}
+      ${field('Type', sel('kind', v('kind') || 'all', [['all', 'All'], ['transfers', 'Transfers (no block rewards)'], ['rewards', 'Block rewards only'], ['contracts', 'Contract transactions']]))}
+      ${field('Sort by', sel('order', v('order') || 'newest', [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['largest', 'Largest ZP amount']]))}
+      <div class="actions"><button>Filter</button><a href="${url([], { address: d.address })}">Reset</a><a href="?find=txs&address=${encodeURIComponent(d.address)}">More search options</a></div></form>`;
+  $('view').innerHTML = `<section><h2>Summary</h2><div class="kv2">${rows.map(([k, x]) => `<div>${k}</div><div>${x}</div>`).join('')}</div>
+    <div class="note">Balance: live from the node. History: our chain index${d.indexedTo < d.tip - 20 ? ` (indexed to block ${fmt(d.indexedTo)}, in progress)` : ''}. ZP received/sent count the ZP inputs and outputs of the address in every transaction, including change sent back to itself.</div></section>
+    <section><h2>Transactions</h2>${filter}${countLine(d, 'transactions')}${d.total ? txsTable(d.transactions, true) + pager(p, d) : ''}</section>`;
+}
+
+document.addEventListener('submit', async e => {   // jump to the first block of a date
+  if (e.target.id !== 'jump') return;
+  e.preventDefault();
+  try { const d = (await get('/find/blocks?order=oldest&take=1&from=' + new FormData(e.target).get('d'))).blocks[0];
+    if (d) location.search = '?block=' + d.number; else $('jumpmsg').textContent = 'No indexed block on or after that date yet.';
+  } catch (err) { $('jumpmsg').textContent = err.message; }
+});
 $('search').addEventListener('submit', async e => {
   e.preventDefault();
   const s = new FormData(e.target).get('q').trim(); if (!s) return;
   try { const r = await get('/search/' + encodeURIComponent(s));
-    if (r.kind === 'block' || r.kind === 'tx') location.search = '?' + r.kind + '=' + encodeURIComponent(r.id);
-    else if (r.kind === 'address') location.href = '/wallet/';
+    if (r.kind === 'block' || r.kind === 'tx' || r.kind === 'address') location.search = '?' + r.kind + '=' + encodeURIComponent(r.id);
     else $('sub').textContent = 'Nothing found for that text.';
   } catch (err) { $('sub').textContent = err.message; }
 });
 fetch('/assets.json').then(r => r.json()).then(d => { for (const a of d.assets || []) if (a.name) names[a.asset] = a.name; }).catch(() => {}).finally(() => {
   const p = new URLSearchParams(location.search);
-  const go = p.get('block') ? showBlock(p.get('block')) : p.get('tx') ? showTx(p.get('tx')) : showBlocks(p.get('before'));
+  const go = p.get('block') ? (tabs(''), showBlock(p.get('block'))) : p.get('tx') ? (tabs(''), showTx(p.get('tx')))
+    : p.get('find') === 'blocks' || p.get('find') === 'txs' ? showFind(p.get('find'))
+    : p.get('address') ? showAddress(p.get('address')) : (tabs(''), showBlocks(p.get('before')));
   go.catch(err => { $('sub').textContent = err.message; $('view').innerHTML = ''; });
 });
 </script>
