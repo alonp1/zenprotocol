@@ -23,6 +23,15 @@ mkdir -p "$WEB/snapshots"
 cp "$REPO/site/index.html" "$WEB/index.html"
 cp "$REPO/site/stats.html" "$WEB/stats.html"
 
+echo "== ZP Wallet (built in a throwaway node container: nothing to install on the server)"
+if command -v docker >/dev/null; then
+  docker run --rm -v "$REPO/wallet:/w" -w /w node:22-alpine sh -c "npm ci --no-audit --no-fund && npm test && npm run build" \
+    && { rm -rf "$WEB/wallet"; mkdir -p "$WEB/wallet"; cp "$REPO"/wallet/dist/* "$WEB/wallet/"; echo "wallet published at /wallet/"; } \
+    || echo "wallet build or tests failed: /wallet/ left as it was"
+else
+  echo "docker not found: skipping the wallet"
+fi
+
 echo "== Publish newest snapshot (hard link, no extra disk)"
 LATEST=$(ls -1t "$SNAPDIR"/zen-node-*.zip 2>/dev/null | head -1 || true)
 if [ -n "$LATEST" ]; then
@@ -85,5 +94,6 @@ certbot --nginx -d "$DOMAIN" $(for d in $EXTRA_DOMAINS; do echo -n " -d $d"; don
 
 echo "== Check"
 curl -fsS "https://$DOMAIN/api/info" && echo
+curl -s -o /dev/null -w "ZP Wallet: HTTP %{http_code}\n" "https://$DOMAIN/wallet/"
 curl -s -o /dev/null -w "wallet API blocked: HTTP %{http_code}\n" "https://$DOMAIN/api/wallet/balance"
 echo "== Done: https://$DOMAIN"

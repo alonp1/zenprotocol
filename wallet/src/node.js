@@ -6,10 +6,10 @@ export class NodeError extends Error {
 }
 
 export class NodeClient {
-  constructor(baseUrl, { timeoutMs = 30000, fetchFn = globalThis.fetch } = {}) {
+  constructor(baseUrl, { timeoutMs = 30000, fetchFn } = {}) {
     this.base = baseUrl.replace(/\/+$/, '');
     this.timeoutMs = timeoutMs;
-    this.fetch = fetchFn;
+    this.fetch = fetchFn || ((...a) => globalThis.fetch(...a));   // unbound window.fetch throws "Illegal invocation"
   }
 
   async request(path, body) {

@@ -40,8 +40,10 @@ docker compose logs --tail 8          # must show "AddressDB adding block", neve
 The loader must print `loaded addressdb` and `loaded blockchaindb`. Then point the domain's DNS A record at the server (Cloudflare: DNS only), wait until `getent hosts <domain>` returns the new IP, and run:
 
 ```
-bash site/setup-site.sh               # nginx site, /node/ proxy, stats timer, snapshot publishing, HTTPS
+bash site/setup-site.sh               # nginx site, /node/ proxy, ZP Wallet at /wallet/, stats timer, snapshot publishing, HTTPS
 ```
+
+`setup-site.sh` also builds and tests ZP Wallet in a temporary Node.js container and publishes it at `/wallet/` with strict security headers. Details: [`WALLET.md`](WALLET.md).
 
 **Moving the public node to another server**: set up the new server as above (it downloads the snapshot from the current one), switch DNS, run `setup-site.sh` there, then on the old server: `docker compose down`, `rm /etc/nginx/sites-enabled/<domain> && systemctl reload nginx`, `systemctl disable --now zen-stats.timer`, and after a day `rm -rf ~/zenprotocol/zen-data`.
 

@@ -19,7 +19,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: cd wallet && npm ci && npm test
+      - run: cd wallet && npm ci && npm test && npm run build
+      - uses: actions/upload-artifact@v4
+        with: { name: zp-wallet-web, path: wallet/dist }
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 30
