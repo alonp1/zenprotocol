@@ -6,6 +6,8 @@ open System
 open Consensus
 open Zen.Types.Data
 
+module PKModule = Consensus.Crypto.PublicKey
+
 let private field (spec: string) : FStar.String.t * data =
     let eq = spec.IndexOf '='
     let head, value = spec.Substring(0, eq), spec.Substring(eq + 1)
@@ -21,7 +23,7 @@ let private field (spec: string) : FStar.String.t * data =
         | "u" -> U64 (UInt64.Parse value)
         | "h" -> Hash (hashBytes value)
         | "k" ->
-            match Crypto.PublicKey.fromString value with
+            match PKModule.fromString value with
             | Some (Crypto.PublicKey b) -> PublicKey b
             | None -> failwithf "bad public key %s" value
         | "c" ->
