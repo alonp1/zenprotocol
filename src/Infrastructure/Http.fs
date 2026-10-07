@@ -27,7 +27,6 @@ type Request =
 type Context = Request * ReplyFunction
 
 module Server =
-    open FStar
 
     type T =
         { listener : System.Net.HttpListener
