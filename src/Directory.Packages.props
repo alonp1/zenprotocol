@@ -7,7 +7,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies.net47" Version="[1.0.3]" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <!-- 16.11: last test SDK that accepts Newtonsoft.Json 12.0.1 (the node's pinned version) -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
     <PackageVersion Include="NUnit3TestAdapter" Version="4.6.0" />
     <PackageVersion Include="Argu" Version="[5.1]" />
     <PackageVersion Include="AsyncIO" Version="[0.1.69]" />

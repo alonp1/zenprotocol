@@ -1,0 +1,41 @@
+# ZP node on .NET 10, built from this repository (stage 4 of docs/MIGRATION.md).
+# F* and the contract compiler still run on Mono (contract-tool/), everything else on .NET 10.
+#
+#   docker build -f Docker/Dockerfile.net10 -t zen-node:net10 .
+
+# ---- build ----
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY nuget.config ./
+COPY src ./src
+RUN dotnet restore src/ContractTool/ContractTool.fsproj \
+ && dotnet restore src/Node/Node.fsproj \
+ && dotnet restore src/Cli/Cli.fsproj \
+ && dotnet build src/ContractTool/ContractTool.fsproj -c Release --no-restore -v minimal \
+ && dotnet build src/Node/Node.fsproj -c Release --no-restore -v minimal \
+ && dotnet build src/Cli/Cli.fsproj -c Release --no-restore -v minimal \
+ && mkdir -p /out \
+ && cp -r src/Node/bin/Release/. /out/ \
+ && cp -rn src/Cli/bin/Release/. /out/ \
+ && test -f /out/contract-tool/zen-contract-tool.exe && test -f /out/libsecp256k1.so && test -x /out/z3-linux
+
+# ---- runtime: .NET 10 + Mono (for F* and the contract tool only) ----
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends mono-devel liblmdb-dev libgomp1 curl unzip zip ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /out /zen
+COPY Docker/entrypoint.sh /entrypoint.sh
+COPY Docker/load-snapshot.sh /load-snapshot.sh
+COPY Docker/create-snapshot.sh /create-snapshot.sh
+RUN sed -i "s/\r$//" /entrypoint.sh /load-snapshot.sh /create-snapshot.sh \
+ && chmod +x /entrypoint.sh /load-snapshot.sh /create-snapshot.sh /zen/z3-linux /zen/contract-tool/z3-linux \
+ && (grep -q "zen.sealinkgps.com" /zen/main.yaml || sed -i 's|^seeds:\s*$|seeds:\n  - zen.sealinkgps.com|' /zen/main.yaml)
+
+WORKDIR /zen
+VOLUME /data
+EXPOSE 9655 11567
+HEALTHCHECK --interval=2m --timeout=10s --start-period=10m \
+  CMD curl -fs http://127.0.0.1:11567/blockchain/info >/dev/null || exit 1
+ENTRYPOINT ["/entrypoint.sh"]

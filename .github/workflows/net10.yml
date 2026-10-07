@@ -96,3 +96,23 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with: { name: zen-node-net10, path: src/Node/bin/Debug/, if-no-files-found: ignore }
+
+  docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        shell: bash
+        run: |
+          docker build --progress=plain -f Docker/Dockerfile.net10 -t zen-node:net10 . > /tmp/b.log 2>&1 || { echo "::error title=image build::$(grep -vE '^#[0-9]+ (sha256|extracting|DONE|CACHED)' /tmp/b.log | tail -40 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
+          docker images zen-node:net10 --format '{{.Size}}' | sed 's/^/::notice title=image size::/'
+      - name: Smoke test - image joins mainnet
+        shell: bash
+        run: |
+          docker run -d --name zn zen-node:net10
+          sleep 180
+          INFO=$(docker exec zn curl -s http://127.0.0.1:11567/blockchain/info || true)
+          echo "::notice title=image node::$INFO"
+          echo "::notice title=image log::$(docker logs zn 2>&1 | grep -E 'check passed|ERR|Exception' | head -15 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+          echo "$INFO" | grep -qE '"blocks":[1-9]'
