@@ -1,6 +1,6 @@
 #!/bin/bash
 # ZP devnet: NODES nodes of the built-in `local` chain in one container (Debug build, see docs/DEVNET.md).
-#   node i: P2P 127.0.0.1:10000+i (inside the container), API 0.0.0.0:20000+i, address index on.
+#   node i: P2P 127.0.0.1:10000+i (inside the container), API *:20000+i, address index on.
 #   node 0 mines (MINER_THREADS, 0 = off) to a wallet imported from DEVNET_MNEMONIC.
 # The default mnemonic is PUBLIC and worthless: anyone can spend the devnet coins. That is intended.
 set -u
@@ -11,7 +11,7 @@ WORDS="${DEVNET_MNEMONIC:-abandon abandon abandon abandon abandon abandon abando
 cd /zen
 mkdir -p /data/logs
 
-args() { echo --local "$1" --data-path "/data/node$1" --api "0.0.0.0:$((20000 + $1))" --addressdb; }
+args() { echo --local "$1" --data-path "/data/node$1" --api "*:$((20000 + $1))" --addressdb; }
 wait_api() { for _ in $(seq 180); do curl -fs "http://127.0.0.1:$1/blockchain/info" >/dev/null && return 0; sleep 1; done; return 1; }
 
 # Phase 1 (first start only): give node 0 its wallet, so that the miner has an address to pay.
