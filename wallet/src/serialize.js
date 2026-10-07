@@ -287,7 +287,8 @@ export const Data = {
       case 11: return { t: 'Array', v: List.read(r, Data.read) };
       case 12: {
         const entries = List.read(r, r => [Str.read(r), Data.read(r)]);
-        for (let i = 1; i < entries.length; i++) if (!(entries[i - 1][0] <= entries[i][0])) fail('dict not sorted');
+        if (!r.lenient)   // lenient (indexer): block 248357 holds a dict with keys ["Signature","Allocation"], which the node accepted
+          for (let i = 1; i < entries.length; i++) if (!(entries[i - 1][0] <= entries[i][0])) fail('dict not sorted');
         return { t: 'Dict', v: entries };
       }
       case 13: return { t: 'List', v: List.read(r, Data.read) };

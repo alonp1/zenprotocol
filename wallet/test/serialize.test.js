@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { sha3_256 } from '@noble/hashes/sha3.js';
-import { Witness, deserializeBlock, deserializeTx, serializeTx, txHash, hex, unhex, Writer, Reader, Amount, VarInt, Asset, ZEN_ASSET } from '../src/serialize.js';
+import { Witness, Data, deserializeBlock, deserializeTx, serializeTx, txHash, hex, unhex, Writer, Reader, Amount, VarInt, Asset, ZEN_ASSET } from '../src/serialize.js';
 import { verifyDigest } from '../src/tx.js';
 
 const FIX = new URL('./fixtures/blocks.json', import.meta.url);
@@ -66,4 +66,14 @@ test('a witness whose declared length is off: strict refuses, lenient (indexer) 
   assert.equal(x.type, 'PK');
   assert.equal(r.u8(), 0x77);
   assert.deepEqual(r.irregular, [{ id: 1, count: 99, size: 98 }]);
+});
+
+test('a dict whose keys are not in code-unit order (block 248357): strict refuses, lenient (indexer) reads it', () => {
+  const w = new Writer();
+  w.u8(12); VarInt.write(w, 2);                                   // Dict with 2 entries: "Signature", then "Allocation"
+  for (const k of ['Signature', 'Allocation']) { const b = new TextEncoder().encode(k); VarInt.write(w, b.length); w.bytes(b); w.u8(2); w.u8(1); }
+  const bytes = w.out();
+  assert.throws(() => Data.read(new Reader(bytes)), /dict not sorted/);
+  const r = new Reader(bytes); r.lenient = true;
+  assert.deepEqual(Data.read(r).v.map(e => e[0]), ['Signature', 'Allocation']);
 });
