@@ -37,8 +37,13 @@ if [ -n "${TESTNET_MNEMONIC:-}" ] && [ "$NET" = test ] && [ ! -f /data/wallet-im
   JSON=$(printf '{"password":"%s","words":[%s]}' "${TESTNET_PASSWORD:-testnet}" "$(echo "$TESTNET_MNEMONIC" | sed 's/[^ ][^ ]*/"&"/g; s/ /,/g')")
   OUT=$(curl -s -X POST -H "Content-Type: application/json" -d "$JSON" "http://127.0.0.1:$API_PORT/wallet/import")
   echo "wallet import: $OUT"
-  case "$OUT" in *imported*) touch /data/wallet-imported ;; *) tail -n 20 /tmp/setup.log; exit 1 ;; esac
+  case "$OUT" in *imported*) ;; *) tail -n 20 /tmp/setup.log; exit 1 ;; esac
+  # the wallet saves its account in its own actor: wait until it answers with the address, then give the database a moment
+  for _ in $(seq 60); do curl -fs "http://127.0.0.1:$API_PORT/wallet/address" | grep -q "tzn1" && break; sleep 1; done
+  curl -fs "http://127.0.0.1:$API_PORT/wallet/address" | grep -q "tzn1" || { echo "wallet import: the account did not appear"; tail -n 20 /tmp/setup.log; exit 1; }
+  sleep 5
   kill $P; wait $P 2>/dev/null || true
+  touch /data/wallet-imported
 fi
 if [ -f /zen/zen-node.dll ]; then exec dotnet /zen/zen-node.dll "${ARGS[@]}" "$@"   # .NET 10 build
 else exec mono /zen/zen-node.exe "${ARGS[@]}" "$@"; fi
