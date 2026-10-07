@@ -32,8 +32,39 @@ type Frankfurter(http: HttpClient) =
             use doc = JsonDocument.Parse body
             doc.RootElement.GetProperty("rates").GetProperty(to').GetDecimal()
 
+let private ids = dict [ "BTC","bitcoin"; "ETH","ethereum"; "LTC","litecoin"; "XRP","ripple"; "SOL","solana"; "DOGE","dogecoin"; "ADA","cardano"; "XMR","monero"; "BNB","binancecoin" ]
+
+/// CoinGecko, free public API (no key; about 30 requests a minute). A demo key in ORACLE_COINGECKO_KEY raises the limit. Ticker = crypto symbol + currency, e.g. BTCUSD.
+type CoinGecko(http: HttpClient, key: string) =
+    interface Provider with
+        member _.Name = "coingecko"
+        member _.Fetch ticker _ =
+            if ticker.Length < 5 then failwithf "ticker %s is not symbol + currency" ticker
+            let sym, cur = ticker.Substring(0, ticker.Length - 3), ticker.Substring(ticker.Length - 3).ToLowerInvariant()
+            let id = match ids.TryGetValue sym with | true, v -> v | _ -> sym.ToLowerInvariant()
+            let req = new HttpRequestMessage(HttpMethod.Get, sprintf "https://api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=%s" id cur)
+            if key <> "" then req.Headers.Add("x-cg-demo-api-key", key)
+            let body = http.Send(req).Content.ReadAsStringAsync().Result
+            use doc = JsonDocument.Parse body
+            doc.RootElement.GetProperty(id).GetProperty(cur).GetDecimal()
+
+/// CoinMarketCap: needs an API key (free plan available) in ORACLE_CMC_KEY.
+type CoinMarketCap(http: HttpClient, key: string) =
+    interface Provider with
+        member _.Name = "coinmarketcap"
+        member _.Fetch ticker _ =
+            if key = "" then failwith "ORACLE_CMC_KEY is not set"
+            let sym, cur = ticker.Substring(0, ticker.Length - 3), ticker.Substring(ticker.Length - 3)
+            let req = new HttpRequestMessage(HttpMethod.Get, sprintf "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol=%s&convert=%s" sym cur)
+            req.Headers.Add("X-CMC_PRO_API_KEY", key)
+            let body = http.Send(req).Content.ReadAsStringAsync().Result
+            use doc = JsonDocument.Parse body
+            doc.RootElement.GetProperty("data").GetProperty(sym).[0].GetProperty("quote").GetProperty(cur).GetProperty("price").GetDecimal()
+
 let create (name: string) : Provider =
     match name.ToLowerInvariant() with
     | "mock" -> Mock() :> Provider
     | "frankfurter" -> Frankfurter(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0)) :> Provider
-    | other -> failwithf "unknown provider '%s' (mock, frankfurter)" other
+    | "coingecko" -> CoinGecko(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue "") :> Provider
+    | "coinmarketcap" -> CoinMarketCap(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), Environment.GetEnvironmentVariable "ORACLE_CMC_KEY" |> Option.ofObj |> Option.defaultValue "") :> Provider
+    | other -> failwithf "unknown provider '%s' (mock, frankfurter, coingecko, coinmarketcap)" other
