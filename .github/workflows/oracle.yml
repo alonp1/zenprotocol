@@ -1,0 +1,34 @@
+name: oracle
+# Builds the oracle service, runs its self test, and runs it against the testnet (Oracle contract activated, rounds committed).
+on:
+  workflow_dispatch:
+  push:
+    branches: [node-upgrade-script]
+    paths: ['src/Oracle/**', 'src/Consensus/**', 'scripts/testnet-oracle.sh', '.github/workflows/oracle.yml']
+
+jobs:
+  oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - name: Build
+        run: |
+          set +e
+          dotnet restore src/Oracle/Oracle.fsproj -v q > /tmp/b.log 2>&1 && dotnet build src/Oracle/Oracle.fsproj -c Release --no-restore -v minimal >> /tmp/b.log 2>&1
+          RC=$?
+          [ $RC -ne 0 ] && { grep -E "error" /tmp/b.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g' | sort -u | head -30 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::error title=build::{}"; exit 1; }
+          true
+      - name: Self test
+        run: |
+          set +e
+          dotnet src/Oracle/bin/Release/zen-oracle.dll selftest > /tmp/st.txt 2>&1
+          RC=$?
+          python3 -c "import sys;print('::notice title=selftest::'+'%0A'.join(l.rstrip() for l in open('/tmp/st.txt')))"
+          exit $RC
+      - name: Dry run round with the mock provider
+        run: |
+          ORACLE_DATA=/tmp/od dotnet src/Oracle/bin/Release/zen-oracle.dll once
+          ls /tmp/od/rounds

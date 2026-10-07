@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Oracle service for the Oracle contract (docs/ORACLE.md). .NET 10, no database server, no paid data source. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>zen-oracle</AssemblyName>
+    <RootNamespace>Oracle</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Leaf.fs" />
+    <Compile Include="Providers.fs" />
+    <Compile Include="Store.fs" />
+    <Compile Include="NodeClient.fs" />
+    <Compile Include="SelfTest.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" />
+    <ProjectReference Include="..\Consensus\Consensus.fsproj" />
+  </ItemGroup>
+</Project>
