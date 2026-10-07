@@ -31,9 +31,15 @@ a = ap.parse_args()
 here = os.path.dirname(os.path.abspath(__file__))
 
 
-def get(path, timeout=60):
-    with urllib.request.urlopen(a.api + path, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+def get(path, timeout=90, tries=4):
+    """GET with retries: the node answers slowly while it validates blocks or serves a syncing peer."""
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(a.api + path, timeout=timeout) as r:
+                return json.loads(r.read().decode())
+        except Exception:
+            if i == tries - 1: raise
+            time.sleep(5 * (i + 1))
 
 
 def post(path, body, timeout=120):
@@ -253,14 +259,21 @@ tip = get("/blockchain/info")["blocks"]
 last = int(meta("last", "0"))
 target = tip - CONFIRM
 start = time.time()
+t_last, stalled = last, False
 while last < target and time.time() - start < a.budget:
-    upto = min(target, last + 500)
-    with db:
-        for n in range(last + 1, upto + 1):
-            index_block(n)
+    upto = min(target, last + 200)
+    try:
+        with db:                                   # a batch is stored completely or not at all
+            for n in range(last + 1, upto + 1):
+                index_block(n)
+            db.execute("INSERT OR REPLACE INTO meta VALUES ('last', ?)", (str(upto),))
         last = upto
-        db.execute("INSERT OR REPLACE INTO meta VALUES ('last', ?)", (str(last),))
-print(f"chain-index: block {last} of {tip} ({'synced' if last >= target else 'catching up'})")
+    except Exception as e:
+        print(f"chain-index: stopped at block {last + 1}: {e!r} (the next run continues from there)")
+        stalled = True
+        break
+rate = (last - t_last) / max(1, time.time() - start)
+print(f"chain-index: block {last} of {tip} ({'synced' if last >= target else 'catching up'}, {rate:.0f} blocks/s)")
 
 # ---- vote weights: balance at the snapshot block (address index), cached ----------------------
 def weight(iv, pk):
