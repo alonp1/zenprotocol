@@ -45,7 +45,7 @@ const zpOf = id => { const z = S.data.get(id)?.state?.assets.find(x => x.asset =
 // wallets that vote together (null = every wallet that can sign); watch-only wallets cannot sign a ballot
 const voters = () => { const sel = S.settings.voteWallets[net()]; return walletsHere().filter(w => w.kind !== 'watch' && (sel === null || sel.includes(w.id))); };
 const voteWeight = () => voters().reduce((s, w) => s + zpOf(w.id), 0n);
-const nameOf = (id, addr) => contractNames[id] || Object.entries(contractNames).find(([k]) => k.length <= 8 && addr?.endsWith(k))?.[1] || null;
+const nameOf = (id, addr) => contractNames[addr] || contractNames[id] || null;
 const zpStr = v => Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '–';
 
 function go(screen, extra = {}) { Object.assign(S, { screen, error: '', modal: null }, extra); render(); window.scrollTo(0, 0); }

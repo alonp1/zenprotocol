@@ -234,7 +234,7 @@ except Exception:
 contracts = []
 for c in safe("/contract/active") or []:
     addr = c.get("address", "")
-    name = names.get(c.get("contractId")) or next((v for k, v in names.items() if len(k) <= 8 and addr.endswith(k)), None)
+    name = names.get(addr) or names.get(c.get("contractId"))
     contracts.append({"id": c.get("contractId"), "address": addr, "name": name, "expire": c.get("expire"),
                       "blocksLeft": (c.get("expire") or tip) - tip})
 contracts.sort(key=lambda c: c["expire"] or 0)
