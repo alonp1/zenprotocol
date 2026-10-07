@@ -20,4 +20,10 @@
     <PackageReference Include="Zulib" />
     <ProjectReference Include="..\Consensus\Consensus.fsproj" />
   </ItemGroup>
+  <!-- Consensus serializes public keys with the native secp256k1 library: put it next to the program -->
+  <Target Name="CopySecp256k1" AfterTargets="Build">
+    <ItemGroup><_SecpLib Include="$(NuGetPackageRoot)zen_secp256k1_linux/**/libsecp256k1.so" /></ItemGroup>
+    <Copy SourceFiles="@(_SecpLib)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(_SecpLib)' != ''" />
+    <Warning Text="libsecp256k1.so not found in the NuGet cache" Condition="'@(_SecpLib)' == ''" />
+  </Target>
 </Project>
