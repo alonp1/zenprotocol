@@ -91,7 +91,7 @@ let totalQueries (hints: string) : Result<uint32, string> =
     withTempFiles [ hints ] (fun files ->
         tool ("total-queries" :: files)
         |> Result.bind (fun out ->
-            match UInt32.TryParse(out.Trim()) with
+            match UInt32.TryParse((out: string).Trim()) with
             | true, n -> Ok n
             | _ -> Error "total queries: invalid output"))
 
