@@ -86,6 +86,33 @@ or the image: `docker build -f Docker/Dockerfile.net10 -t zen-node:net10 .` (`.N
 
 **Gate before merging:** a full mainnet replay of the .NET 10 image from genesis must match the reference (`.github/workflows/net10-replay.yml`, started by pushing to the `net10-replay` branch; it runs on GitHub-hosted runners in parts of ~5 hours, passing the chain data on through the Actions cache), and the CGP, supply and winner state must match the release node at the same tip.
 
+## Results of the .NET 10 merge (stage 4)
+
+Merged into `master` after CI was green. Production still runs the Mono 1.0.13 release image; switching it is a separate decision.
+
+**Correctness**
+
+| Check | Result |
+|---|---|
+| Full mainnet replay from genesis, `check-against-reference.sh` (1,053 block hashes and the CGP state) | Passed |
+| Unit tests (`net10.yml`) | Pass |
+| Image syncs mainnet blocks in CI | Pass |
+| State comparison against a community node during the replay | Not visible in the logs, so not counted as verified |
+
+**Measured benefits** (`net10-compare.yml`: same GitHub-hosted runner, same image build method, 10 minutes of sync from genesis, one run each)
+
+| | Mono (1.0.13) | .NET 10 | Difference |
+|---|---|---|---|
+| Blocks synced in 10 minutes | 21,271 | 31,426 | about 48% more |
+| Peak memory of the node container | 542.2 MiB | 299.8 MiB | about 45% less |
+| Runtime image size | 929 MB | 657 MB | about 29% less |
+| Full chain replay on hosted runners | 6 h 08 min | about 105 min | about 3.5 times faster |
+| CI build and tests | about 8.6 min | about 7 min | small |
+
+**Other benefits:** supported runtime (.NET 10 LTS until November 2028; Mono 6.12 is unmaintained), a current Debian base with security updates, and PackageReference with central version pinning.
+
+**Limits of these numbers:** one run per runtime on shared hosted runners, so results vary between runs. CPU use and block-validation latency were not measured. The early blocks are small, so the speed-up on recent, larger blocks may differ. The F\* contract tool still runs on Mono (stage 5).
+
 ## Running the replay test
 
 1. Create a server with 4+ dedicated cores and 16 GB RAM (Ubuntu 24.04), e.g. Hetzner CCX23. Hourly-billed; delete it after the run. 40 GB disk is enough: the script frees the Docker build cache, logs free space every 5 minutes and stops with a clear error below 1 GB.

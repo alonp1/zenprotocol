@@ -141,7 +141,7 @@ Done when `blocks` equals `headers` and `initialBlockDownload` is `false`. Run t
 | Prebuilt image in CI (`image`): start, API answers, syncs from our seed | Passes; blocks arrive from the seed |
 | Seeds refresh from `network.json` and the sources parser (local test with a changed file) | Passes |
 | Mirror contents (`mirror-upstream`): the exact packages pinned in `paket.lock`, `@zen/zen-node` 1.0.13, 21 repositories | Present in the release; `MANIFEST.json` lists size and sha256 of each |
-| Replay of the whole chain by the source build (`check-against-reference.sh`: 1,053 block hashes and the CGP state) | Passed for the Mono build; the .NET 10 replay is running |
+| Replay of the whole chain by the source build (`check-against-reference.sh`: 1,053 block hashes and the CGP state) | Passed for the Mono build and for the .NET 10 build (see "Results of the .NET 10 merge" in `docs/MIGRATION.md`) |
 | Wallet: 20 tests including hostile node responses | Pass |
 | `install-node.sh` itself on a clean server | **Not yet run end to end**: see the checklist below |
 
