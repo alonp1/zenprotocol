@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '10.0.x' }
       - name: Native and Mono dependencies
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq mono-runtime libmono-system-core4.0-cil libmono-system-numerics4.0-cil liblmdb0 libgomp1
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mono-devel liblmdb-dev libgomp1
 
       - name: Restore
         shell: bash
@@ -48,6 +48,47 @@ jobs:
         run: |
           set -o pipefail
           { dotnet build src/ContractTool/ContractTool.fsproj -c Debug -v minimal --no-restore && dotnet build src/Node/Node.fsproj -c Debug -v minimal --no-restore; } 2>&1 | tee /tmp/build.log || { grep -E " error " /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt; split -l 12 /tmp/err.txt /tmp/errpart.; for f in /tmp/errpart.*; do echo "::error title=build::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"; done; exit 1; }
+
+      - name: Smoke test - node on .NET 10 joins mainnet
+        shell: bash
+        run: |
+          cd src/Node/bin/Debug
+          mono --version | head -1
+          timeout 240 dotnet zen-node.dll --data-path /tmp/zen-smoke --api 127.0.0.1:11567 > /tmp/node.log 2>&1 &
+          sleep 200
+          INFO=$(curl -s http://127.0.0.1:11567/blockchain/info || true)
+          echo "::notice title=node info::$INFO"
+          echo "::notice title=node log::$(tail -30 /tmp/node.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+          wait || true
+          echo "$INFO" | grep -qE '"blocks":[1-9]'
+
+      - name: Contract tool runs on Mono
+        shell: bash
+        run: |
+          cd src/Node/bin/Debug/contract-tool
+          echo '{}' > /tmp/empty.hints
+          mono zen-contract-tool.exe total-queries /tmp/empty.hints; echo "exit $?"
+
+      - name: Build tests
+        shell: bash
+        run: |
+          set -o pipefail
+          : > /tmp/build.log
+          for p in Infrastructure.Tests Zulib.Tests Consensus.Tests Blockchain.Tests Wallet.Tests AddressDB.Tests Network.Tests Api.Tests; do
+            dotnet build src/$p/$p.fsproj -c Debug -v minimal 2>&1 | tee -a /tmp/build.log || true
+          done
+          grep -E " error " /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt
+          if [ -s /tmp/err.txt ]; then split -l 12 /tmp/err.txt /tmp/errpart.; for f in /tmp/errpart.*; do echo "::error title=test build::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"; done; exit 1; fi
+
+      - name: Run tests
+        shell: bash
+        run: |
+          fail=0
+          for p in Zulib.Tests Infrastructure.Tests Consensus.Tests Blockchain.Tests Wallet.Tests AddressDB.Tests Network.Tests; do
+            dotnet test src/$p/$p.fsproj -c Debug --no-build -v q --logger "console;verbosity=minimal" > /tmp/t-$p.log 2>&1 || fail=1
+            echo "::notice title=$p::$(grep -E "Passed!|Failed!|error|Failed " /tmp/t-$p.log | head -15 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+          done
+          exit $fail
 
       - name: Upload node build
         if: always()
