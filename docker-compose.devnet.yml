@@ -1,0 +1,22 @@
+# Private ZP network for development and load tests (see docs/DEVNET.md).
+#   docker compose -f docker-compose.devnet.yml up -d --build
+# APIs: http://127.0.0.1:20000 (node 0, mines), 20001, 20002 ... Coins have no value.
+services:
+  devnet:
+    image: ${DEVNET_IMAGE:-zen-devnet}
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.devnet
+    container_name: zen-devnet
+    restart: unless-stopped
+    environment:
+      NODES: "${NODES:-3}"
+      MINER_THREADS: "${MINER_THREADS:-1}"
+      DEVNET_MNEMONIC: "${DEVNET_MNEMONIC:-}"
+      DEVNET_PASSWORD: "${DEVNET_PASSWORD:-devnet}"
+    ports:
+      - "127.0.0.1:20000-20009:20000-20009"
+    volumes:
+      - devnet-data:/data
+volumes:
+  devnet-data:

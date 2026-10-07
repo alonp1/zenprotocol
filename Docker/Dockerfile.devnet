@@ -1,0 +1,37 @@
+# ZP devnet: a private network of ZP nodes on the built-in `local` chain (needs a Debug build, so this image is NOT for mainnet).
+# F* and the contract compiler still run on Mono (contract-tool/), everything else on .NET 10.
+#
+#   docker build -f Docker/Dockerfile.devnet -t zen-devnet .
+
+# ---- build ----
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY nuget.config ./
+COPY src ./src
+RUN dotnet restore src/ContractTool/ContractTool.fsproj \
+ && dotnet restore src/Node/Node.fsproj \
+ && dotnet restore src/Cli/Cli.fsproj \
+ && dotnet build src/ContractTool/ContractTool.fsproj -c Debug --no-restore -v minimal \
+ && dotnet build src/Node/Node.fsproj -c Debug --no-restore -v minimal \
+ && dotnet build src/Cli/Cli.fsproj -c Debug --no-restore -v minimal \
+ && mkdir -p /out \
+ && cp -r src/Node/bin/Debug/. /out/ \
+ && cp -rn src/Cli/bin/Debug/. /out/ \
+ && test -f /out/contract-tool/zen-contract-tool.exe && test -f /out/libsecp256k1.so && test -x /out/z3-linux
+
+# ---- runtime: .NET 10 + Mono (for F* and the contract tool only) ----
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends mono-devel liblmdb-dev libgomp1 curl unzip zip ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /out /zen
+COPY Docker/devnet-entrypoint.sh /entrypoint.sh
+RUN sed -i "s/\r$//" /entrypoint.sh && chmod +x /entrypoint.sh /zen/z3-linux /zen/contract-tool/z3-linux
+
+WORKDIR /zen
+VOLUME /data
+EXPOSE 20000-20009
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s \
+  CMD curl -fs http://127.0.0.1:20000/blockchain/info >/dev/null || exit 1
+ENTRYPOINT ["/entrypoint.sh"]

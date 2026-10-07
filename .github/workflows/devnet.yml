@@ -1,0 +1,51 @@
+name: devnet
+# Builds the devnet image (Debug build, `local` chain), starts 3 nodes with a miner and runs the load generator.
+# Run it by hand with other rates: Actions > devnet > Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      rates:   { description: 'tx/s steps, comma separated', default: '5,20,50' }
+      seconds: { description: 'seconds per step', default: '30' }
+  push:
+    branches: [node-upgrade-script]
+    paths: ['Docker/Dockerfile.devnet', 'Docker/devnet-entrypoint.sh', 'scripts/devnet/**', 'scripts/devnet.sh', 'docker-compose.devnet.yml', '.github/workflows/devnet.yml']
+
+jobs:
+  devnet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Build the devnet image
+        run: docker build -f Docker/Dockerfile.devnet -t zen-devnet . 2>&1 | tail -n 25
+      - name: Start 3 nodes with a miner
+        run: |
+          docker run -d --name zen-devnet -p 127.0.0.1:20000-20002:20000-20002 -e NODES=3 zen-devnet
+          for i in $(seq 60); do sleep 5; T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p' || true); [ -n "$T" ] && [ "$T" -ge 12 ] && break; done
+          echo "::notice title=devnet::block $T after start"
+          [ -n "$T" ] && [ "$T" -ge 12 ]
+      - name: Nodes are connected to each other
+        run: |
+          sleep 20
+          for p in 20000 20001 20002; do echo "$p: $(curl -fs http://127.0.0.1:$p/blockchain/info | tr -d '\n ' | cut -c1-200)"; done
+          H=$(for p in 20000 20001 20002; do curl -fs http://127.0.0.1:$p/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'; done | sort -u | wc -l)
+          echo "::notice title=heights::distinct heights across the 3 nodes: $H"
+      - name: Load test
+        run: |
+          cd wallet && npm ci --no-audit --no-fund && cd ..
+          node scripts/devnet/loadgen.mjs --rates "${{ inputs.rates || '5,20,50' }}" --seconds "${{ inputs.seconds || '30' }}" --out devnet-result.json | tee /tmp/load.txt
+          sed -n '/^rate /,$p' /tmp/load.txt | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=load result::{}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: devnet-result, path: devnet-result.json, if-no-files-found: ignore }
+      - name: Node logs
+        if: failure()
+        run: |
+          docker logs zen-devnet 2>&1 | tail -n 80 | sed 's/^/devnet: /'
+          docker exec zen-devnet sh -c 'tail -n 30 /data/logs/node1.log' || true
+      - name: Annotate the failure
+        if: failure()
+        run: |
+          { docker logs zen-devnet 2>&1 | tail -n 25; } | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::error title=devnet log::{}"
