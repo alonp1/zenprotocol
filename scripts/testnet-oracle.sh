@@ -24,4 +24,4 @@ done
 echo "$R" | grep -qi "blocknumber\|confirmations" || { echo "commitment not confirmed: $R" | cut -c1-300; exit 1; }
 echo "== proof endpoint"
 (dotnet src/Oracle/bin/Release/zen-oracle.dll run > /tmp/oracle-run.txt 2>&1 &)
-for i in $(seq 20); do curl -fs "http://127.0.0.1:8085/auditpath?ticker=EURUSD" && break; sleep 2; done
+for i in $(seq 20); do curl -fs "http://127.0.0.1:8085/auditpath?ticker=EUR" && break; sleep 2; done

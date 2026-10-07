@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # A bet on the testnet, end to end, with zUSD as collateral (docs/ORACLE.md):
-#   buy zUSD (the Token contract) -> activate FixedPayout -> Issue Bull/Bear tokens on EURUSD (mock oracle)
+#   buy zUSD (the Token contract) -> activate FixedPayout -> Issue Bull/Bear tokens on EUR (mock oracle)
 #   -> Attest the oracle's commitment to the FixedPayout contract -> Redeem the winning side -> collateral is back.
 # Needs: a testnet node with the public test wallet, the Token contract active and the Oracle contract active with the
 # oracle service running (scripts/testnet-oracle.sh does that). Reads /tmp/token.env and /tmp/oracle.env.
@@ -30,14 +30,14 @@ echo "FixedPayout $FP_ADDR"; [ -n "$FP_ID" ]
 
 echo "== 3. oracle key and the latest committed round"
 PK=$(post /wallet/publickey "{\"path\":\"m/44'/258'/0'/3/0\",\"password\":\"$PW\"}" | tr -d '"'); echo "oracle public key: $PK"
-P=$(curl -fs "$ORACLE/auditpath?ticker=EURUSD")
+P=$(curl -fs "$ORACLE/auditpath?ticker=EUR")
 read -r TS ROOT VALUE INDEX PATHS < <(echo "$P" | python3 -c "import json,sys;p=json.load(sys.stdin);print(p['timestamp'],p['root'],p['valueScaled'],p['index'],','.join(p['auditPath']))")
 echo "round $TS value(x1000) $VALUE root $ROOT"
 COMMIT=$($ZO commit-hash "$ROOT" "$TS")
 blocks 2                                    # the commitment is in a block
 
 START=$((TS - 3600000)); EXPIRY=$((TS + 31536000000)); PRICE=$((VALUE - 1))      # Bull wins: value >= price
-EVENT="OraclePubKey:k=$PK OracleContractId:s=$ORACLE_ID Ticker:s=EURUSD Price:u=$PRICE Start:u=$START Expiry:u=$EXPIRY Collateral:s=$TOKEN_ID"
+EVENT="OraclePubKey:k=$PK OracleContractId:s=$ORACLE_ID Ticker:s=EUR Price:u=$PRICE Start:u=$START Expiry:u=$EXPIRY Collateral:s=$TOKEN_ID"
 
 echo "== 4. Issue: lock 1000 zUSD, get 1000 Bull + 1000 Bear"
 exec_contract "$FP_ADDR" Issue "$($ZO body $EVENT)" "[{\"asset\":\"$TOKEN_ID\",\"amount\":1000}]"

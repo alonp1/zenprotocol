@@ -11,6 +11,7 @@ open Consensus
 type Settings =
     { Tickers: string list
       Provider: string
+      Quote: string
       IntervalMinutes: int
       Node: string
       Contract: string      // contract address, e.g. ctzn1...
@@ -25,8 +26,9 @@ let private env name fallback =
     | v -> v
 
 let settings () =
-    { Tickers = (env "ORACLE_TICKERS" "EURUSD,GBPUSD,USDJPY,EURGBP,USDCHF").Split(',', StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun s -> s.Trim()) |> Array.toList
+    { Tickers = (env "ORACLE_TICKERS" "EUR,GBP,JPY,CHF,BTC").Split(',', StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun s -> s.Trim()) |> Array.toList
       Provider = env "ORACLE_PROVIDER" "mock"
+      Quote = env "ORACLE_QUOTE" "USD"
       IntervalMinutes = int (env "ORACLE_INTERVAL_MINUTES" "60")
       Node = env "ORACLE_NODE" "http://127.0.0.1:31567"
       Contract = env "ORACLE_CONTRACT" ""
@@ -37,6 +39,7 @@ let settings () =
 
 let round (s: Settings) (provider: Providers.Provider) =
     let now = DateTimeOffset.UtcNow
+    if s.Tickers |> List.exists (fun t -> t.Length > 4) then failwith "tickers are at most 4 characters (FixedPayout refuses longer ones)"
     let data = s.Tickers |> List.map (fun t -> t, provider.Fetch t now)
     let root = Leaf.root data
     let tx =
@@ -109,11 +112,11 @@ let main argv =
         0
     | [ "once" ] ->
         let s = settings ()
-        round s (Providers.create s.Provider)
+        round s (Providers.create s.Provider s.Quote)
         0
     | [] | [ "run" ] ->
         let s = settings ()
-        let provider = Providers.create s.Provider
+        let provider = Providers.create s.Provider s.Quote
         printfn "oracle: provider %s, tickers %s, every %d min, contract %s" s.Provider (String.Join(",", s.Tickers)) s.IntervalMinutes (if s.Contract = "" then "(none, dry run)" else s.Contract)
         let t = Thread((fun () -> serve s), IsBackground = true)
         t.Start()

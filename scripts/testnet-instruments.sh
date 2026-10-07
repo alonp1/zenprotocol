@@ -16,7 +16,15 @@ exec_contract() {   # address command bodyhex spends-json [sign]
 if os.environ['SG']: o['sign']=os.environ['SG']
 print(json.dumps({'address':os.environ['ADDR'],'command':os.environ['CMD'],'messageBody':os.environ['BODY'],'options':o,'spends':json.loads(os.environ['SP']),'password':os.environ['PW']}))")
   R=$(post /wallet/contract/execute "$B"); echo "  $2 -> $(echo "$R" | cut -c1-160)" >&2
-  echo "$R" | grep -Eq '^"[0-9a-f]{64}"$'
+  echo "$R" | grep -Eq '^"[0-9a-f]{64}"$' || return 1
+  LASTTX=$(echo "$R" | tr -d '"')
+}
+tx_in_block() {   # tx hash -> prints the transaction JSON once it is in a block
+  for i in $(seq 60); do
+    local R; R=$(curl -s "$API/blockchain/transaction?hash=$1")
+    echo "$R" | grep -qi "blocknumber\|confirmations" && { echo "$R"; return 0; }
+    sleep 5
+  done; return 1
 }
 bal() { curl -fs "$API/wallet/balance" | ASSET="$1" python3 -c "import json,os,sys;print(sum(b['balance'] for b in json.load(sys.stdin) if b['asset']==os.environ['ASSET']))"; }
 tip() { curl -fs "$API/blockchain/info" | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'; }
@@ -71,8 +79,11 @@ dex() {
   exec_contract "$ADDR" Make "$($ZO body $(order 300 100))" "[{\"asset\":\"$TOKEN_ID\",\"amount\":300}]" "$SIGN"
   wait_bal "$TOKEN_ID" $((Z0 - 300))
   exec_contract "$ADDR" Cancel "$($ZO body $(order 300 100))" '[]' "$SIGN"
-  wait_bal "$TOKEN_ID" "$Z0"
-  echo "  cancelled, zUSD back at $(bal "$TOKEN_ID")"
+  # the underlying goes back to the maker's public key (the signing key, not an address of the wallet's account):
+  # check the confirmed transaction pays 300 zUSD out
+  J=$(tx_in_block "$LASTTX")
+  echo "$J" | python3 -c "import json,sys;t=json.load(sys.stdin);o=json.dumps(t);assert '$TOKEN_ID' in o and '300' in o, 'cancel does not pay 300 zUSD'" 
+  echo "  cancelled: the confirmed transaction pays 300 zUSD back to the maker key"
 }
 
 for s in ${SCENARIOS:-named_token authenticated_supply dex}; do scenario "$s" "$s"; done

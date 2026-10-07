@@ -41,7 +41,7 @@ let run () : bool =
               (let a = Leaf.commitHash root 1234UL
                a = Leaf.commitHash root 1234UL && a <> Leaf.commitHash root 1235UL && a <> root)
           check "the mock provider is deterministic"
-              (let m = Providers.Mock() :> Providers.Provider
+              (let m = Providers.Mock("USD") :> Providers.Provider
                let t = DateTimeOffset.FromUnixTimeSeconds 1800000000L
-               m.Fetch "EURUSD" t = m.Fetch "EURUSD" t && m.Fetch "EURUSD" t > 0M) ]
+               m.Fetch "EUR" t = m.Fetch "EUR" t && m.Fetch "EUR" t > 0M) ]
     List.forall id results
