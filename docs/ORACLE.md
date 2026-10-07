@@ -26,8 +26,18 @@ Trust: the oracle is trusted for the *value*. The chain proves the *time* (the c
 Message bodies (dictionaries) are listed in each contract's README (`zenprotocol/contracts`). Notes:
 
 - The old service sent the command `Add`; the contract expects `Commit`. The new service uses `Commit`.
+- **What is committed.** FixedPayout expects the commitment to be `SHA3(root ‖ uint64 timestamp)` (its `hashCommit`), not the bare root. The old service committed the bare root, so a payout could not have worked against it. The new service builds the commit hash with the same Zulib function the contract uses, and serves `timestamp` and `root` with every proof.
 - A commitment token is bound to the oracle's public key, so a second oracle can use the same contract without clashing.
 - FixedPayout does not know tickers by name in the tree; it recomputes the leaf from `Ticker` and `Value`, so the service and the contract must build leaves identically (see step 2).
+
+## Economics: what the oracle can and cannot carry today
+
+The oracle is only a price source. The money in a bet is whatever asset the consumer contract is given as collateral, and any asset on the ZP chain works (ZP, or a token).
+
+- **ZP is volatile and, today, has no market value.** A bet or a loan in ZP says little. A stable unit is needed for most financial uses.
+- **There is no USDC on ZP** and no bridge. Options for a stable unit: a token backed by USDC held by one custodian (works, but it is trust and regulation), an over-collateralised synthetic dollar (needs a collateral that has value and liquidity, so not yet), or a test unit for experiments.
+- **zUSD on the testnet** is that test unit: a token of the `Token` or `NamedToken` contract with no value, used as the collateral in the bet scenario (`scripts/testnet-bet.sh`). An authorised issuer can be modelled with `AuthenticatedSupply` (only one key may issue and destroy).
+- Nothing here is for real money before an independent review of the contracts and the service, and legal advice.
 
 ## The service (`src/Oracle`)
 
@@ -46,7 +56,7 @@ Planned layout and behavior:
 
 1. Start a testnet node with a known wallet (see [TESTNET.md](TESTNET.md)).
 2. Activate the Oracle contract: `scripts/testnet-contract.sh` shows the activation call; the Oracle contract is activated the same way with `CONTRACT=<path to Oracle.fst>`.
-3. Start the oracle service with the `mock` provider pointing at the node and the contract address.
+3. Start the oracle service with the `mock` provider (or `frankfurter` for ECB currency rates, `coingecko` for crypto prices, `coinmarketcap` with a key) pointing at the node and the contract address.
 4. Watch `/rounds/latest`; each round shows a transaction hash that appears in the explorer.
 
 Never use real money with this until the contract and the service have had an independent review.
