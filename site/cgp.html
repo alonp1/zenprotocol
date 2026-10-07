@@ -81,6 +81,8 @@
   details.iv > summary .v { font-weight: 600; font-variant-numeric: tabular-nums; }
   .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4px; background: var(--line); }
   .split i { display: block; height: 100%; } .split .m { background: var(--muted); } .split .c { background: var(--accent); }
+  td.addr { white-space: normal; overflow-wrap: anywhere; word-break: break-all; width: 320px; max-width: 320px; font-size: 12.5px; }
+  td.addr a { overflow-wrap: anywhere; word-break: break-all; }
   .lg { font-size: 12px; color: var(--muted); margin-top: 3px; }
   .bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 6px; }
   details.iv > summary .v.n { font-weight: 500; }
@@ -144,11 +146,11 @@ fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => 
         ${tallyHtml(i.votes)}
         <h3>Ballots (${i.votes.length})</h3>
         ${i.votes.length ? '<div class="scroll"><table><tr><th>Wallet (voter)</th><th>Type</th><th>Voted for</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>' +
-          i.votes.map(v => `<tr><td class="mono" title="${esc(v.voter)}">${esc(v.voter && v.voter.length > 30 ? v.voter.slice(0, 18) + '…' + v.voter.slice(-8) : v.voter)}</td><td>${esc(v.command)}</td><td>${ballotText(v.ballot)}</td>
+          i.votes.map(v => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}" title="All transactions of this wallet">${esc(v.voter)}</a></td><td>${esc(v.command)}</td><td>${ballotText(v.ballot)}</td>
             <td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
             <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="outside the voting window, or a repeated ballot">not counted</span>'}</td></tr>`).join('') + '</table></div>' : '<div class="note">No ballots.</div>'}
         ${i.payouts.length ? '<h3>Payout transactions</h3><div class="scroll"><table><tr><th>Recipient</th><th class="r">Amount</th><th class="r">Block</th><th>Transaction</th></tr>' +
-          i.payouts.map(p => `<tr><td class="mono" title="${esc(p.recipient)}">${esc(p.recipientName || short(p.recipient))}</td><td class="r">${amt(p.amount)} ${p.asset === '00' ? 'ZP' : ''}</td><td class="r">${fmt(p.block)}</td><td class="mono" title="${esc(p.tx)}">${esc(short(p.tx))}</td></tr>`).join('') + '</table></div>' : ''}
+          i.payouts.map(p => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(p.recipient)}" title="${esc(p.recipient)}">${esc(p.recipientName ? p.recipientName + ' · ' + p.recipient : p.recipient)}</a></td><td class="r">${amt(p.amount)} ${p.asset === '00' ? 'ZP' : ''}</td><td class="r">${fmt(p.block)}</td><td class="mono" title="${esc(p.tx)}">${esc(short(p.tx))}</td></tr>`).join('') + '</table></div>' : ''}
       </div></details>`;
   }).join('') || '<section>No CGP activity indexed yet.</section>';
 }).catch(() => { $('updated').textContent = 'Not available yet: the index is being built.'; });
