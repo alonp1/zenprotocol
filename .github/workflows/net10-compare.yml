@@ -1,0 +1,36 @@
+name: net10-compare
+# Same runner type, same seed, same time: how fast do the Mono release image and the .NET 10 image sync the first
+# blocks, and how much memory/CPU do they use? Results are in the job summary and annotations.
+on:
+  workflow_dispatch:
+  push:
+    paths: [.github/workflows/net10-compare.yml]
+
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix: { variant: [mono, net10] }
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image
+        run: |
+          if [ "${{ matrix.variant }}" = mono ]; then docker pull ghcr.io/alonp1/zen-node:latest && docker tag ghcr.io/alonp1/zen-node:latest img
+          else docker build -q -f Docker/Dockerfile.net10 -t img . ; fi
+          docker images img --format 'size {{.Size}}' | sed 's/^/::notice title=image size ${{ matrix.variant }}::/'
+      - name: Sync for 10 minutes
+        run: |
+          docker run -d --name n -e NETWORK_URL=off img
+          T0=$(date +%s); : > /tmp/s.txt
+          for i in $(seq 1 20); do
+            sleep 30
+            B=$(docker exec n curl -fs http://127.0.0.1:11567/blockchain/info 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["blocks"])' 2>/dev/null || echo 0)
+            S=$(docker stats --no-stream --format '{{.MemUsage}} {{.CPUPerc}}' n | sed 's/ \/ [^ ]*//')
+            echo "$(( $(date +%s) - T0 ))s blocks=$B $S" | tee -a /tmp/s.txt
+          done
+          LAST=$(tail -1 /tmp/s.txt | sed 's/.*blocks=\([0-9]*\).*/\1/')
+          PEAK=$(awk '{print $3}' /tmp/s.txt | sed 's/MiB//; s/GiB/*1024/' | while read x; do echo "$x" | bc -l 2>/dev/null || echo 0; done | sort -n | tail -1)
+          echo "::notice title=RESULT ${{ matrix.variant }}::blocks after 10 min: $LAST, peak memory MiB: $PEAK"
+          { echo "### ${{ matrix.variant }}"; echo "blocks after 10 min: $LAST, peak memory (MiB): $PEAK"; echo '```'; cat /tmp/s.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
