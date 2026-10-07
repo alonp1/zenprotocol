@@ -52,8 +52,28 @@ def myget_packages():
     return out
 
 
+def pinned():
+    """The exact versions this repository's build needs, from paket.lock: (feed, id, version)."""
+    lock = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'paket.lock')
+    out, feed = [], None
+    for line in open(lock):
+        m = re.match(r'\s+remote: (\S+)', line)
+        if m: feed = 'myget' if 'myget.org' in m.group(1) else 'nuget'
+        m = re.match(r'    ([A-Za-z0-9_.\-]+) \(([^)\s]+)\)', line)
+        if m and feed == 'myget': out.append((feed, m.group(1), m.group(2)))
+        if m and m.group(1) in ('secp256k1-vc140',): out.append(('nuget', m.group(1), m.group(2)))
+    return out
+
+
 def packages():
     n = 0
+    for feed, pid, ver in pinned():   # first: exactly what the build uses
+        try:
+            low = pid.lower()
+            url = f'{MYGET}/api/v2/package/{urllib.parse.quote(pid)}/{ver}' if feed == 'myget' else f'https://api.nuget.org/v3-flatcontainer/{low}/{ver}/{low}.{ver}.nupkg'
+            save(f'{OUT}/packages/{pid}.{ver}.nupkg', get(url, True)); n += 1
+        except Exception as e:
+            problems.append(f'pinned {pid} {ver}: {e}')
     try:
         found = myget_packages()
         print(f'MyGet feed: {len(found)} package versions')
