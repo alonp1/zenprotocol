@@ -23,6 +23,8 @@ CHAIN="${CHAIN:-main}"
 
 mkdir -p "$TMP"
 cd "$TMP"
+# no progress bar when the output is not a terminal (it fills logs with one huge line)
+Q=""; [ -t 1 ] || Q="-sS"
 
 # json_get <file> <key>: first value of "key": "..." / ["a","b"] ... (no jq in the image)
 sources() {
@@ -41,10 +43,10 @@ fetch_from() {   # <base>: leaves zen-node.zip verified, returns 1 otherwise
   [ -n "$f" ] && [ -n "$sha" ] || { echo "   latest.json incomplete"; return 1; }
   rm -f zen-node.zip
   if [ -n "$(parts latest.json)" ]; then
-    for p in $(parts latest.json); do curl -fL -C - -o "$p" "$base/$p" || return 1; done
+    for p in $(parts latest.json); do curl -fL $Q -C - -o "$p" "$base/$p" || return 1; done
     cat $(parts latest.json) > zen-node.zip && rm -f $(parts latest.json)
   else
-    curl -fL -C - -o zen-node.zip "$base/$f" || return 1
+    curl -fL $Q -C - -o zen-node.zip "$base/$f" || return 1
   fi
   echo "$sha  zen-node.zip" | sha256sum -c --status || { echo "   checksum mismatch - discarded"; rm -f zen-node.zip; return 1; }
   echo "   checksum ok ($f)"
@@ -54,14 +56,14 @@ echo "== Getting the snapshot (resumable)"
 got=0
 if [ -n "${SNAPSHOT_URL:-}" ]; then
   if [ -f "$SNAPSHOT_URL" ]; then ln -f "$SNAPSHOT_URL" zen-node.zip 2>/dev/null || cp "$SNAPSHOT_URL" zen-node.zip; got=1
-  elif curl -fL -C - -o zen-node.zip "$SNAPSHOT_URL"; then got=1; fi
+  elif curl -fL $Q -C - -o zen-node.zip "$SNAPSHOT_URL"; then got=1; fi
 fi
 if [ "$got" = 0 ]; then
   for base in $(sources); do fetch_from "$base" && { got=1; break; }; done
 fi
 if [ "$got" = 0 ]; then
   echo "No community snapshot reachable, using the official Feb-2023 snapshot (the node syncs the rest)"
-  rm -f zen-node.zip; curl -fL -o zen-node.zip "$FALLBACK"
+  rm -f zen-node.zip; curl -fL $Q -o zen-node.zip "$FALLBACK"
 fi
 
 echo "== Checking archive"
