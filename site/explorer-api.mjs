@@ -84,6 +84,18 @@ function fromNodeJson(j) {
 }
 
 
+// blocks read from the node are kept for a while: a page load must not cost the (single threaded) node ten calls
+const liveCache = new Map();
+function liveBlock(n, t) {
+  const hit = liveCache.get(n), ttl = t - n < 2 ? 15000 : 600000;
+  if (hit && Date.now() - hit.at < ttl) return hit.p;
+  const p = node('/blockchain/block?blockNumber=' + n).then(j => fromNodeJson(j).block);
+  liveCache.set(n, { at: Date.now(), p });
+  p.catch(() => liveCache.delete(n));
+  if (liveCache.size > 300) liveCache.delete(liveCache.keys().next().value);
+  return p;
+}
+
 // ---- search --------------------------------------------------------------------------------------
 const bad = m => Object.assign(new Error(m), { status: 400 });
 const ADDRESS = /^c?(zen|tzn)1[0-9a-z]{20,90}$/, ASSET = /^[0-9a-f]{8,144}$/;
@@ -158,7 +170,7 @@ async function handle(p, query) {
     const before = Math.min(t + 1, Number(query.get('before')) || t + 1);
     const out = [];
     // newest blocks may not be indexed yet: read those from the node (cheap near the tip)
-    for (let n = before - 1; n > indexed && out.length < take && n >= 1; n--) out.push(fromNodeJson(await node('/blockchain/block?blockNumber=' + n)).block);
+    for (let n = before - 1; n > indexed && out.length < take && n >= 1; n--) out.push(await liveBlock(n, t));
     if (out.length < take && db) out.push(...q.blocks.all(Math.min(before, indexed + 1), take - out.length).map(blockRow));
     return { tip: t, indexedTo: indexed, blocks: out };
   }

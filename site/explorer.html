@@ -187,14 +187,25 @@ async function showTx(id) {
   $('view').innerHTML = `<section><h2>Summary</h2><div class="kv2"><div>Hash</div><div class="mono">${esc(d.transaction.hash)}</div><div>Block</div><div>${link('block', d.block.number, fmt(d.block.number))}</div><div>Confirmations</div><div>${fmt(d.tip - d.block.number + 1)}</div><div>Inputs · outputs</div><div>${d.transaction.inputs.length} · ${d.transaction.outputs.length}</div>${d.transaction.contract ? `<div>Contract</div><div>${esc(d.transaction.contract === 'deploy' ? 'deploys a contract' : d.transaction.contract + ' · ' + (d.transaction.command || ''))}</div>` : ''}</div></section>` +
     `<section><h2>Inputs → outputs</h2>${txHtml(d.transaction)}</section>`;
 }
+const latestTable = d => {
+  const last = d.blocks.at(-1)?.number;
+  return '<div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
+    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td>${addrLink(b.miner)}</td></tr>`).join('') +
+    `</table></div><div class="pager"><span></span><span>${last > 1 ? `<a href="?before=${last}">Older →</a>` : ''}</span></div>`;
+};
+const blocksSub = d => 'Tip ' + fmt(d.tip) + (d.indexedTo < d.tip - 20 ? ' · history indexed to block ' + fmt(d.indexedTo) + ' (in progress)' : '');
+let blocksTimer = null;
 async function showBlocks(before) {
   const d = await get('/blocks?take=50' + (before ? '&before=' + before : ''));
   $('title').textContent = 'Latest blocks';
-  $('sub').textContent = 'Tip ' + fmt(d.tip) + (d.indexedTo < d.tip - 20 ? ' · history indexed to block ' + fmt(d.indexedTo) + ' (in progress)' : '');
-  const last = d.blocks.at(-1)?.number;
-  $('view').innerHTML = '<section><form class="jump" id="jump">Go to date <input type="date" name="d" required aria-label="Date"> <button>Go</button> <span id="jumpmsg"></span></form><div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
-    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td>${addrLink(b.miner)}</td></tr>`).join('') +
-    `</table></div><div class="pager"><span></span><span>${last > 1 ? `<a href="?before=${last}">Older →</a>` : ''}</span></div></section>`;
+  $('sub').textContent = blocksSub(d);
+  $('view').innerHTML = '<section><form class="jump" id="jump">Go to date <input type="date" name="d" required aria-label="Date"> <button>Go</button> <span id="jumpmsg"></span></form><div id="blocklist">' + latestTable(d) + '</div></section>';
+  // the first page follows the chain: a new block appears within ~20 seconds, without reloading
+  clearInterval(blocksTimer);
+  if (!before) blocksTimer = setInterval(async () => {
+    if (document.hidden || !$('blocklist')) return;
+    try { const n = await get('/blocks?take=50'); if (n.blocks[0]?.number !== d.blocks[0]?.number || n.tip !== d.tip) { d.blocks = n.blocks; d.tip = n.tip; $('blocklist').innerHTML = latestTable(n); $('sub').textContent = blocksSub(n); } } catch { /* try again next time */ }
+  }, 20000);
 }
 const MAXPAGE = 100000;
 const addrLink = a => a ? `<a class="mono" href="?address=${encodeURIComponent(a)}" title="${esc(a)}">${esc(short(a))}</a>` : '–';
