@@ -95,6 +95,14 @@ let totalQueries (hints: string) : Result<uint32, string> =
             | true, n -> Ok n
             | _ -> Error "total queries: invalid output"))
 
+let calculateMetrics (hints: string) : Result<int * int, string> =
+    withTempFiles [ hints ] (fun files ->
+        tool ("metrics" :: files)
+        |> Result.bind (fun out ->
+            match (out: string).Trim().Split(' ') with
+            | [| fuel; ifuel |] -> Ok (int fuel, int ifuel)
+            | _ -> Error "limits"))
+
 let load path moduleName =
     let assemblyPath = Path.Combine(path, sprintf "%s.dll" moduleName)
 

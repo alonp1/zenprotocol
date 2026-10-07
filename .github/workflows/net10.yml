@@ -79,7 +79,8 @@ jobs:
           for p in Infrastructure.Tests Zulib.Tests Consensus.Tests Blockchain.Tests Wallet.Tests AddressDB.Tests Network.Tests Api.Tests; do
             dotnet build src/$p/$p.fsproj -c Debug -v minimal 2>&1 | tee -a /tmp/build.log || true
           done
-          grep -E " error " /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt || true
+          grep -E "error (FS|NU|MSB|CS)[0-9]+" /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt || true
+          wc -l /tmp/err.txt
           if [ -s /tmp/err.txt ]; then split -l 12 /tmp/err.txt /tmp/errpart.; for f in /tmp/errpart.*; do echo "::error title=test build::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"; done; exit 1; fi
 
       - name: Run tests

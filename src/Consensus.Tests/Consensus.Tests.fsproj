@@ -26,8 +26,9 @@
     <Compile Include="TestWallet.fs" />
     <Compile Include="Helper.fs" />
     <Compile Include="SignedWitnessTests.fs" />
-    <Compile Include="StepDefinitionsModules.fs" />
-    <Compile Include="StepDefinitions.fs" />
+    <!-- SpecFlow step definitions for Consensus.Features.Tests: back when the feature tests move to Reqnroll -->
+    <None Include="StepDefinitionsModules.fs" />
+    <None Include="StepDefinitions.fs" />
     <Compile Include="TransactionHelpers.fs" />
     <Compile Include="TransactionNunitHelpers.fs" />
     <Compile Include="TransactionFsCheckHelpers.fs" />

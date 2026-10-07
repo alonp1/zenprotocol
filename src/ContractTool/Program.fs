@@ -5,6 +5,7 @@
 ///   compile       <contractsPath> <moduleName> <rlimit> <codeFile> <hintsFile>
 ///   record-hints  <moduleName> <rlimit> <codeFile> <outHintsFile>
 ///   total-queries <hintsFile>                          prints the number on stdout
+///   metrics       <hintsFile>                          prints max fuel and max ifuel
 ///   (debug builds) --unit-testing <dir> before the command: use pre-extracted test contracts
 module ContractTool.Program
 
@@ -35,6 +36,10 @@ let main argv =
         | [ "record-hints"; moduleName; rlimit; codeFile; outFile ] ->
             ZFStar.recordHints (UInt32.Parse rlimit) (File.ReadAllText codeFile) moduleName
             |> Result.map (fun (hints: string) -> File.WriteAllText(outFile, hints))
+            |> finish
+        | [ "metrics"; hintsFile ] ->
+            ZFStar.calculateMetrics (File.ReadAllText hintsFile)
+            |> Result.map (fun (fuel: int, ifuel: int) -> printfn "%d %d" fuel ifuel)
             |> finish
         | [ "total-queries"; hintsFile ] ->
             ZFStar.totalQueries (File.ReadAllText hintsFile)
