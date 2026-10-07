@@ -1,30 +1,28 @@
 <Project>
-  <!-- Shared settings for all SDK-style projects. Still .NET Framework 4.7 / Mono;
-       references come from the paket packages/ folder (hint paths in each .fsproj). -->
+  <!-- Shared settings for all projects: .NET 10 (stage 4 of docs/MIGRATION.md).
+       Packages come from NuGet (src/Directory.Packages.props pins every version to paket.lock of release 1.0.13). -->
   <PropertyGroup>
-    <TargetFramework>net47</TargetFramework>
-    <!-- paket <Choose> blocks in the projects test these before the SDK infers them -->
-    <TargetFrameworkIdentifier>.NETFramework</TargetFrameworkIdentifier>
-    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
-
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
     <EnableDefaultItems>false</EnableDefaultItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
-    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
-    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DebugType>portable</DebugType>
-    <!-- legacy-format leftovers; keep builds quiet but not silent -->
-    <NoWarn>$(NoWarn);MSB3277;MSB3245;NU1603</NoWarn>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- NU1701: .NET Framework-only packages (Zulib, FsBech32, ZFStar, ...) used on .NET 10 - checked by the replay test.
+         NU1603/NU1605: exact pins from paket.lock. FS3370 etc: new compiler notes on old code. -->
+    <NoWarn>$(NoWarn);NU1701;NU1603;NU1605;NU1608;NU1902;NU1903;NU1904;FS3370;FS0044;FS0064</NoWarn>
+    <WarningsAsErrors></WarningsAsErrors>
   </PropertyGroup>
 
-  <!-- On Linux/macOS build against Mono's .NET 4.7 reference assemblies -->
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' And Exists('/usr/lib/mono/4.7-api')">
-    <FrameworkPathOverride>/usr/lib/mono/4.7-api/</FrameworkPathOverride>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' And Exists('/Library/Frameworks/Mono.framework/Versions/Current/lib/mono/4.7-api')">
-    <FrameworkPathOverride>/Library/Frameworks/Mono.framework/Versions/Current/lib/mono/4.7-api/</FrameworkPathOverride>
-  </PropertyGroup>
+  <!-- test projects: dotnet test with NUnit -->
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
 </Project>

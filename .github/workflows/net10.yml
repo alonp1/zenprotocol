@@ -1,0 +1,46 @@
+name: net10
+# Stage 4 of docs/MIGRATION.md: the node on .NET 10. F* (fstar.exe) still runs on Mono as an external tool.
+on:
+  push:
+    branches: [net10]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - name: Native and Mono dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq mono-runtime libmono-system-core4.0-cil libmono-system-numerics4.0-cil liblmdb0 libgomp1
+
+      - name: Restore
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet restore src/Node/Node.fsproj 2>&1 | tee /tmp/restore.log || { grep -E "error" /tmp/restore.log | sort -u | head -40 | sed 's/^/::error title=restore::/'; exit 1; }
+
+      - name: Package layout (for porting notes)
+        if: always()
+        shell: bash
+        run: |
+          for p in zulib zfstar fsbech32 cgpcontract zen.fsharp.compiler.service zfs-tools zen_secp256k1_linux zen_z3_linux fsnetmq fsharp.core lightningdb; do
+            d=$(ls -d ~/.nuget/packages/$p/*/ 2>/dev/null | head -1); [ -n "$d" ] || continue
+            echo "::notice title=pkg $p::$(cd $d && find . -maxdepth 3 -not -name '*.xml' -not -name '*.fst*' | sort | head -40 | tr '\n' ' ')"
+          done
+
+      - name: Build node
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build src/Node/Node.fsproj -c Debug -v minimal 2>&1 | tee /tmp/build.log || { grep -E " error " /tmp/build.log | sed -E 's#^.*/src/#src/#' | sort -u | head -60 | sed 's/%/%25/g' | sed 's/^/::error title=build::/'; exit 1; }
+
+      - name: Upload node build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: zen-node-net10, path: src/Node/bin/Debug/, if-no-files-found: ignore }

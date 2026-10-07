@@ -1,19 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-
+<Project>
+  <!-- F* assemblies used in-process (hints, AST elaboration). fstar.exe itself runs as a separate Mono process. -->
   <ItemGroup>
-    <Reference Include="fstar">
-      <HintPath>$(SolutionDir)\..\packages\ZFStar\tools\fstar.exe</HintPath>
-    </Reference>
-    <Reference Include="parser">
-      <HintPath>$(SolutionDir)\..\packages\ZFStar\tools\parser.dll</HintPath>
-    </Reference>
-    <Reference Include="prettyprint">
-      <HintPath>$(SolutionDir)\..\packages\ZFStar\tools\prettyprint.dll</HintPath>
-    </Reference>
-    <Reference Include="basic">
-      <HintPath>$(SolutionDir)\..\packages\ZFStar\tools\basic.dll</HintPath>
-    </Reference>
+    <PackageReference Include="ZFStar" GeneratePathProperty="true" />
   </ItemGroup>
-    
+  <ItemGroup>
+    <Reference Include="fstar"><HintPath>$(PkgZFStar)/tools/fstar.exe</HintPath></Reference>
+    <Reference Include="parser"><HintPath>$(PkgZFStar)/tools/parser.dll</HintPath></Reference>
+    <Reference Include="prettyprint"><HintPath>$(PkgZFStar)/tools/prettyprint.dll</HintPath></Reference>
+    <Reference Include="basic"><HintPath>$(PkgZFStar)/tools/basic.dll</HintPath></Reference>
+  </ItemGroup>
 </Project>
