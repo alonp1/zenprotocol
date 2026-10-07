@@ -74,10 +74,10 @@ ExecStart=/usr/bin/python3 $REPO/site/update-stats.py --out $WEB/stats.json
 UNIT
 cat > /etc/systemd/system/zen-stats.timer <<UNIT
 [Unit]
-Description=Refresh ZP network stats every 5 minutes
+Description=Refresh ZP network stats every 15 minutes (each run asks the node for about 2 minutes of work)
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=15min
 [Install]
 WantedBy=timers.target
 UNIT
