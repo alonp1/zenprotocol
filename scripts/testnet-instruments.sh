@@ -31,7 +31,7 @@ activate() {   # file -> prints "ADDR ID", tries growing z3 limits
   done; return 1; }
 PK=$(post /wallet/publickey "{\"path\":\"$SIGN\",\"password\":\"$PW\"}" | tr -d '"')
 RESULTS=()
-scenario() { local name=$1; shift; echo "== $name"; if ( set -e; "$@" ); then RESULTS+=("PASS $name"); else RESULTS+=("FAIL $name"); fi; }
+scenario() { local name=$1 rc; shift; echo "== $name"; ( set -e; "$@" ); rc=$?; if [ $rc -eq 0 ]; then RESULTS+=("PASS $name"); else RESULTS+=("FAIL $name"); fi; }
 
 named_token() {
   read -r ADDR ID < <(activate src/ContractExamples/NamedToken.fst)

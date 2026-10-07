@@ -6,6 +6,8 @@ open System
 open Consensus
 open Zen.Types.Data
 
+module PKModule = Consensus.Crypto.PublicKey
+
 
 let private field (spec: string) : FStar.String.t * data =
     let eq = spec.IndexOf '='
@@ -22,10 +24,10 @@ let private field (spec: string) : FStar.String.t * data =
         | "u" -> U64 (UInt64.Parse value)
         | "h" -> Hash (hashBytes value)
         | "k" ->
-            // 33 bytes, compressed key: taken as bytes (parsing it with Consensus would load the native secp256k1 library)
-            let b = Convert.FromHexString value
-            if b.Length <> 33 then failwithf "bad public key %s" value
-            PublicKey b
+            // a compressed key (33 bytes hex), parsed by Consensus so that its serialization is valid
+            match PKModule.fromString value with
+            | Some (Consensus.Crypto.PublicKey b) -> PublicKey b
+            | None -> failwithf "bad public key %s" value
         | "c" ->
             match ContractId.fromString value with
             | Some id -> Lock (ZFStar.fsToFstLock (Types.Lock.Contract id))

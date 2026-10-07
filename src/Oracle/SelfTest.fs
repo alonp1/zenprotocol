@@ -31,6 +31,12 @@ let run () : bool =
                | _ -> false)
           check "body builder: the Commit dictionary equals the hand-built one"
               (Body.build [ "Commit:h=" + Leaf.hex root ] = Leaf.commitMessageBody root)
+          check "a body with a public key survives the node's deserializer (it silently drops a body it cannot read)"
+              (let pk = "02bee4711911864b76160c865bd29cb8a33c9f4a6d0186dffa02808b0daf122a15"
+               let bytes = Convert.FromHexString(Body.build [ "OraclePubKey:k=" + pk; "Ticker:s=EURUSD"; "Price:u=1" ])
+               match Serialization.Data.deserialize bytes with
+               | Some (Zen.Types.Data.Collection (Zen.Types.Data.Dict (map, _))) -> Map.count map = 3
+               | _ -> false)
           check "the commit hash depends on root and timestamp and is stable"
               (let a = Leaf.commitHash root 1234UL
                a = Leaf.commitHash root 1234UL && a <> Leaf.commitHash root 1235UL && a <> root)
