@@ -68,7 +68,8 @@ jobs:
           fail=0
           for p in Zulib.Tests Infrastructure.Tests Consensus.Tests Blockchain.Tests Wallet.Tests AddressDB.Tests Network.Tests; do
             dotnet test src/$p/$p.fsproj -c Debug --no-build -v q --logger "console;verbosity=minimal" > /tmp/t-$p.log 2>&1 || fail=1
-            echo "::notice title=$p::$(grep -E "Passed!|Failed!|error|Failed " /tmp/t-$p.log | head -15 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+            echo "::notice title=$p::$(grep -E "Passed!|Failed!" /tmp/t-$p.log | head -3 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+            grep -q "Failed!" /tmp/t-$p.log && echo "::notice title=$p failures (gz64)::$(grep -E -A12 "^\s+Failed " /tmp/t-$p.log | head -400 | gzip -c | base64 -w0)"
           done
           exit $fail
 
