@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           for f in ~/.nuget/packages/*/*/build/*.targets ~/.nuget/packages/*/*/build/*/*.targets; do
-            echo "::notice title=$(basename $f)::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"
+            echo "::notice title=$(basename $f)::$(gzip -c $f | base64 -w0)"
           done
 
       - name: Build node
