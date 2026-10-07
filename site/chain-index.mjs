@@ -213,7 +213,15 @@ while (last < target && Date.now() - start < BUDGET) {
   }
   db.exec('BEGIN');
   try {
-    for (const b of blocks) indexBlock(b.blockNumber, b.rawBlock);
+    for (const b of blocks) {
+      try { indexBlock(b.blockNumber, b.rawBlock); }
+      catch (e) {   // say which block and where, and keep its bytes for analysis
+        console.log(`chain-index: block ${b.blockNumber} cannot be read: ${e.message} at byte ${e.pos} of ${e.length}`);
+        try { fs.writeFileSync(`/var/lib/zen-stats/bad-block-${b.blockNumber}.hex`, b.rawBlock); console.log(`chain-index: raw block saved to /var/lib/zen-stats/bad-block-${b.blockNumber}.hex`); } catch { /* read-only */ }
+        if (b.rawBlock.length < 6000) console.log(`chain-index: raw ${b.rawBlock}`);
+        throw e;
+      }
+    }
     q.setMeta.run('last', String(upto));
     db.exec('COMMIT');
     last = upto;

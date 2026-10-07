@@ -410,14 +410,16 @@ export const witnessesHash = ws => { const w = new Writer(); List.write(w, Witne
 export function deserializeBlock(bytes, opts = {}) {
   const r = new Reader(bytes);
   r.lenient = !!opts.lenient;
-  const header = r.bytes(100);
-  const commitments = List.read(r, Hash.read);
-  const txs = List.read(r, r => {
-    const start = r.p, tx = Transaction.read(r);
-    return { tx, raw: r.b.slice(start, r.p) };
-  });
-  if (!r.done()) fail('trailing bytes in block');
-  return { header, commitments, txs, irregular: r.irregular || [] };
+  try {
+    const header = r.bytes(100);
+    const commitments = List.read(r, Hash.read);
+    const txs = List.read(r, r => {
+      const start = r.p, tx = Transaction.read(r);
+      return { tx, raw: r.b.slice(start, r.p) };
+    });
+    if (!r.done()) fail('trailing bytes in block');
+    return { header, commitments, txs, irregular: r.irregular || [] };
+  } catch (e) { e.pos = r.p; e.length = bytes.length; throw e; }
 }
 
 export const bytesEqual = eq;
