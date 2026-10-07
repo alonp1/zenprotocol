@@ -67,7 +67,7 @@ jobs:
           RC=$?
           tail -n 45 /tmp/load.txt | python3 -c "import sys;print('::notice title=load output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
-      - name: A bet with zUSD (FixedPayout: issue, attest, redeem)
+      - name: "A bet with zUSD (FixedPayout, issue then attest then redeem)"
         if: always()
         timeout-minutes: 30
         run: |
