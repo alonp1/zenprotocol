@@ -18,6 +18,7 @@
   <ItemGroup>
     <PackageReference Include="FSharp.Core" />
     <PackageReference Include="Zulib" />
+    <PackageReference Include="zen_secp256k1_linux" />
     <ProjectReference Include="..\Consensus\Consensus.fsproj" />
   </ItemGroup>
   <!-- Consensus serializes public keys with the native secp256k1 library: put it next to the program -->
