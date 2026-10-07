@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Oracle</title>
+<meta name="description" content="Price data committed on the ZP blockchain, with proofs anyone can verify.">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64;
+    --line: #e3e1da; --accent: #1f6f5c; --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890;
+            --line: #2c2d2a; --accent: #5cc3a6; --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 14px; font-weight: 600; }
+  p.lead { margin: 0; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px; margin-bottom: 18px; }
+  .banner { background: color-mix(in srgb, var(--warn) 14%, var(--card)); border: 1px solid var(--warn); color: var(--ink); border-radius: 10px; padding: 10px 14px; margin-bottom: 18px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  code, .mono { font-family: var(--mono); font-size: 13.5px; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 10px 0; font-family: var(--mono); font-size: 13px; }
+  a { color: var(--accent); }
+  .hash { word-break: break-all; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  button { font: inherit; background: none; border: 1px solid var(--line); color: var(--accent); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .proof { display: none; }
+  .proof.open { display: table-row; }
+  .proof td { background: var(--bg); }
+  ol { padding-left: 20px; margin: 0; } li { margin: 6px 0; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tabs button.on { background: var(--accent); color: var(--card); border-color: var(--accent); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ZP Oracle</h1>
+    <p class="lead">Prices committed on the ZP blockchain. The chain proves when each value was published and that it was never changed.</p>
+  </header>
+
+  <div class="banner"><strong>Mockup.</strong> Sample data on the testnet. The live page will read the oracle service (<code>/oracle/rounds/latest</code>).</div>
+
+  <section>
+    <h2>Latest commitment</h2>
+    <div class="grid">
+      <div class="stat"><div class="k">Published</div><div class="v" id="when">–</div></div>
+      <div class="stat"><div class="k">Block</div><div class="v" id="block">–</div></div>
+      <div class="stat"><div class="k">Network</div><div class="v">Testnet</div></div>
+      <div class="stat"><div class="k">Source</div><div class="v">mock</div></div>
+    </div>
+    <p style="margin:16px 0 4px" class="k">Merkle root (what the chain holds)</p>
+    <div class="hash" id="root"></div>
+    <p style="margin:12px 0 4px" class="k">Commitment transaction</p>
+    <div class="hash" id="tx"></div>
+  </section>
+
+  <section>
+    <h2>Values in this round</h2>
+    <table>
+      <thead><tr><th>Ticker</th><th class="num">Value</th><th class="num">Index</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p style="margin:14px 0 0;color:var(--muted);font-size:14px">The proof is the leaf plus the audit path. A contract (for example a bet) rebuilds the root from them and compares it with the committed root.</p>
+  </section>
+
+  <section>
+    <h2>History</h2>
+    <table>
+      <thead><tr><th>Time (UTC)</th><th>Block</th><th>Root</th><th class="num">EURUSD</th></tr></thead>
+      <tbody id="hist"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>How it works</h2>
+    <ol>
+      <li>Every hour the service reads each price from its data source.</li>
+      <li>It hashes every <code>ticker;value</code> pair into a leaf and builds one Merkle tree.</li>
+      <li>It sends the root to the Oracle contract (<code>Commit</code>), signed with the oracle key. The chain now proves the root existed at that block.</li>
+      <li>Anyone asks the service for a value with its proof, and a contract or a person checks it against the root.</li>
+    </ol>
+    <p style="margin:14px 0 0;color:var(--muted);font-size:14px">The oracle is trusted for the value itself. Everything after the commitment is verifiable. <a href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/ORACLE.md">Read the design</a>.</p>
+  </section>
+
+  <section>
+    <h2>Use it</h2>
+    <div class="tabs"><button class="on" data-t="api">API</button><button data-t="verify">Verify yourself</button><button data-t="contract">In a contract</button></div>
+    <div id="tab"></div>
+  </section>
+
+  <footer>Testnet, no value. Part of the community node: <a href="/">home</a> · <a href="/explorer.html">explorer</a> · <a href="/stats.html">stats</a></footer>
+</main>
+<script>
+const DATA = {"timestamp": 1791390000000, "root": "30c8461b09fdde71df3ba5db747eff582108839501bb01a5570fa7070266c54a", "tx": "015f7f2a3f1fc6c8bd94515a91b77ad0f3292a5d998153343c9c656327a065e3", "block": 1042, "rows": [{"ticker": "EURUSD", "value": 1.0832, "leaf": "9f99879a71e0458ff19b99a4956f93740e5c694ca0122a96b55a821b16cbcb11", "index": 0}, {"ticker": "GBPUSD", "value": 1.2711, "leaf": "a380029280cf37a08fbcd20bdbe718884340efcc8d3925d3add9b45ec2e60e03", "index": 1}, {"ticker": "USDJPY", "value": 149.5, "leaf": "9f3344e2e0d815a0ca30dd0ff1c6b06bc3a75dfa5cdc676caf1a6fdc8aab353c", "index": 2}, {"ticker": "EURGBP", "value": 0.852, "leaf": "5cd6a0a7d1e4d4d4c626212c7bf3d0df0bec112c4b3ebc4d4e3e3323be4945e0", "index": 3}, {"ticker": "USDCHF", "value": 0.9, "leaf": "2508ec4053e4773586f459c7cfce8d7cb78e3b31b02610eff4bb2c1395c6f97d", "index": 4}, {"ticker": "BTCUSD", "value": 67250.12, "leaf": "9be7eab68d2cd0340eefe5ce9f06a0bdb22714d26c9c8a1015af264f5b8a1e03", "index": 5}]};
+const $ = id => document.getElementById(id);
+const fmt = v => v >= 1000 ? v.toLocaleString('en', {maximumFractionDigits: 2}) : String(v);
+$('when').textContent = new Date(DATA.timestamp).toISOString().slice(0, 16).replace('T', ' ');
+$('block').textContent = DATA.block.toLocaleString();
+$('root').textContent = DATA.root;
+$('tx').textContent = DATA.tx;
+$('rows').innerHTML = DATA.rows.map(r =>
+  '<tr><td><strong>' + r.ticker + '</strong></td><td class="num">' + fmt(r.value) + '</td><td class="num">' + r.index +
+  '</td><td><button data-i="' + r.index + '">Proof</button></td></tr>' +
+  '<tr class="proof" id="p' + r.index + '"><td colspan="4"><div class="hash">leaf ' + r.leaf + '</div>' +
+  '<pre>GET /oracle/auditpath?ticker=' + r.ticker + '&amp;root=' + DATA.root.slice(0, 12) + '…</pre></td></tr>').join('');
+$('rows').onclick = e => { const i = e.target.dataset && e.target.dataset.i; if (i !== undefined) $('p' + i).classList.toggle('open'); };
+// history: this round and 5 earlier ones (sample)
+$('hist').innerHTML = [0,1,2,3,4,5].map(n => {
+  const t = new Date(DATA.timestamp - n * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+  const root = n === 0 ? DATA.root : Array.from({length: 64}, (_, k) => '0123456789abcdef'[(k * 7 + n * 13 + (k * k) % 5) % 16]).join('');
+  return '<tr><td>' + t + '</td><td>' + (DATA.block - n * 15) + '</td><td class="mono">' + root.slice(0, 10) + '…' + root.slice(-6) + '</td><td class="num">' + (1.0832 + ((n + 1) % 3 - 1) * 0.0007).toFixed(4) + '</td></tr>';
+}).join('');
+const TABS = {
+  api: '<pre>GET /oracle/rounds/latest\nGET /oracle/auditpath?ticker=EURUSD\nGET /oracle/auditpath?ticker=EURUSD&amp;timestamp=1791390000000\nGET /oracle/health</pre><p style="color:var(--muted);margin:0">Answers are JSON: value, timestamp, root, index, audit path, commitment transaction.</p>',
+  verify: '<pre>leaf  = SHA3-256( "EURUSD" + ";" + uint32_be(value × 1000) )\nroot  = merkle(leaves)          // same tree as the node (Consensus.MerkleTree)\ncheck = root == committed root  // from the chain, via the Oracle contract</pre><p style="color:var(--muted);margin:0">A reference implementation and test are in <code>src/Oracle</code>.</p>',
+  contract: '<pre>Oracle contract:      ctzn1…  (Commit, Attest)\nFixedPayout contract: Issue / Redeem / Cancel bull and bear positions on a ticker</pre><p style="color:var(--muted);margin:0">Try bets on the testnet; see the docs for the message bodies.</p>'
+};
+const showTab = k => { $('tab').innerHTML = TABS[k]; document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); };
+document.querySelector('.tabs').onclick = e => { if (e.target.dataset.t) showTab(e.target.dataset.t); };
+showTab('api');
+</script>
+</body>
+</html>
