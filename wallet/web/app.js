@@ -2,7 +2,7 @@
 // or a node goes through esc(). Secrets live in memory only while unlocked.
 import qrcode from 'qrcode-generator';
 import { newMnemonic, checkMnemonic, isValidAddress, decodeAddress } from '../src/keys.js';
-import { NodeClient, DEFAULT_NODES } from '../src/node.js';
+import { NodeClient, NodeError, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
 import { openWallet, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
 import { parseZP, formatZP } from '../src/tx.js';
@@ -249,8 +249,16 @@ function render() {
 async function refreshNode() {
   const n = node();
   if (!n) { S.nodeOk = false; S.tip = null; return; }
-  try { const info = checkInfo(await n.info(), net()); S.tip = info.blocks; S.nodeOk = true; S.nodeError = ''; S.cgp = await n.cgp().catch(() => null); }
-  catch (e) { S.nodeOk = false; S.nodeError = e.message; }
+  // A node that is busy (it serves the chain indexer too) can miss one request: ask up to 3 times before saying "offline".
+  // A wrong network or a bad answer is not retried.
+  for (let i = 0; i < 3; i++) {
+    try { const info = checkInfo(await n.info(), net()); S.tip = info.blocks; S.nodeOk = true; S.nodeError = ''; S.cgp = await n.cgp().catch(() => null); break; }
+    catch (e) {
+      S.nodeOk = false; S.nodeError = e.message;
+      if (!(e instanceof NodeError) || i === 2) break;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
   // the community site publishes stats.json next to /node/ (CGP fund balance, named contracts)
   S.stats = null;
   try {
