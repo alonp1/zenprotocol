@@ -159,7 +159,14 @@ def body_entries(mb):
 
 # ---- database ---------------------------------------------------------------------------------
 os.makedirs(os.path.dirname(a.db), exist_ok=True)
-db = sqlite3.connect(a.db)
+# one run at a time (timer, manual runs): a second run exits quietly
+import fcntl, sys
+_lock = open(a.db + ".lock", "w")
+try:
+    fcntl.flock(_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    print("chain-index: another run is in progress"); sys.exit(0)
+db = sqlite3.connect(a.db, timeout=60)
 db.executescript("""
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS utxo (outpoint TEXT PRIMARY KEY, asset TEXT, address TEXT, amount TEXT);
