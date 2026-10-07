@@ -79,6 +79,10 @@
   details.iv > summary::-webkit-details-marker { display: none; }
   details.iv > summary .k { font-size: 12px; color: var(--muted); }
   details.iv > summary .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4px; background: var(--line); }
+  .split i { display: block; height: 100%; } .split .m { background: var(--muted); } .split .c { background: var(--accent); }
+  .lg { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 6px; }
   details.iv > summary .v.n { font-weight: 500; }
   details.iv[open] > summary { border-bottom: 1px solid var(--line); }
   details.iv .in { padding: 12px 16px 16px; }
@@ -93,7 +97,7 @@
   <p class="lead" id="updated">Loading…</p>
   <section>
     <div class="note" style="margin-top:0">Each interval is 10,000 blocks. The balance at the snapshot block is the vote weight; nominations follow the snapshot,
-    then the allocation and payout vote. The allocation decided in an interval applies to the next one. Interval numbers as in the community wallets
+    then the allocation and payout vote. The allocation (the CGP share of every block reward; miners get the rest) decided in an interval applies to the next one. Interval numbers as in the community wallets
     (the node counts 24 more). A ballot is counted if it is the first of its key and type inside its voting window.</div>
   </section>
   <div id="list"></div>
@@ -109,6 +113,20 @@ const $ = id => document.getElementById(id);
 document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
 const ballotText = b => !b ? '?' : b.allocation != null ? 'Allocation ' + b.allocation + '%' :
   'Pay ' + esc(short(b.recipient)) + ' ' + b.spends.map(s => s[0] === '00' ? amt(Number(s[1]) / 1e8) + ' ZP' : esc(s[1]) + ' ' + esc(short(s[0]))).join(', ');
+const splitBar = p => p == null ? '–' : `<div class="v">CGP ${p}% · miners ${100 - p}%</div><div class="split" title="CGP ${p}% of each block reward, miners ${100 - p}%"><i class="c" style="width:${p}%"></i><i class="m" style="width:${100 - p}%"></i></div>`;
+// weighted result of the allocation ballots that count: how much vote weight stands behind each percentage
+const tally = votes => {
+  const m = new Map(); let total = 0;
+  for (const v of votes) if (v.counted && v.ballot && v.ballot.allocation != null && v.weight != null) {
+    const r = m.get(v.ballot.allocation) || { pct: v.ballot.allocation, weight: 0, voters: 0 }; r.weight += v.weight; r.voters++; m.set(v.ballot.allocation, r); total += v.weight;
+  }
+  return { rows: [...m.values()].sort((a, b) => b.weight - a.weight), total };
+};
+const tallyHtml = votes => {
+  const t = tally(votes); if (!t.rows.length) return '';
+  return '<h3>Allocation vote: weight behind each percentage</h3><div class="scroll"><table><tr><th>CGP share</th><th>Miners share</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share of voted weight</th></tr>' +
+    t.rows.map(r => { const sh = t.total ? r.weight / t.total * 100 : 0; return `<tr><td>${r.pct}%</td><td>${100 - r.pct}%</td><td class="r">${r.voters}</td><td class="r">${amt(Math.round(r.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('') + '</table></div>';
+};
 fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
   const ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
@@ -117,15 +135,16 @@ fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => 
     const decided = i.complete ? (i.allocationDecided != null ? i.allocationDecided + '%' : '–') : 'voting open';
     return `<details class="iv" ${n === 0 ? 'open' : ''}><summary>
       <div><div class="k">Interval</div><div class="v">${i.communityInterval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
-      <div><div class="k">Allocation in force</div><div class="v">${i.allocationInForce != null ? i.allocationInForce + '%' : '–'}</div></div>
-      <div><div class="k">Allocation decided</div><div class="v">${decided}</div></div>
+      <div><div class="k">Split in force</div>${splitBar(i.allocationInForce)}</div>
+      <div><div class="k">Split decided for next</div>${i.complete && i.allocationDecided != null ? splitBar(i.allocationDecided) : '<div class="v">' + decided + '</div>'}</div>
       <div><div class="k">Voters · weight</div><div class="v">${i.voters} · ${amt(Math.round(i.weightVoted))} ZP</div></div>
       <div><div class="k">Payout</div><div class="v n">${pay}</div></div></summary>
       <div class="in">
         <div class="note" style="margin-top:0">Snapshot block ${fmt(i.snapshot)} · nominations to block ${fmt(i.nominationEnd)} · voting to block ${fmt(i.end)}</div>
+        ${tallyHtml(i.votes)}
         <h3>Ballots (${i.votes.length})</h3>
-        ${i.votes.length ? '<div class="scroll"><table><tr><th>Voter</th><th>Type</th><th>Ballot</th><th class="r">Weight (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>' +
-          i.votes.map(v => `<tr><td class="mono" title="${esc(v.voter)}">${esc(short(v.voter))}</td><td>${esc(v.command)}</td><td>${ballotText(v.ballot)}</td>
+        ${i.votes.length ? '<div class="scroll"><table><tr><th>Wallet (voter)</th><th>Type</th><th>Voted for</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>' +
+          i.votes.map(v => `<tr><td class="mono" title="${esc(v.voter)}">${esc(v.voter && v.voter.length > 30 ? v.voter.slice(0, 18) + '…' + v.voter.slice(-8) : v.voter)}</td><td>${esc(v.command)}</td><td>${ballotText(v.ballot)}</td>
             <td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
             <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="outside the voting window, or a repeated ballot">not counted</span>'}</td></tr>`).join('') + '</table></div>' : '<div class="note">No ballots.</div>'}
         ${i.payouts.length ? '<h3>Payout transactions</h3><div class="scroll"><table><tr><th>Recipient</th><th class="r">Amount</th><th class="r">Block</th><th>Transaction</th></tr>' +
