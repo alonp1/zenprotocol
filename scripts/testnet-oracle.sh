@@ -8,6 +8,8 @@ OUT=$(CONTRACT=src/ContractExamples/Oracle.fst RLIMIT=${RLIMIT:-30000000} EXECUT
 echo "$OUT" | tail -n 5
 ADDR=$(echo "$OUT" | sed -n 's/^CONTRACT_ADDRESS=//p')
 [ -n "$ADDR" ]
+ID=$(echo "$OUT" | sed -n 's/^CONTRACT_ID=//p')
+printf "ORACLE_ADDR=%s\nORACLE_ID=%s\n" "$ADDR" "$ID" > /tmp/oracle.env
 export ORACLE_NODE=$API ORACLE_CONTRACT=$ADDR ORACLE_PASSWORD=$PW ORACLE_DATA=/tmp/oracle-data ORACLE_PROVIDER=mock
 rm -rf /tmp/oracle-data
 dotnet src/Oracle/bin/Release/zen-oracle.dll once | tee /tmp/oracle-once.txt

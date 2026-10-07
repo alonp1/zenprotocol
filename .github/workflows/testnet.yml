@@ -9,7 +9,7 @@ on:
       split:   { description: 'outputs per splitting transaction (fewer mined blocks needed when higher)', default: '500' }
   push:
     branches: [node-upgrade-script]
-    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'scripts/testnet-oracle.sh', 'src/Oracle/**', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
+    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'scripts/testnet-oracle.sh', 'scripts/testnet-bet.sh', 'src/Oracle/**', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
 
 jobs:
   testnet:
@@ -53,6 +53,7 @@ jobs:
       - name: Oracle on the testnet (Oracle contract, one round, proof)
         run: |
           set +e
+          for k in ADDRESS ID; do sed -n "s/^CONTRACT_$k=//p" /tmp/contract.txt | head -1; done | { read A; read I; printf "TOKEN_ADDR=%s\nTOKEN_ID=%s\n" "$A" "$I" > /tmp/token.env; }
           dotnet restore src/Oracle/Oracle.fsproj -v q >/dev/null 2>&1; dotnet build src/Oracle/Oracle.fsproj -c Release --no-restore -v q >/dev/null 2>&1
           bash scripts/testnet-oracle.sh http://127.0.0.1:31567 testnet > /tmp/oracle.txt 2>&1
           RC=$?
@@ -65,6 +66,15 @@ jobs:
           node scripts/devnet/loadgen.mjs --node http://127.0.0.1:31567 --nodes 31567,31568,31569 --rates "${{ inputs.rates || '5,20' }}" --seconds "${{ inputs.seconds || '10' }}" --split "${{ inputs.split || '100' }}" --out testnet-result.json > /tmp/load.txt 2>&1
           RC=$?
           tail -n 45 /tmp/load.txt | python3 -c "import sys;print('::notice title=load output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
+      - name: A bet with zUSD (FixedPayout: issue, attest, redeem)
+        if: always()
+        timeout-minutes: 30
+        run: |
+          set +e
+          bash scripts/testnet-bet.sh http://127.0.0.1:31567 testnet > /tmp/bet.txt 2>&1
+          RC=$?
+          tail -n 30 /tmp/bet.txt | python3 -c "import sys;print('::notice title=bet output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
       - uses: actions/upload-artifact@v4
         if: always()

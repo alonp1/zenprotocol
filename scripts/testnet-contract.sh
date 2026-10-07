@@ -22,6 +22,7 @@ done
 curl -fs "$API/contract/active" | grep -q "$CID" || { echo "contract never became active"; exit 1; }
 echo "active after $((i*10)) s: $ADDR"
 echo "CONTRACT_ADDRESS=$ADDR"
+echo "CONTRACT_ID=$CID"
 [ "${EXECUTE:-1}" = 0 ] && exit 0
 
 echo "== execute: buy tokens with 1000 kalapas"

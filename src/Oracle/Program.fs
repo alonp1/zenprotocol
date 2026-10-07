@@ -100,6 +100,10 @@ let serve (s: Settings) =
 let main argv =
     match List.ofArray argv with
     | [ "selftest" ] -> if SelfTest.run () then 0 else 1
+    | [ "commit-hash"; root; timestamp ] ->
+        match Hash.fromString root with
+        | Some r -> printfn "%s" (Leaf.hex (Leaf.commitHash r (UInt64.Parse timestamp))); 0
+        | None -> eprintfn "bad root"; 2
     | "body" :: specs ->
         printfn "%s" (Body.build specs)
         0
