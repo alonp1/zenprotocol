@@ -25,42 +25,21 @@ jobs:
           set -o pipefail
           dotnet restore src/ContractTool/ContractTool.fsproj 2>&1 | tee /tmp/restore.log && dotnet restore src/Node/Node.fsproj 2>&1 | tee -a /tmp/restore.log || { echo "::error title=restore::$(grep -E "error" /tmp/restore.log | sort -u | head -30 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
 
-      - name: Package layout (for porting notes)
-        continue-on-error: true
-        shell: bash
-        run: |
-          set +e +o pipefail
-          for p in cgpcontract zulib zfstar fsbech32 zen.fsharp.compiler.service zfs-tools zen_secp256k1_linux zen_z3_linux fsnetmq fsharp.core lightningdb; do
-            d=$(ls -d ~/.nuget/packages/$p/*/ 2>/dev/null | head -1); [ -n "$d" ] || continue
-            echo "::notice title=pkg $p::$(cd $d && find . -maxdepth 3 -not -name '*.xml' -not -name '*.fst*' | sort | head -60 | tr '\n' ' ')"
-          done
-
-      - name: Package build targets (for porting notes)
-        continue-on-error: true
-        shell: bash
-        run: |
-          for f in ~/.nuget/packages/*/*/build/*.targets ~/.nuget/packages/*/*/build/*/*.targets; do
-            echo "::notice title=$(basename $f)::$(gzip -c $f | base64 -w0)"
-          done
-
       - name: Build node
         shell: bash
         run: |
           set -o pipefail
           { dotnet build src/ContractTool/ContractTool.fsproj -c Debug -v minimal --no-restore && dotnet build src/Node/Node.fsproj -c Debug -v minimal --no-restore; } 2>&1 | tee /tmp/build.log || { grep -E " error " /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt; split -l 12 /tmp/err.txt /tmp/errpart.; for f in /tmp/errpart.*; do echo "::error title=build::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"; done; exit 1; }
 
-      - name: Smoke test - node on .NET 10 joins mainnet
+      - name: Node starts on .NET 10 and answers the API (sync is checked in the docker job)
         shell: bash
         run: |
           cd src/Node/bin/Debug
-          mono --version | head -1
-          timeout 100 dotnet zen-node.dll --data-path /tmp/zen-smoke --api 127.0.0.1:11567 > /tmp/node.log 2>&1 &
-          sleep 90
-          INFO=$(curl -s http://127.0.0.1:11567/blockchain/info || true)
+          timeout 120 dotnet zen-node.dll --data-path /tmp/zen-smoke --api 127.0.0.1:11567 > /tmp/node.log 2>&1 &
+          for i in $(seq 1 24); do sleep 5; INFO=$(curl -s http://127.0.0.1:11567/blockchain/info || true); [ -n "$INFO" ] && break; done
           echo "::notice title=node info::$INFO"
-          echo "::notice title=node log::$(tail -30 /tmp/node.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
-          wait || true
-          echo "$INFO" | grep -qE '"blocks":[1-9]'
+          grep -E "check passed" /tmp/node.log | sed 's/^/::notice title=node::/'
+          echo "$INFO" | grep -q '"chain":"main"'
 
       - name: Contract tool runs on Mono
         shell: bash

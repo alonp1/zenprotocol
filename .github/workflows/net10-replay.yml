@@ -1,0 +1,65 @@
+name: net10-replay
+# Full mainnet replay of the .NET 10 node on GitHub-hosted runners: up to 5 chained jobs of ~5 h,
+# the chain data passed on through the Actions cache. Gate for merging stage 4 (docs/MIGRATION.md).
+# Start: git push origin net10:net10-replay
+on:
+  push:
+    branches: [net10-replay]
+
+env:
+  KEY: net10-replay-${{ github.run_id }}
+
+jobs:
+  part1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs: { done: "${{ steps.run.outputs.done }}" }
+    steps: &steps
+      - uses: actions/checkout@v4
+      - name: Free disk space
+        run: sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/share/boost && df -h /
+      - name: Build image
+        run: docker build -q -f Docker/Dockerfile.net10 -t zen-node:net10 .
+      - name: Restore chain data from the previous part
+        uses: actions/cache/restore@v4
+        with: { path: replay-data.tar.zst, key: "${{ env.KEY }}-${{ github.job }}", restore-keys: "${{ env.KEY }}-" }
+      - name: Unpack
+        run: if [ -f replay-data.tar.zst ]; then sudo tar --zstd -xf replay-data.tar.zst && rm replay-data.tar.zst; fi; sudo du -sh replay-data 2>/dev/null || true
+      - name: Sync
+        id: run
+        run: BUDGET_MIN=290 bash scripts/net10-replay-part.sh
+      - name: Pack
+        if: steps.run.outputs.done == 'false'
+        run: sudo tar --zstd -cf replay-data.tar.zst replay-data && sudo rm -rf replay-data && ls -lh replay-data.tar.zst
+      - name: Save chain data for the next part
+        if: steps.run.outputs.done == 'false'
+        uses: actions/cache/save@v4
+        with: { path: replay-data.tar.zst, key: "${{ env.KEY }}-${{ github.job }}-out" }
+  part2:
+    needs: part1
+    if: needs.part1.outputs.done == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs: { done: "${{ steps.run.outputs.done }}" }
+    steps: *steps
+  part3:
+    needs: part2
+    if: needs.part2.outputs.done == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs: { done: "${{ steps.run.outputs.done }}" }
+    steps: *steps
+  part4:
+    needs: part3
+    if: needs.part3.outputs.done == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs: { done: "${{ steps.run.outputs.done }}" }
+    steps: *steps
+  part5:
+    needs: part4
+    if: needs.part4.outputs.done == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    outputs: { done: "${{ steps.run.outputs.done }}" }
+    steps: *steps
