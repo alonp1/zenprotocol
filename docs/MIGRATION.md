@@ -180,6 +180,19 @@ The script fetches the newest reference from `reference-data`, verifies its chec
 
 Reading: nothing was lost or rejected and the three nodes stayed on the same block, but at 50/s the node took in only about 17 transactions a second (latency grew to seconds): on this setup the mempool intake is the limit, around 17-20 tx/s. Blocks (60 s target on the `local` chain) then carried hundreds of transactions each. Caveats: Debug build (slower than Release), all processes share 4 shared vCPUs, one run, no Mono comparison yet (the release Mono image has no `local` chain). Treat it as a lower bound and a baseline for the next runs.
 
+**Second measurement: the testnet on the Release build (.NET 10), `testnet.yml`, one run.** Same machine type (one 4-vCPU GitHub runner running 3 nodes, 2 mining threads and the load generator, so mining and the nodes compete with the generator). Transactions of 1 input, 1 payment and change, 10 s per step, the four steps run one after the other:
+
+| Offered rate | Accepted per second | Publish latency p50 / p95 | Rejected | Confirmed (by the end) | Largest block | Node lag |
+|---|---|---|---|---|---|---|
+| 50/s | 34.4 | 0.5 / 2.8 s | 0 | 500 of 500 | 443 txs | 0 blocks |
+| 100/s | 25.0 | 2.3 / 4.5 s | 0 | 673 of 1,000 in that step | 673 txs | 0 blocks |
+| 200/s | 16.6 | 3.6 / 5.8 s | 0 | 2,327 | 1,096 txs | 0 blocks |
+| 500/s | 7.2 | 7.8 / 18.0 s | 0 | 5,000 | 4,868 txs | 0 blocks |
+
+Reading: no transaction was rejected or lost, every one was confirmed in the end, the three nodes were always on the same block, and the largest block held 4,868 transactions. But the node does not take transactions in at the offered rate: it took in at most about 34 per second (first step, empty mempool), and the rate fell step by step as the backlog of unconfirmed transactions grew (blocks come every ~4 minutes, so the mempool kept 1,000 to 5,000 waiting). That points to mempool intake cost growing with the size of the mempool, which is the first thing to look at. The steps are not independent: each starts with the previous backlog still waiting, so the later rows mix rate and backlog. Release is much faster than Debug at low rates (p95 3-4 ms at 20/s against 162 ms), but this run does not show a higher ceiling than the Debug run: the contended machine and the growing mempool dominate.
+
+Caveats: one run, shared runner, everything on one machine, 4-minute blocks (the confirmation numbers depend on when blocks happened to arrive). A fairer next measurement: a separate machine for the load generator, one step per fresh chain (empty mempool at the start), and a profile of the mempool code at 1,000+ waiting transactions.
+
 Pass criterion for the network: the sustained rate at which every node stays at the tip, with block propagation well under the block interval.
 
 ## Consensus safety rules

@@ -86,7 +86,16 @@ It first splits mined coinbase outputs into thousands of small outputs (so many 
 
 ### Results
 
-Latest measurements are kept in the Capacity section of [MIGRATION.md](MIGRATION.md#capacity-and-load-test) with their caveats (one run, shared 4-vCPU runner, all nodes on one machine).
+First run on the Release build (shared 4-vCPU runner, 3 nodes, one miner and the generator together, 10 s per step):
+
+| Offered | Accepted/s | Latency p50 / p95 | Rejected | Largest block | Lag |
+|---|---|---|---|---|---|
+| 50/s | 34.4 | 0.5 / 2.8 s | 0 | 443 txs | 0 |
+| 100/s | 25.0 | 2.3 / 4.5 s | 0 | 673 txs | 0 |
+| 200/s | 16.6 | 3.6 / 5.8 s | 0 | 1,096 txs | 0 |
+| 500/s | 7.2 | 7.8 / 18.0 s | 0 | 4,868 txs | 0 |
+
+Nothing was lost or rejected and the nodes never fell behind, but intake fell as the mempool backlog grew (the steps run back to back). Details, reading and caveats: the Capacity section of [MIGRATION.md](MIGRATION.md#capacity-and-load-test).
 
 ## Checks that run on every change
 
