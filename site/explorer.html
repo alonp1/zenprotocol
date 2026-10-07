@@ -303,7 +303,9 @@ $('search').addEventListener('submit', async e => {
     else $('sub').textContent = 'Nothing found for that text.';
   } catch (err) { $('sub').textContent = err.message; }
 });
-fetch('/assets.json').then(r => r.json()).then(d => { for (const a of d.assets || []) if (a.name) names[a.asset] = a.name; }).catch(() => {}).finally(() => {
+// Names of assets are only decoration: wait for them at most 2 seconds, never block the page on them
+const namesLoaded = fetch('/assets.json').then(r => r.json()).then(d => { for (const a of d.assets || []) if (a.name) names[a.asset] = a.name; }).catch(() => {});
+Promise.race([namesLoaded, new Promise(r => setTimeout(r, 2000))]).finally(() => {
   const p = new URLSearchParams(location.search);
   const go = p.get('block') ? (tabs(''), showBlock(p.get('block'))) : p.get('tx') ? (tabs(''), showTx(p.get('tx')))
     : p.get('find') === 'blocks' || p.get('find') === 'txs' ? showFind(p.get('find'))
