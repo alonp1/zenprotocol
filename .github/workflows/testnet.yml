@@ -1,0 +1,57 @@
+name: testnet
+# The revived testnet on a release build: 3 nodes (one mines) on their own genesis block, they find each other,
+# agree on the chain, and carry load. Run it by hand with other rates: Actions > testnet > Run workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      rates:   { description: 'tx/s steps, comma separated', default: '5,20' }
+      seconds: { description: 'seconds per step', default: '10' }
+  push:
+    branches: [node-upgrade-script]
+    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
+
+jobs:
+  testnet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      MN: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Build the release image (.NET 10)
+        run: docker build -f Docker/Dockerfile.net10 -t zen-testnet . 2>&1 | tail -n 15
+      - name: Start 3 nodes (A mines and is the seed)
+        run: |
+          docker network create zt
+          docker run -d --name zt-a --network zt -p 127.0.0.1:31567:31567 -e NETWORK=test -e NETWORK_URL=off -e SEEDS= -e MINER_THREADS=2 -e WALLET_API=1 -e TESTNET_MNEMONIC="$MN" zen-testnet
+          sleep 40
+          docker run -d --name zt-b --network zt -p 127.0.0.1:31568:31567 -e NETWORK=test -e SEEDS=zt-a -e WALLET_API=1 zen-testnet
+          docker run -d --name zt-c --network zt -p 127.0.0.1:31569:31567 -e NETWORK=test -e SEEDS=zt-a -e WALLET_API=1 zen-testnet
+      - name: Genesis accepted, blocks are mined, nodes follow
+        run: |
+          tip() { curl -fs http://127.0.0.1:$1/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'; }
+          for i in $(seq 120); do sleep 10; T=$(tip 31567 || true); echo "tip A: $T"; [ -n "$T" ] && [ "$T" -ge 14 ] && break; done
+          echo "::notice title=testnet::tip $T after $((i*10)) s"
+          [ -n "$T" ] && [ "$T" -ge 14 ]
+          sleep 30
+          echo "heights A/B/C: $(tip 31567) $(tip 31568) $(tip 31569)"
+          curl -fs http://127.0.0.1:31567/blockchain/info | tr -d '\n ' | cut -c1-300
+          echo "::notice title=heights::A $(tip 31567) B $(tip 31568) C $(tip 31569); $(curl -fs http://127.0.0.1:31568/blockchain/info | grep -o '"chain": *"[a-z]*"')"
+          [ "$(tip 31568)" -ge 10 ] && [ "$(tip 31569)" -ge 10 ]
+      - name: Load test on the release build
+        run: |
+          cd wallet && npm ci --no-audit --no-fund && cd ..
+          set +e
+          node scripts/devnet/loadgen.mjs --node http://127.0.0.1:31567 --nodes 31567,31568,31569 --rates "${{ inputs.rates || '5,20' }}" --seconds "${{ inputs.seconds || '10' }}" --out testnet-result.json > /tmp/load.txt 2>&1
+          RC=$?
+          tail -n 45 /tmp/load.txt | python3 -c "import sys;print('::notice title=load output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: testnet-result, path: testnet-result.json, if-no-files-found: ignore }
+      - name: Logs
+        if: failure()
+        run: |
+          for n in zt-a zt-b zt-c; do { echo "== $n"; docker logs $n 2>&1 | grep -v " INF\] Blockchain: Handling" | tail -n 18; } | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::error title=$n::{}"; done

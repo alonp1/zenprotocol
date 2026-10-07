@@ -4,6 +4,9 @@
   "seeds": [
     "zen.sealinkgps.com"
   ],
+  "testnetSeeds": [
+    "zen.sealinkgps.com"
+  ],
   "snapshotSources": [
     "https://zen.sealinkgps.com/snapshots",
     "https://github.com/alonp1/zenprotocol/releases/download/snapshot-latest"

@@ -100,6 +100,14 @@ module Local =
         ()
 #endif
 
+/// The testnet's genesis block is part of the code: every node adds it at start (an existing one is ignored), no seed needed.
+module Testnet =
+    let addGenesis (config:MainConfig) =
+        if config.chain = Chain.Test then
+            let block = Chain.testGenesisHex |> Block.fromHex |> Option.get
+            use client = ServiceBus.Client.create busName
+            Messaging.Services.Blockchain.validateMinedBlock client block
+
 module Init =
     let broker (config:MainConfig) =
         Actor.create (fun shim ->
@@ -392,6 +400,7 @@ let main argv =
 #if DEBUG        
     Local.addGenesis config
 #endif
+    Testnet.addGenesis config
 
     use event = new Threading.ManualResetEvent(false)
 

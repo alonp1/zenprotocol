@@ -60,6 +60,13 @@ let mainParameters =
         genesisTotal=20_000_000UL * 100_000_000UL
     }
 
+// Testnet of the revived network (docs/TESTNET.md). The original testnet (network id 2016) is gone with the
+// developers' servers, and its genesis block was never part of the code. This one has its own genesis block, made by
+// scripts/devnet/make-genesis.mjs and carried in the code (testGenesisHex), so a node needs no server to start it.
+// CGP and voting contract ids are unchanged: those contracts are not active on this testnet yet.
+let testGenesisHex =
+    "000000000000000000000000000000000000000000000000000000000000000000000000000000013ca83bcc8483b5a8706a8fed28e4ec64952d7d6b65624c8e8026f48cf1771767000001a113a8ec001dffffff0000000000000000000000000000000103b01098756bcf637bef2a161bd49412cad0a10adf12e64a694c41f9c5b971642029f0999def953f2a14ad6c143e2a0ebf3b4f794d8b17fc1203c12365427c09d3be653064be80f760b9d471dc9afbac2b24236c9f2eb0f08b7427942852dc780201000000000001022030759b07ca01caf8e524fc279946a1e96afc3546ee5f1fd4a1cfaf644763c2b4002c010000"
+
 let testParameters =
     {
         name="testnet"
@@ -69,11 +76,11 @@ let testParameters =
         maxBlockWeight=8_000_000_000I;
         sacrificePerByteBlock=1UL;
         genesisHashHash =
-            Hash.fromString "5488069e4be0551a3c886543845c332633731c536853209c2dbe04c035946490"
+            Hash.fromString "211b6deb68ff0d91e99aeeb5519a5c817bb2182741b34788013c44e2bcc0c0b7"
             |> Option.get
             |> Hash.computeOfHash
-        genesisTime=1535968146719UL
-        networkId=2016ul
+        genesisTime=1791331200000UL
+        networkId=2026ul
         contractSacrificePerBytePerBlock=ContractSacrificePerBytePerBlock
         intervalLength=100ul
         snapshot=90ul

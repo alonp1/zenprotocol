@@ -1,0 +1,26 @@
+# One node of the ZP testnet (docs/TESTNET.md). Own genesis block (network id 2026), no value.
+#   docker compose -f docker-compose.testnet.yml up -d
+# Mine: MINER_THREADS=1 docker compose -f docker-compose.testnet.yml up -d     (the reward goes to the node's wallet)
+# Own private testnet instead of ours: SEEDS="" is not enough, see docs/TESTNET.md ("Your own testnet").
+services:
+  zen-testnet:
+    image: ${ZEN_TESTNET_IMAGE:-ghcr.io/alonp1/zen-node:testnet}
+    build:
+      context: .
+      dockerfile: Docker/Dockerfile.net10
+    container_name: zen-testnet
+    restart: unless-stopped
+    environment:
+      NETWORK: test
+      MINER_THREADS: "${MINER_THREADS:-0}"
+      EXTERNAL_IP: "${EXTERNAL_IP:-}"
+      WALLET_API: "${WALLET_API:-1}"          # address index: wallets and the load generator need it
+      SEEDS: "${SEEDS:-}"                     # host,ip:port,... (a host name uses the node port 29555) - empty = network.json
+      TESTNET_MNEMONIC: "${TESTNET_MNEMONIC:-}"
+    ports:
+      - "29555:29555"               # P2P
+      - "127.0.0.1:31567:31567"     # API, this machine only
+    volumes:
+      - testnet-data:/data
+volumes:
+  testnet-data:
