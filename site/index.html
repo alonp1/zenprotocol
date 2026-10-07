@@ -100,9 +100,27 @@ docker compose up -d</pre>
     return Math.round(s / 86400) + ' d ago';
   }
 
+  // The node answers one request at a time and is slow while it serves the chain indexer: ask again before giving up,
+  // never print an error page as data, and call the node unreachable only after several rounds in a row failed.
+  async function ask(path, tries = 3) {
+    for (let i = 0; i < tries; i++) {
+      const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const res = await fetch(path, { cache: 'no-store', signal: ctrl.signal });
+        if (res.ok) return await res.text();
+      } catch (e) { /* timeout or network: try again */ }
+      finally { clearTimeout(timer); }
+      if (i < tries - 1) await new Promise(r => setTimeout(r, 2000));
+    }
+    return null;
+  }
+  let failedRounds = 0;
+
   async function refresh() {
-    try {
-      const info = await (await fetch('/api/info', { cache: 'no-store' })).json();
+    let info = null;
+    try { const t = await ask('/api/info'); info = t && JSON.parse(t); } catch (e) { info = null; }
+    if (info && Number.isFinite(Number(info.blocks))) {
+      failedRounds = 0;
       $('height').textContent = fmt(info.blocks);
       $('diff').textContent = Number(info.difficulty).toFixed(0);
       $('age').textContent = ago(info.medianTime);
@@ -114,13 +132,13 @@ docker compose up -d</pre>
         cls = 'warn'; text = 'No new blocks for ' + Math.round(lagMin) + ' minutes';
       }
       $('dot').className = 'dot ' + cls; $('state').textContent = text;
-    } catch (e) {
-      $('dot').className = 'dot bad'; $('state').textContent = 'Node unreachable';
+    } else {
+      failedRounds++;
+      if (failedRounds >= 3) { $('dot').className = 'dot bad'; $('state').textContent = 'Node unreachable'; }
+      else { $('dot').className = 'dot warn'; $('state').textContent = 'Node is busy, retrying...'; }
     }
-    try {
-      const p = await (await fetch('/api/peers', { cache: 'no-store' })).text();
-      $('peers').textContent = p.trim();
-    } catch (e) { $('peers').textContent = '–'; }
+    const p = await ask('/api/peers');
+    if (p !== null && /^\s*\d+\s*$/.test(p)) $('peers').textContent = p.trim();   // a number, never an error page
   }
 
   async function snapshot() {
