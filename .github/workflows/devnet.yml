@@ -35,8 +35,11 @@ jobs:
       - name: Load test
         run: |
           cd wallet && npm ci --no-audit --no-fund && cd ..
-          node scripts/devnet/loadgen.mjs --rates "${{ inputs.rates || '5,20,50' }}" --seconds "${{ inputs.seconds || '30' }}" --out devnet-result.json | tee /tmp/load.txt
-          python3 -c "import json;r=json.load(open('devnet-result.json'))['results'];print('::notice title=load result::'+'%0A'.join('rate %s/s: accepted %s/%s (%s/s) p50 %sms p95 %sms, confirmed %s (%s/s), tx/block max %s, lag %s'%(x['rate'],x['accepted'],x['sent'],x['acceptedPerSec'],x['latencyMs']['p50'],x['latencyMs']['p95'],x['confirmed'],x['confirmedPerSec'],max([0]+x['txsPerBlock']),x['lagBlocks']) for x in r))"
+          set +e
+          node scripts/devnet/loadgen.mjs --rates "${{ inputs.rates || '5,20,50' }}" --seconds "${{ inputs.seconds || '30' }}" --out devnet-result.json > /tmp/load.txt 2>&1
+          RC=$?
+          tail -n 45 /tmp/load.txt | python3 -c "import sys;print('::notice title=load output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: devnet-result, path: devnet-result.json, if-no-files-found: ignore }
