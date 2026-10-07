@@ -125,7 +125,8 @@ function addressOf(lock) {
 }
 
 function indexBlock(n, raw) {
-  const blk = deserializeBlock(unhex(raw));
+  const blk = deserializeBlock(unhex(raw), { lenient: true });
+  for (const w of blk.irregular) console.log(`chain-index: block ${n}: witness ${w.id} declares ${w.count} bytes, re-serializes to ${w.size} (kept the declared length)`);
   const dv = new DataView(blk.header.buffer, blk.header.byteOffset);
   if (dv.getUint32(36) !== n) throw new Error(`block ${n}: header says ${dv.getUint32(36)}`);
   const ts = Number(dv.getBigUint64(72));

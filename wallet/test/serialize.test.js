@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { sha3_256 } from '@noble/hashes/sha3.js';
-import { deserializeBlock, deserializeTx, serializeTx, txHash, hex, unhex, Writer, Reader, Amount, VarInt, Asset, ZEN_ASSET } from '../src/serialize.js';
+import { Witness, deserializeBlock, deserializeTx, serializeTx, txHash, hex, unhex, Writer, Reader, Amount, VarInt, Asset, ZEN_ASSET } from '../src/serialize.js';
 import { verifyDigest } from '../src/tx.js';
 
 const FIX = new URL('./fixtures/blocks.json', import.meta.url);
@@ -52,4 +52,18 @@ test('mainnet blocks: every transaction re-serializes byte for byte, hashes and 
   }
   console.log(`checked ${blocks.length} blocks, ${txs} transactions, ${sigs} signatures, ${contracts} contract witnesses`);
   assert.ok(txs > blocks.length, 'fixtures should contain non-coinbase transactions');
+});
+
+test('a witness longer than what it parses to: strict refuses, lenient (indexer) follows the declared length', () => {
+  const w = new Writer();
+  VarInt.write(w, 1); VarInt.write(w, 1 + 33 + 64 + 2);           // PK witness declaring 2 extra bytes
+  w.u8(1); w.bytes(new Uint8Array(33).fill(2)); w.bytes(new Uint8Array(64).fill(3)); w.bytes(Uint8Array.from([9, 9]));
+  w.u8(0x77);                                                    // the next item in the stream
+  const bytes = w.out();
+  assert.throws(() => Witness.read(new Reader(bytes)), /witness size/);
+  const r = new Reader(bytes); r.lenient = true;
+  const x = Witness.read(r);
+  assert.equal(x.type, 'PK');
+  assert.equal(r.u8(), 0x77);
+  assert.deepEqual(r.irregular, [{ id: 1, count: 100, size: 98 }]);
 });

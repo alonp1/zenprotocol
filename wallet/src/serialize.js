@@ -336,7 +336,7 @@ export const Witness = {
     witnessPayload(w, x);
   },
   read(r) {
-    const id = VarInt.read(r), count = VarInt.read(r);
+    const id = VarInt.read(r), count = VarInt.read(r), start = r.p;
     let x;
     if (id === 1) {
       const sh = r.u8();
@@ -350,7 +350,15 @@ export const Witness = {
             signature: Opt.read(r, r => ({ publicKey: r.bytes(33), signature: r.bytes(64) })),
             cost: r.u64() };
     } else x = { type: 'HighV', id, bytes: r.bytes(count) };
-    if (sizeOf(witnessPayload, x) !== count) fail('witness size');
+    const size = sizeOf(witnessPayload, x);
+    if (size !== count) {
+      // Strict (wallet): refuse anything that does not re-serialize to its declared length.
+      // Lenient (the chain indexer reading blocks the network already accepted): the declared length
+      // is authoritative, so continue after it and report the irregular witness.
+      if (!r.lenient || start + count > r.b.length) fail('witness size');
+      r.p = start + count;
+      (r.irregular ||= []).push({ id, count, size });
+    }
     return x;
   },
 };
@@ -399,8 +407,9 @@ export const txHash = tx => sha3_256(serializeTx(tx, false));
 export const witnessesHash = ws => { const w = new Writer(); List.write(w, Witness.write, ws); return sha3_256(w.out()); };
 
 // --- block (for tests and explorers) --------------------------------------------------------
-export function deserializeBlock(bytes) {
+export function deserializeBlock(bytes, opts = {}) {
   const r = new Reader(bytes);
+  r.lenient = !!opts.lenient;
   const header = r.bytes(100);
   const commitments = List.read(r, Hash.read);
   const txs = List.read(r, r => {
@@ -408,7 +417,7 @@ export function deserializeBlock(bytes) {
     return { tx, raw: r.b.slice(start, r.p) };
   });
   if (!r.done()) fail('trailing bytes in block');
-  return { header, commitments, txs };
+  return { header, commitments, txs, irregular: r.irregular || [] };
 }
 
 export const bytesEqual = eq;
