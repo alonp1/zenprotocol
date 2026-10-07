@@ -200,7 +200,7 @@ module Contract =
         let getFullpath filename =
             System.IO.Path.Combine(TempPath, filename)
 
-        let createFile filename code =
+        let createFile (filename: string) (code: string) =
             System.IO.File.WriteAllText(filename, code)
 
         let readFile filename =

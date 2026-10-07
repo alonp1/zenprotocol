@@ -3,6 +3,7 @@ module Infrastructure.Platform
 open System
 open System.IO
 open System.Text
+open System.Text.RegularExpressions
 open System.Diagnostics
 open System.Runtime.InteropServices
 open Exception
@@ -51,10 +52,14 @@ let workingDirectory =
 let combine a b = Path.Combine (a,b)
 
 let getFrameworkPath =
-    match platform with
-    | PlatformID.Unix -> "/usr/lib/mono/4.7-api/"
-    | PlatformID.MacOSX -> "/Library/Frameworks/Mono.framework/Versions/Current/lib/mono/4.7-api/"
-    | _ -> @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\"
+    let path =
+        match platform with
+        | PlatformID.Unix -> "/usr/lib/mono/4.7-api/"
+        | PlatformID.MacOSX -> "/Library/Frameworks/Mono.framework/Versions/Current/lib/mono/4.7-api/"
+        | _ -> @"C:\Windows\Microsoft.NET\Framework\v4.0.30319\"
+    // Mono without its 4.7 reference assemblies: use the identical copy shipped with the contract tool
+    let bundled = Path.Combine(workingDirectory, "ref-net47") + string Path.DirectorySeparatorChar
+    if not (Directory.Exists path) && Directory.Exists bundled then bundled else path
 
 
 let private monoM =
@@ -129,19 +134,27 @@ let run exe args =
 [<System.Runtime.InteropServices.DllImport("__Internal", EntryPoint="mono_get_runtime_build_info")>]
 extern string GetMonoVersion();
 
+let isRunningOnMono = not (isNull (Type.GetType "Mono.Runtime"))
+
+let private parseVersion (text: string) =
+    let m = RegularExpressions.Regex.Match(text, @"(\d+)\.(\d+)\.(\d+)")
+    if m.Success then Some (Version(int m.Groups.[1].Value, int m.Groups.[2].Value, int m.Groups.[3].Value)) else None
+
+/// Version of Mono: the running runtime, or (on .NET) the mono executable used for F* and the contract tool.
 let monoVersion : Option<Version> =
-    match isUnix,monoM with
-    | true, Some _ ->
-        let version = GetMonoVersion()
-        let numbers = version.Split('.',' ')
-
-        (System.Convert.ToInt32 numbers.[0],
-            System.Convert.ToInt32 numbers.[1],
-            System.Convert.ToInt32 numbers.[2])
-        |> Version
-        |> Some
-
+    match isUnix, monoM with
+    | true, Some _ when isRunningOnMono -> parseVersion (GetMonoVersion())
+    | true, Some mono ->
+        try
+            use p = Process.Start(ProcessStartInfo(mono, "--version", RedirectStandardOutput = true, UseShellExecute = false))
+            let first = p.StandardOutput.ReadLine()
+            p.WaitForExit()
+            parseVersion first
+        with _ -> None
     | _ -> None
+
+/// The mono executable (Unix), for tools that still run on Mono.
+let monoPath = mono
 
 let removeDirectory path =
     if Directory.Exists path then

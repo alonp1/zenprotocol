@@ -80,7 +80,7 @@ let parseConfirmations query (config: Config) get =
     match Map.tryFind "confirmations" query with
     | None -> get 0ul
     | Some confirmations ->
-        match System.UInt32.TryParse confirmations with
+        match System.UInt32.TryParse (confirmations: string) with
         | true, confirmations -> get confirmations
         | _ -> config.replyError "invalid confirmations"
 module Blockchain =
@@ -145,7 +145,7 @@ module Blockchain =
             | None ->
                   match Map.tryFind "blockNumber" query with
                   | Some blockNumber ->
-                      match System.UInt32.TryParse blockNumber with
+                      match System.UInt32.TryParse (blockNumber: string) with
                       | false,_ ->
                           "couldn't decode hash"
                           |> config.replyError
@@ -391,7 +391,7 @@ module Blockchain =
             match Map.tryFind "blockNumber" query with
             | None -> config.replyError "blockNumber is missing"
             | Some blockNumber ->
-                let success,blockNumber = System.UInt32.TryParse blockNumber
+                let success,blockNumber = System.UInt32.TryParse (blockNumber: string)
                 if success then
                     Blockchain.getBlockReward config.client blockNumber
                     |> decimal

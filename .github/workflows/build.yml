@@ -2,6 +2,7 @@ name: build
 
 on:
   push:
+    branches-ignore: [net10, net10-replay]   # the .NET 10 port has its own workflows
   pull_request:
   workflow_dispatch:
 

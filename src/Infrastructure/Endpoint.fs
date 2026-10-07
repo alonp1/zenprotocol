@@ -10,7 +10,7 @@ let getPort (address:string)  =
         failwith "invalid address"
     else 
         let port = address.Substring(index + 1)  // Correct index offset
-        let isInteger, portValue = System.Int32.TryParse(port)  // Rename output of TryParse
+        let isInteger, portValue = System.Int32.TryParse(port: string)  // Rename output of TryParse
         
         if isInteger && portValue >= 1 && portValue <= 65535 then
             portValue
@@ -26,7 +26,7 @@ let isValid (address:string) =
         let host = address.Substring(0, index)
         let port = address.Substring(index + 1) 
         
-        let isInteger, portValue = System.Int32.TryParse port
+        let isInteger, portValue = System.Int32.TryParse (port: string)
         if isInteger && portValue >= 1 && portValue <= 65535 then                     
             match Uri.CheckHostName (host) with
             | UriHostNameType.IPv4 

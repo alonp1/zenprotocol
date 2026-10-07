@@ -19,4 +19,5 @@ ARGS=(--data-path /data --api "*:11567")
 [ -n "${EXTERNAL_IP:-}" ] && ARGS+=(--ip "$EXTERNAL_IP")
 if [ "${PUBLIC_NODE:-0}" = "1" ]; then ARGS+=(--remote --origin any)
 elif [ "${WALLET_API:-0}" = "1" ]; then ARGS+=(--addressdb --origin any); fi
-exec mono /zen/zen-node.exe "${ARGS[@]}" "$@"
+if [ -f /zen/zen-node.dll ]; then exec dotnet /zen/zen-node.dll "${ARGS[@]}" "$@"   # .NET 10 build
+else exec mono /zen/zen-node.exe "${ARGS[@]}" "$@"; fi
