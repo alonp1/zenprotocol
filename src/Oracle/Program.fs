@@ -41,7 +41,10 @@ let round (s: Settings) (provider: Providers.Provider) =
     let root = Leaf.root data
     let tx =
         if s.Contract = "" then ""
-        else NodeClient.commit s.Node s.Contract (Leaf.commitMessageBody (Leaf.commitHash root (uint64 now.ToUnixTimeMilliseconds()))) s.SignPath s.Password
+        else
+            let ts = uint64 (now.ToUnixTimeMilliseconds())
+            let body = Leaf.commitMessageBody (Leaf.commitHash root ts)
+            NodeClient.commit s.Node s.Contract body s.SignPath s.Password
     let r : Store.Round =
         { Timestamp = now.ToUnixTimeMilliseconds(); Root = Leaf.hex root; Tx = tx
           Tickers = data |> List.map fst |> List.toArray; Values = data |> List.map snd |> List.toArray }
