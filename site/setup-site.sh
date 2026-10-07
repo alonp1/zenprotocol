@@ -25,7 +25,7 @@ cp "$REPO/site/stats.html" "$WEB/stats.html"
 
 echo "== ZP Wallet (built in a throwaway node container: nothing to install on the server)"
 if command -v docker >/dev/null; then
-  docker run --rm -v "$REPO/wallet:/w" -w /w node:22-alpine sh -c "npm ci --no-audit --no-fund && npm test && npm run build" \
+  docker run --rm -v "$REPO:/r" -w /r/wallet node:22-alpine sh -c "npm ci --no-audit --no-fund && npm test && npm run build" \
     && { rm -rf "$WEB/wallet"; mkdir -p "$WEB/wallet"; cp "$REPO"/wallet/dist/* "$WEB/wallet/"; echo "wallet published at /wallet/"; } \
     || echo "wallet build or tests failed: /wallet/ left as it was"
 else
