@@ -114,6 +114,54 @@ dotnet restore --source ./packages-mirror --source https://api.nuget.org/v3/inde
 
 Every download is checked against its sha256 before use. A snapshot is only a shortcut: the node keeps validating every new block, and the replay gate (`scripts/check-against-reference.sh`: hashes of the first 1,053 blocks and the CGP state) shows that a node built from the sources reproduces the same chain.
 
+## One-command node install: what it does and what is checked
+
+```
+curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-node.sh | bash
+```
+
+| Step | What happens | Stops or falls back when |
+| --- | --- | --- |
+| 1. Checks | 20 GB free disk; ports 9655 and 11567 free (first install only) | Not enough disk or port in use: stops with a message |
+| 2. Docker | Installs Docker and the compose plugin on Linux; on macOS/Windows asks for Docker Desktop | |
+| 3. Code | Clones the repository to `~/zenprotocol`, or fast-forwards an existing copy | |
+| 4. Firewall | Opens 9655 in `ufw` when it is active; otherwise reminds you about a cloud firewall | |
+| 5. Settings | Writes `.env`: external IP, miner threads (0), public-node flag | |
+| 6. Image | `docker compose pull`: the ready image `ghcr.io/alonp1/zen-node` (official 1.0.13 binaries, Mono 6.12) | Registry not reachable: builds the image locally, taking the binaries from MyGet or, if gone, from our `upstream-mirror` release |
+| 7. Snapshot | Loads the newest chain snapshot (about 2.5 GB, chain data only, never a wallet) unless chain data already exists. Sources in order: `SNAPSHOT_URL`, each entry of `snapshotSources` in `network.json` (this server, then the GitHub release), the official Feb-2023 file. Every source is checked against the sha256 in its `latest.json`, the zip is test-extracted, the chain folder is located and only then replaces `/data/main` (wallet files are skipped) | A source that is down or has a wrong checksum is skipped; with none left the old official snapshot is used and the node syncs the rest |
+| 8. Start | `docker compose up -d`; at start the node refreshes its seeds from `network.json`; waits for the API and prints `blockchain/info` | API not up after about 2 minutes: prints where to read the logs |
+
+Done when `blocks` equals `headers` and `initialBlockDownload` is `false`. Run the command again to update (code and image; chain data is kept). Options: `MINER_THREADS`, `PUBLIC_NODE=1`, `SKIP_SNAPSHOT=1`, `DIR`.
+
+### Tests that were run
+
+| Test | Result |
+| --- | --- |
+| Snapshot loader against the live server in CI (`snapshot-test`): load, start, sync | Passes; the node reaches the chain tip (about block 1,053,169, `initialBlockDownload` false) within 150 s |
+| Prebuilt image in CI (`image`): start, API answers, syncs from our seed | Passes; blocks arrive from the seed |
+| Seeds refresh from `network.json` and the sources parser (local test with a changed file) | Passes |
+| Mirror contents (`mirror-upstream`): the exact packages pinned in `paket.lock`, `@zen/zen-node` 1.0.13, 21 repositories | Present in the release; `MANIFEST.json` lists size and sha256 of each |
+| Replay of the whole chain by the source build (`check-against-reference.sh`: 1,053 block hashes and the CGP state) | Passed for the Mono build; the .NET 10 replay is running |
+| Wallet: 20 tests including hostile node responses | Pass |
+| `install-node.sh` itself on a clean server | **Not yet run end to end**: see the checklist below |
+
+### Testing on a fresh server
+
+Use a new Ubuntu 22.04/24.04 server with 2 GB RAM and 40 GB disk, as root, nothing else installed:
+
+1. Run the command above. Expected: `== Checks` through `== Start`, then a `blockchain/info` line with `"chain":"main"`.
+2. Within a few minutes `curl -s http://127.0.0.1:11567/blockchain/info` shows `blocks` close to the public tip; `docker compose ps` shows **Up**.
+3. `docker compose logs zen-node | head` shows `seeds from network.json: zen.sealinkgps.com`.
+4. Run the command a second time: it must update and restart without reloading the snapshot.
+5. Compare the tip with `https://zen.sealinkgps.com/stats.html`.
+6. Optional failure tests: block `ghcr.io` (`echo '0.0.0.0 ghcr.io' >> /etc/hosts`) to see the local build fallback; start with a wrong `SNAPSHOT_URL` to see the next source being used.
+
+Report any error with the last lines of the output.
+
+### Do we need the developers' packages on our node?
+
+A running node needs none of them: the image already contains the compiled 1.0.13 release. They are needed only to **build the node from source** (the .NET 10 work, stage 5). Our copy covers that: `bash scripts/restore-from-mirror.sh` downloads exactly the pinned packages, checks their sha256 and writes `./packages-mirror`; then `dotnet restore src/Node/Node.fsproj --source ./packages-mirror --source https://api.nuget.org/v3/index.json`. Packages from nuget.org (FSharp, NetMQ, ZFStar...) are permanent there; ZFStar, Zen.FSharp.Compiler.Service and ZFS-Tools are mirrored as well.
+
 ## Linux server (node only)
 
 1. Connect: `ssh root@<server-ip>`
