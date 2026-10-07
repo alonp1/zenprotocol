@@ -36,7 +36,7 @@ jobs:
         run: |
           cd wallet && npm ci --no-audit --no-fund && cd ..
           node scripts/devnet/loadgen.mjs --rates "${{ inputs.rates || '5,20,50' }}" --seconds "${{ inputs.seconds || '30' }}" --out devnet-result.json | tee /tmp/load.txt
-          sed -n '/^rate /,$p' /tmp/load.txt | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=load result::{}"
+          python3 -c "import json;r=json.load(open('devnet-result.json'))['results'];print('::notice title=load result::'+'%0A'.join('rate %s/s: accepted %s/%s (%s/s) p50 %sms p95 %sms, confirmed %s (%s/s), tx/block max %s, lag %s'%(x['rate'],x['accepted'],x['sent'],x['acceptedPerSec'],x['latencyMs']['p50'],x['latencyMs']['p95'],x['confirmed'],x['confirmedPerSec'],max([0]+x['txsPerBlock']),x['lagBlocks']) for x in r))"
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: devnet-result, path: devnet-result.json, if-no-files-found: ignore }
