@@ -1,7 +1,7 @@
 {
   "_comment": "Display names for contracts on the stats page and in ZP Wallet. Key: contract address (czen1...) or contract ID. Add a line to name a new contract.",
   "00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1": "CGP",
-  "000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12": "CGP voting",
+  "000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12": "VCGP",
   "czen1qqqqqqqrw54zha5378cflx8lyel2xcgq9slewfnpzmuc2camepakjc9wvzga8dtw0": "VCGP",
   "czen1qqqqqqq9pdfruyeqwtga5pfgvhwk2rxkxexjhvek0r55cc8wlqpy5dxs95ylmr2s9": "FPC",
   "czen1qqqqqqq8ptestf6xe72hysaew858j8j2naurpauqljw4cccsqhpfjyk2zcsnmrq85": "DEX-V2"
