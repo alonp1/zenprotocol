@@ -1,0 +1,8 @@
+{
+  "_comment": "Display names for contracts on the stats page and in ZP Wallet. Key: contract ID, or the last 6 characters of the contract address. Add a line to name a new contract.",
+  "00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1": "CGP",
+  "000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12": "CGP voting",
+  "a8dtw0": "VCGP",
+  "lmr2s9": "FPC",
+  "nmrq85": "DEX-V2"
+}

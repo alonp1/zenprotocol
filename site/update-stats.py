@@ -17,6 +17,8 @@ GENESIS_ZP = 20_000_000
 INITIAL_REWARD = 50 * 10**8       # kalapas, halves every PERIOD blocks
 PERIOD = 800_000
 BUCKET_S = 4 * 3600               # ~60 blocks per point; hourly is too noisy
+CGP_CONTRACT = "00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1"   # Chain.fs cgpContractId
+COMMUNITY_INTERVAL_OFFSET = 24    # wallets and the explorer count intervals from the CGP launch: 106 -> 82
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--api", default="http://127.0.0.1:11567")
@@ -30,11 +32,46 @@ def get(path, timeout=60):
         return json.loads(r.read().decode())
 
 
+def get_post(path, body, timeout=60):
+    req = urllib.request.Request(a.api + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
 def safe(path):
     try:
         return get(path)
     except Exception:
         return None
+
+
+_B32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+
+def _polymod(values):
+    g, chk = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3], 1
+    for v in values:
+        b = chk >> 25
+        chk = (chk & 0x1ffffff) << 5 ^ v
+        for i in range(5):
+            chk ^= g[i] if (b >> i) & 1 else 0
+    return chk
+
+
+def contract_address(contract_id_hex, hrp="czen"):
+    """Bech32 address of a contract (Wallet/Address.fs: version byte 0 + 5-bit words of the 36-byte id)."""
+    acc, bits, words = 0, 0, []
+    for b in bytes.fromhex(contract_id_hex):
+        acc, bits = (acc << 8) | b, bits + 8
+        while bits >= 5:
+            bits -= 5
+            words.append((acc >> bits) & 31)
+    if bits:
+        words.append((acc << (5 - bits)) & 31)
+    data = [0] + words
+    hv = [ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp]
+    pm = _polymod(hv + data + [0] * 6) ^ 1
+    return hrp + "1" + "".join(_B32[d] for d in data + [(pm >> 5 * (5 - i)) & 31 for i in range(6)])
 
 
 def hashes_per_block(target_hex):
@@ -165,10 +202,42 @@ elif tip < nom_end:
 else:
     phase, nxt, nxt_name = "Voting", end, "Voting closes, payout"
 bt = avg_bt_24h or TARGET_BLOCK_S
-cgp = {"interval": interval, "phase": phase, "snapshotBlock": snap, "nominationEnd": nom_end,
+cgp = {"interval": interval, "communityInterval": interval - COMMUNITY_INTERVAL_OFFSET, "phase": phase, "snapshotBlock": snap, "nominationEnd": nom_end,
        "intervalEnd": end, "next": {"name": nxt_name, "block": nxt,
        "eta": now_ms + int((nxt - tip) * bt * 1000)},
        "state": safe("/blockchain/cgp"), "lastWinner": safe("/blockchain/winner")}
+
+# CGP fund balance: outputs locked to the CGP contract (address index). Can be slow: long timeout,
+# and the last good value is kept when a run fails.
+cgp_addr = contract_address(CGP_CONTRACT)
+prev = {}
+try:
+    with open(a.out) as f:
+        prev = json.load(f).get("cgp", {})
+except Exception:
+    pass
+cgp["contractAddress"] = cgp_addr
+try:
+    bal = get_post("/addressdb/balance", {"addresses": [cgp_addr]}, timeout=240)
+    zp = sum(int(x["balance"]) for x in bal if x["asset"] == "00")
+    cgp["balance"] = {"zp": zp / 1e8, "block": tip}
+except Exception:
+    cgp["balance"] = prev.get("balance")
+
+# active contracts (names: site/contract-names.json)
+names = {}
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "contract-names.json")) as f:
+        names = {k: v for k, v in json.load(f).items() if not k.startswith("_")}
+except Exception:
+    pass
+contracts = []
+for c in safe("/contract/active") or []:
+    addr = c.get("address", "")
+    name = names.get(c.get("contractId")) or next((v for k, v in names.items() if len(k) <= 8 and addr.endswith(k)), None)
+    contracts.append({"id": c.get("contractId"), "address": addr, "name": name, "expire": c.get("expire"),
+                      "blocksLeft": (c.get("expire") or tip) - tip})
+contracts.sort(key=lambda c: c["expire"] or 0)
 
 peers = None
 try:
@@ -210,6 +279,7 @@ out = {
     "miners24h": miners,
     "recent": recent,
     "cgp": cgp,
+    "contracts": contracts,
 }
 tmp = a.out + ".tmp"
 with open(tmp, "w") as f:

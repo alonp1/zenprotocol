@@ -6,6 +6,7 @@ import { NodeClient, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
 import { openWallet, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
 import { parseZP, formatZP } from '../src/tx.js';
+import contractNames from '../../site/contract-names.json';
 
 const LOCK_AFTER_MS = 15 * 60 * 1000;
 const SETTINGS_KEY = 'zp-wallet.settings.v1';
@@ -31,13 +32,21 @@ const S = {
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { /* default */ }
-  return { network: s.network === 'test' ? 'test' : 'main', nodes: { main: s.nodes?.main || DEFAULT_NODES.main[0], test: s.nodes?.test || '' }, active: s.active || null };
+  return { network: s.network === 'test' ? 'test' : 'main', nodes: { main: s.nodes?.main || DEFAULT_NODES.main[0], test: s.nodes?.test || '' }, active: s.active || null,
+           voteWallets: { main: Array.isArray(s.voteWallets?.main) ? s.voteWallets.main : null, test: Array.isArray(s.voteWallets?.test) ? s.voteWallets.test : null } };
 }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S.settings)); } catch { /* private mode */ } }
 const net = () => S.settings.network;
 const node = () => S.settings.nodes[net()] ? new NodeClient(S.settings.nodes[net()]) : null;
 const walletsHere = () => (S.vault?.wallets || []).filter(w => w.network === net());
 const active = () => { const ws = walletsHere(); return ws.find(w => w.id === S.settings.active) || ws[0] || null; };
+
+const zpOf = id => { const z = S.data.get(id)?.state?.assets.find(x => x.asset === '00'); return z ? z.spendable + z.maturing : 0n; };
+// wallets that vote together (null = every wallet that can sign); watch-only wallets cannot sign a ballot
+const voters = () => { const sel = S.settings.voteWallets[net()]; return walletsHere().filter(w => w.kind !== 'watch' && (sel === null || sel.includes(w.id))); };
+const voteWeight = () => voters().reduce((s, w) => s + zpOf(w.id), 0n);
+const nameOf = (id, addr) => contractNames[id] || Object.entries(contractNames).find(([k]) => k.length <= 8 && addr?.endsWith(k))?.[1] || null;
+const zpStr = v => Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '–';
 
 function go(screen, extra = {}) { Object.assign(S, { screen, error: '', modal: null }, extra); render(); window.scrollTo(0, 0); }
 function fail(e) { S.error = e?.message || String(e); S.busy = false; render(); }
@@ -110,9 +119,9 @@ const views = {
         <button class="btn" data-go="receive">${I.recv}Receive</button>
         <button class="btn" data-go="vote">${I.vote}Vote</button></div>
       ${c ? `<button class="card cgp" data-go="vote" data-s="plain">
-        <div class="row k"><span>CGP · INTERVAL ${c.interval}</span><span data-s="right">${esc(c.phase)}</span></div>
-        <div data-s="mt4">${esc(c.next)} in ${c.blocksLeft.toLocaleString('en-US')} blocks</div>
-        <div class="muted small">Around ${esc(c.eta)}. Your balance at the snapshot block is your voting weight.</div></button>` : ''}
+        <div class="row k"><span>CGP · INTERVAL ${c.community}</span><span data-s="right">${esc(c.phase)}</span></div>
+        <div data-s="mt4">${esc(c.next)} in ${c.blocksLeft.toLocaleString('en-US')} blocks · around ${esc(c.eta)}</div>
+        <div class="muted small">Fund ${cgpBalance()} · ${zpStr(c.cgpPerBlock)} ZP per block to the CGP · your vote weight ${formatZP(voteWeight())} ZP</div></button>` : ''}
       ${others.length ? `<div class="card"><h2>Tokens</h2><div class="list">${others.map(x => `<div class="item"><span class="mono small">${esc(x.asset.slice(0, 18))}…</span><span class="amt">${esc(String(x.spendable + x.maturing))}</span></div>`).join('')}</div></div>` : ''}
       <div class="row"><h2>Activity</h2><button class="iconbtn" data-act="refresh" aria-label="Refresh" data-s="fixed">${S.busy ? '<span class="spin"></span>' : I.refresh}</button></div>
       <div class="list">${!d.history ? '<p class="muted small">Loading…</p>' : d.history.length === 0 ? '<p class="muted small">No transactions yet.</p>' : d.history.map(h => {
@@ -145,16 +154,34 @@ const views = {
   },
 
   vote: () => {
-    const c = cgpInfo();
+    const c = cgpInfo(), sel = new Set(voters().map(w => w.id)), signers = walletsHere().filter(w => w.kind !== 'watch');
     return `${top()}<div class="screen"><h1>Community vote</h1>
-      ${c ? `<div class="card cgp"><div class="row k"><span>INTERVAL ${c.interval}</span><span data-s="right">${esc(c.phase)}</span></div>
+      ${c ? `<div class="card cgp"><div class="row k"><span>INTERVAL ${c.community} <span class="muted">(node ${c.interval})</span></span><span data-s="right">${esc(c.phase)}</span></div>
         <div data-s="mt6">${esc(c.next)} in ${c.blocksLeft.toLocaleString('en-US')} blocks · around ${esc(c.eta)}</div>
-        <div class="muted small" data-s="mt6">Block reward split now: miners ${100 - alloc()}%, CGP ${alloc()}%.</div></div>` : '<p class="muted">Loading…</p>'}
-      <div class="card"><h2>Voting from ZP Wallet</h2><p class="muted small">Casting allocation and payout ballots arrives in the next version. Until then your balance at the snapshot block already counts as your voting weight for the interval.</p></div></div>${nav('vote')}`;
+        <div class="kv" data-s="mt6"><span class="muted">To the CGP</span><span>${zpStr(c.cgpPerBlock)} ZP / block (${alloc()}%)</span></div>
+        <div class="kv"><span class="muted">CGP fund</span><span title="${esc(S.stats?.cgp?.balance ? 'at block ' + S.stats.cgp.balance.block : '')}">${cgpBalance()}</span></div>
+        <div class="kv"><span class="muted">Snapshot block</span><span>${c.snapshot.toLocaleString('en-US')}</span></div></div>` : '<p class="muted">Loading…</p>'}
+      <div class="card"><h2>Wallets that vote</h2>
+        <p class="muted small">Choose one wallet or several: their balances at the snapshot block add up to one vote weight.</p>
+        <div class="list">${signers.map(w => `<button class="item" data-act="vote-toggle" data-id="${esc(w.id)}" data-s="plain" aria-pressed="${sel.has(w.id)}">
+          <span class="row"><span class="check ${sel.has(w.id) ? 'on' : ''}" aria-hidden="true">${sel.has(w.id) ? '✓' : ''}</span><span>${esc(w.name)}</span></span>
+          <span class="amt" data-s="fixed">${formatZP(zpOf(w.id))} ZP</span></button>`).join('') || '<p class="muted small">Add a wallet with its 24 words or key to vote. Watch-only wallets cannot sign a ballot.</p>'}</div>
+        ${signers.length > 1 ? `<div class="row" data-s="mt10"><button class="btn" data-act="vote-all">All</button><button class="btn" data-act="vote-none">None</button></div>` : ''}
+        <div class="kv" data-s="mt10"><span>Vote weight now</span><span class="amt">${formatZP(voteWeight())} ZP</span></div></div>
+      <div class="card"><h2>Casting ballots</h2><p class="muted small">Allocation and payout ballots are signed by the selected wallets and arrive in the next version. Your balance at the snapshot block already counts as your weight for the interval.</p></div>
+      <div class="card"><h2>Protocol upgrade vote</h2><p class="muted small">Inactive: the Repo voting contract has been inactive since block 233,874.</p></div></div>${nav('vote')}`;
   },
 
-  contracts: () => `${top()}<div class="screen"><h1>Smart contracts</h1>
-    <div class="card"><p class="muted small">Tokens issued by contracts appear on the Wallet screen. Running and deploying contracts arrives in a later version.</p></div></div>${nav('contracts')}`,
+  contracts: () => {
+    const cs = S.contracts;
+    return `${top()}<div class="screen"><h1>Smart contracts</h1>
+    <div class="card"><h2>Active contracts</h2><div class="list">${!cs ? '<p class="muted small">Loading…</p>' : cs.length === 0 ? '<p class="muted small">None.</p>' : cs.map(k => {
+      const left = k.expire - (S.tip || k.expire), cls = left < 300 ? 'lvl-bad' : left < 3000 ? 'lvl-warn' : '';
+      return `<div class="item"><div><div>${esc(k.name || 'Unnamed')}</div><div class="muted small mono" title="${esc(k.address)}">${esc(shortAddr(k.address))}</div></div>
+        <div data-s="right"><div class="small">until ${Number(k.expire).toLocaleString('en-US')}</div><div class="small ${cls}">${left.toLocaleString('en-US')} blocks left</div></div></div>`;
+    }).join('')}</div></div>
+    <div class="card"><p class="muted small">Tokens issued by contracts appear on the Wallet screen. Viewing code, extending and running contracts arrive in a later version.</p></div></div>${nav('contracts')}`;
+  },
 
   settings: () => `${top()}<div class="screen"><h1>Settings</h1>
     <div class="card"><h2>Network</h2><div class="tabs" data-s="two mt10">
@@ -179,8 +206,14 @@ function cgpInfo() {
   const tip = S.tip, interval = Math.floor((tip - 1) / 10000) + 1, snap = (interval - 1) * 10000 + 9000, nom = snap + 500, end = interval * 10000;
   const [phase, next, at] = tip < snap ? ['Before snapshot', 'Balance snapshot', snap] : tip < nom ? ['Nomination', 'Voting opens', nom] : ['Voting', 'Voting closes', end];
   const eta = new Date(Date.now() + (at - tip) * 236682).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return { interval, phase, next, blocksLeft: at - tip, eta };
+  const reward = 50 / 2 ** Math.floor(Math.max(0, tip - 2) / 800000);       // ZP per block, halving every 800,000 blocks
+  // wallets and the explorer number intervals from the CGP launch (node interval 106 = interval 82)
+  return { interval, community: interval - 24, phase, next, blocksLeft: at - tip, eta, snapshot: snap, reward, cgpPerBlock: reward * alloc() / 100 };
 }
+const cgpBalance = (withBlock = false) => {
+  const b = S.stats?.cgp?.balance;
+  return b && Number.isFinite(b.zp) ? zpStr(b.zp) + ' ZP' + (withBlock ? ` <span class="muted small">at block ${Number(b.block).toLocaleString('en-US')}</span>` : '') : 'not available from this node';
+};
 
 // ---------------------------------------------------------------- modal
 function modalHtml() {
@@ -218,6 +251,21 @@ async function refreshNode() {
   if (!n) { S.nodeOk = false; S.tip = null; return; }
   try { const info = checkInfo(await n.info(), net()); S.tip = info.blocks; S.nodeOk = true; S.nodeError = ''; S.cgp = await n.cgp().catch(() => null); }
   catch (e) { S.nodeOk = false; S.nodeError = e.message; }
+  // the community site publishes stats.json next to /node/ (CGP fund balance, named contracts)
+  S.stats = null;
+  try {
+    const u = new URL(S.settings.nodes[net()]);
+    if (/\/node$/.test(u.pathname)) {
+      const r = await fetch(u.origin + '/stats.json', { cache: 'no-cache' });
+      if (r.ok) { const j = await r.json(); if (j && typeof j === 'object') S.stats = j; }
+    }
+  } catch { /* optional */ }
+  const list = Array.isArray(S.stats?.contracts) ? S.stats.contracts : await n.activeContracts().catch(() => null);
+  S.contracts = Array.isArray(list) ? list
+    .map(c => ({ id: String(c.id ?? c.contractId ?? ''), address: String(c.address ?? ''), expire: Number(c.expire) }))
+    .filter(c => Number.isSafeInteger(c.expire) && /^c(zen|tzn)1[0-9a-z]+$/.test(c.address))
+    .map(c => ({ ...c, name: nameOf(c.id, c.address) }))
+    .sort((x, y) => x.expire - y.expire) : null;
 }
 async function refreshWallet(id, full) {
   const n = node(), w = S.open.get(id); if (!n || !w) return;
@@ -259,6 +307,13 @@ $app.addEventListener('click', async e => {
   const act = t.dataset.act; if (!act) return;
   try {
     if (act === 'refresh') return refreshAll(true);
+    if (act === 'vote-toggle' || act === 'vote-all' || act === 'vote-none') {
+      const all = walletsHere().filter(w => w.kind !== 'watch').map(w => w.id);
+      let sel = voters().map(w => w.id);
+      if (act === 'vote-all') sel = all; else if (act === 'vote-none') sel = [];
+      else sel = sel.includes(t.dataset.id) ? sel.filter(x => x !== t.dataset.id) : [...sel, t.dataset.id];
+      S.settings.voteWallets[net()] = sel.length === all.length ? null : sel; saveSettings(); return render();
+    }
     if (act === 'close') { S.modal = null; S.error = ''; return render(); }
     if (act === 'lock') return lock();
     if (act === 'copy') { await navigator.clipboard.writeText(t.dataset.text); t.innerHTML = I.copy + 'Copied'; return; }

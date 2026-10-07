@@ -38,6 +38,8 @@ export class NodeClient {
   history(addresses, skip = 0, take = 50) { return this.request('/addressdb/transactions', { addresses, skip, take }); }
   // [{address, hasBalance, hasTxs}]
   discovery(addresses) { return this.request('/addressdb/discovery', { addresses, full: false }); }
+  // [{contractId, address, expire, code}]
+  activeContracts() { return this.request('/contract/active'); }
   publish(txHex) { return this.request('/blockchain/publishtransaction', { tx: txHex }); }
 }
 

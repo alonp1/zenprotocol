@@ -85,3 +85,7 @@ input.mono { font-family: var(--mono); font-size: 13px; }
 .screen[data-s~="flush"] { padding: 0; } [data-s~="right"] { text-align: right; } [data-s~="wrap"] { word-break: break-all; }
 [data-s~="plain"] { text-align: left; color: inherit; font: inherit; cursor: pointer; width: 100%; }
 input[data-s~="check"] { width: 20px; min-height: 20px; flex: none; }
+.check { width: 22px; height: 22px; flex: none; border-radius: 6px; border: 1px solid var(--line); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; color: var(--accent-ink); }
+.check.on { background: var(--accent); border-color: var(--accent); }
+button.item { background: none; border: 0; border-bottom: 1px solid var(--line2); }
+.lvl-warn { color: var(--amber); font-weight: 600; } .lvl-bad { color: var(--bad); font-weight: 600; }
