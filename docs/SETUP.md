@@ -1,6 +1,6 @@
 # ZP – Running a Node and a Miner
 
-Updated: 2026-10-06
+Updated: 2026-10-07
 
 ## Overview
 
@@ -8,36 +8,48 @@ A node validates and relays the blockchain. A miner is a node that also mines bl
 
 | Machine | Role | Method | Mining |
 | --- | --- | --- | --- |
-| Linux server (Ubuntu) | Public node, seed, status page, snapshots | Docker + Nginx | Not allowed |
+| Linux server (Ubuntu) | Public node for wallets, seed, status page, snapshots | Docker + Nginx | Not allowed |
 | Home computer (Windows/macOS/Linux) | Node + miner | Docker Desktop | Allowed |
 
 All installs use the official 1.0.13 release, the first without a version expiry date. A new node loads a recent snapshot and is in sync within minutes.
 
-### Public node for wallets
+### Public node for wallets (dedicated server)
 
-Light wallets need a node with an address index (AddressDB). Release 1.0.13 cannot build it from scratch on today's chain (it loads every block into one message and crashes), so the index is built once with the source build, which indexes in batches, and shipped inside the snapshot. Release nodes then keep it up to date block by block.
+The community public node serves light wallets (ZP Wallet) through `https://<domain>/node/`. It runs on its own server so it cannot disturb other services; since 2026-10-07 that is a Hetzner CX33 (4 vCPU, 8 GB RAM, 80 GB disk, Ubuntu 24.04). Load: ~10 GB chain + address index, 4.8 GB published snapshot, ~5 GB temporary during a monthly snapshot.
 
-1. On a machine with 16 GB RAM and a synced node volume (the replay runner): push to the `make-addressdb` branch, or run `bash scripts/make-addressdb-snapshot.sh`. The snapshot lands in `~/zen-out` (runner: `/home/runner/zen-out`).
-2. Serve it temporarily from that machine: `cd /home/runner/zen-out && python3 -m http.server 8000` (allow TCP 8000 in its firewall).
-3. On the community server (needs about 20 GB free during the load):
+Light wallets need a node with an address index (AddressDB). Release 1.0.13 cannot build it from scratch on today's chain, so it comes inside the published snapshot (see *Rebuilding the address index snapshot* below); the node then keeps it up to date block by block.
+
+**Fresh server, step by step** (firewall: allow TCP 22, 80, 443, 9655):
 
 ```
-cd ~/zenprotocol && git pull
-F=<file>.zip
+curl -fsSL https://get.docker.com | sh
+apt-get install -y nginx
+git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git && cd zenprotocol
+F=$(curl -s https://zen.sealinkgps.com/snapshots/latest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["file"])')
 mkdir -p zen-data/snapshots
-curl -o zen-data/snapshots/$F http://<runner-ip>:8000/$F
-curl -o zen-data/snapshots/$F.sha256 http://<runner-ip>:8000/$F.sha256
+curl -o zen-data/snapshots/$F https://zen.sealinkgps.com/snapshots/$F
+curl -o zen-data/snapshots/$F.sha256 https://zen.sealinkgps.com/snapshots/$F.sha256
 (cd zen-data/snapshots && sha256sum -c $F.sha256)
-docker compose down
-docker compose build          # the loader that reads a local file is in the new image
+printf "EXTERNAL_IP=%s\nPUBLIC_NODE=1\nMINER_THREADS=0\nZEN_CPUS=3.0\nZEN_MEM=5g\n" "$(curl -4 -s ifconfig.me)" > .env
+docker compose build                  # build first: the loader that reads a local file is in the new image
 docker compose run --rm --no-deps -e SNAPSHOT_URL=/data/snapshots/$F --entrypoint /load-snapshot.sh zen-node
-grep -q PUBLIC_NODE .env 2>/dev/null || echo "PUBLIC_NODE=1" >> .env
 docker compose up -d
-bash site/setup-site.sh
-curl -s https://zen.sealinkgps.com/node/blockchain/info
+docker compose logs --tail 8          # must show "AddressDB adding block", never "Creating AddressDB"
 ```
 
-`setup-site.sh` also publishes this snapshot (with the index) for everyone. `PUBLIC_NODE=1` runs the node with `--remote`: no node wallet, address index on, CORS open. Never set it on a mining node. Never start it without the loaded index: the log must show `Syncing AddressDB`, not `Creating AddressDB` (release 1.0.13 cannot build the index from scratch).
+The loader must print `loaded addressdb` and `loaded blockchaindb`. Then point the domain's DNS A record at the server (Cloudflare: DNS only), wait until `getent hosts <domain>` returns the new IP, and run:
+
+```
+bash site/setup-site.sh               # nginx site, /node/ proxy, stats timer, snapshot publishing, HTTPS
+```
+
+**Moving the public node to another server**: set up the new server as above (it downloads the snapshot from the current one), switch DNS, run `setup-site.sh` there, then on the old server: `docker compose down`, `rm /etc/nginx/sites-enabled/<domain> && systemctl reload nginx`, `systemctl disable --now zen-stats.timer`, and after a day `rm -rf ~/zenprotocol/zen-data`.
+
+`PUBLIC_NODE=1` runs the node with `--remote`: no node wallet, address index on, CORS open. Never set it on a mining node.
+
+### Rebuilding the address index snapshot
+
+Only needed if no published snapshot contains the index any more. It needs a machine with 16 GB RAM and a synced node volume (for example a replay runner): push to the `make-addressdb` branch, or run `bash scripts/make-addressdb-snapshot.sh`, which indexes with the source build in batches of 5000 blocks (about 1.5 h for 1M blocks) and writes the snapshot to `~/zen-out`. Copy it to the public node server and publish it with `setup-site.sh`.
 
 ### Moving to a new domain
 
@@ -62,7 +74,7 @@ The replay reference lives in the `reference-data` branch of the repository, not
 | --- | --- |
 | Network status and downloads | [zen.sealinkgps.com](https://zen.sealinkgps.com) |
 | Seed node | `zen.sealinkgps.com:9655` (pre-configured in the image) |
-| Public node for wallets | `https://zen.sealinkgps.com/node` (planned, see below) |
+| Public node for wallets | `https://zen.sealinkgps.com/node/` (whitelisted read-only API + `publishtransaction`) |
 | Network stats | [zen.sealinkgps.com/stats.html](https://zen.sealinkgps.com/stats.html) |
 | Latest snapshot | [zen.sealinkgps.com/snapshots](https://zen.sealinkgps.com/snapshots/) |
 | Source | [github.com/alonp1/zenprotocol](https://github.com/alonp1/zenprotocol/tree/node-upgrade-script) |
