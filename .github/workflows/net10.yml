@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          dotnet restore src/Node/Node.fsproj 2>&1 | tee /tmp/restore.log || { echo "::error title=restore::$(grep -E "error" /tmp/restore.log | sort -u | head -30 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
+          dotnet restore src/ContractTool/ContractTool.fsproj 2>&1 | tee /tmp/restore.log && dotnet restore src/Node/Node.fsproj 2>&1 | tee -a /tmp/restore.log || { echo "::error title=restore::$(grep -E "error" /tmp/restore.log | sort -u | head -30 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; }
 
       - name: Package layout (for porting notes)
         continue-on-error: true
@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          dotnet build src/Node/Node.fsproj -c Debug -v minimal 2>&1 | tee /tmp/build.log || { grep -E " error " /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt; split -l 12 /tmp/err.txt /tmp/errpart.; for f in /tmp/errpart.*; do echo "::error title=build::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"; done; exit 1; }
+          { dotnet build src/ContractTool/ContractTool.fsproj -c Debug -v minimal --no-restore && dotnet build src/Node/Node.fsproj -c Debug -v minimal --no-restore; } 2>&1 | tee /tmp/build.log || { grep -E " error " /tmp/build.log | sed -E 's#/home/runner/work/zenprotocol/zenprotocol/##g; s# \[[^]]*\]$##' | sort -u | head -80 > /tmp/err.txt; split -l 12 /tmp/err.txt /tmp/errpart.; for f in /tmp/errpart.*; do echo "::error title=build::$(sed 's/%/%25/g' $f | sed ':a;N;$!ba;s/\n/%0A/g')"; done; exit 1; }
 
       - name: Upload node build
         if: always()

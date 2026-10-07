@@ -15,7 +15,6 @@
     <Tailcalls>true</Tailcalls>
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
-  <Import Project="..\RefFStar.props" />
   <ItemGroup>
     <Content Include="app.config" />
   </ItemGroup>
@@ -56,8 +55,6 @@
     <PackageReference Include="FSharp.Control.Reactive" />
     <PackageReference Include="System.Reactive.Compatibility" />
     <PackageReference Include="FSharp.Data" />
-    <PackageReference Include="Zen.FSharp.Compiler.Service" />
-    <PackageReference Include="ZFS-Tools" />
     <PackageReference Include="FSharpx.Extras" />
     <PackageReference Include="BouncyCastle" />
   </ItemGroup>

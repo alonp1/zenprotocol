@@ -2,7 +2,7 @@
 <Project>
   <!-- F* assemblies used in-process (hints, AST elaboration). fstar.exe itself runs as a separate Mono process. -->
   <ItemGroup>
-    <PackageReference Include="ZFStar" GeneratePathProperty="true" />
+    <PackageReference Include="ZFStar" GeneratePathProperty="true" ExcludeAssets="build" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="fstar"><HintPath>$(PkgZFStar)/tools/fstar.exe</HintPath></Reference>
