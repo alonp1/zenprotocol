@@ -32,8 +32,19 @@ let main argv =
     try
         match argv with
         | [ "compile"; path; moduleName; rlimit; codeFile; hintsFile ] ->
-            ZFStar.compile path (File.ReadAllText codeFile) (File.ReadAllText hintsFile) (UInt32.Parse rlimit) moduleName
-            |> finish
+            // compile into a private folder, then move the DLL into place: the node never sees a half-written DLL
+            let target = Path.Combine(path, moduleName + ".dll")
+            if File.Exists target then 0 else
+            let temp = Path.Combine(path, ".tmp-" + Guid.NewGuid().ToString("N"))
+            Directory.CreateDirectory temp |> ignore
+            try
+                ZFStar.compile temp (File.ReadAllText codeFile) (File.ReadAllText hintsFile) (UInt32.Parse rlimit) moduleName
+                |> Result.map (fun () ->
+                    try File.Move(Path.Combine(temp, moduleName + ".dll"), target)
+                    with _ when File.Exists target -> ())        // compiled at the same time by another call
+                |> finish
+            finally
+                try Directory.Delete(temp, true) with _ -> ()
         | [ "record-hints"; moduleName; rlimit; codeFile; outFile ] ->
             ZFStar.recordHints (UInt32.Parse rlimit) (File.ReadAllText codeFile) moduleName
             |> Result.map (fun (hints: string) -> File.WriteAllText(outFile, hints))

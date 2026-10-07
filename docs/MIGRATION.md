@@ -58,6 +58,34 @@ Argu 5.1, AsyncIO, NetMQ 4, FsPickler 5.2, FSharp.Data 3, FSharp.Control.Reactiv
 
 Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, `FsBech32`, `BouncyCastle.Crypto`, `FSharp.Compatibility.OCaml` and `Zulib` (see `Infrastructure/ZFStar.fs`), and the CGP tally uses `FSharpx.Extras`. Changing any of them can change contract results or vote counting, so they are only touched once the replay test can prove identical behaviour. `FsNetMQ` 0.3.6 supports `netstandard2.0` but requires a newer `FSharp.Core`, so it goes with that upgrade. `net452` assemblies may also load unchanged on .NET 10; stage 4 will tell.
 
+## Stage 4: how the node runs on .NET 10 (branch `net10`)
+
+**Projects.** All projects target `net10.0` (`src/Directory.Build.props`). Packages come from NuGet as `PackageReference`; `src/Directory.Packages.props` pins every package, including indirect ones, to the exact version in `paket.lock` of release 1.0.13, so the libraries are the same as before. `nuget.config` adds the zenprotocol MyGet feed for `Zulib`, `CGPContract`, `FsBech32` and the native `zen_*` packages. FSharp.Core stays at 4.3.4 (it ships a `netstandard` build).
+
+**Contract toolchain.** Contracts are written in F\*, extracted to F# and compiled to a DLL when activated. That code (`ZFStar.fs` of 1.0.13: elaboration, `fstar.exe`, compilation with the patched `Zen.FSharp.Compiler.Service`, hints) moved unchanged into `src/ContractTool`, a `net47` command line program (`zen-contract-tool.exe`) that runs on Mono with the same .NET Framework libraries as the old node. The .NET 10 node calls it as a separate process; `Infrastructure/ZFStar.fs` keeps the same functions (`compile`, `recordHints`, `totalQueries`, `calculateMetrics`, `load`), so nothing else changed. Compiled contract DLLs are loaded into the node as before. This keeps compiled contracts byte-identical while the node itself leaves Mono. Stage 5 replaces this with an in-process compiler on .NET 10.
+
+Output layout: the node folder holds `zen-node.dll`, `zen-cli.dll`, `libsecp256k1.so`, `z3-linux` and `contract-tool/` (the tool, F\*, Zulib sources, `z3-linux`, and the .NET Framework 4.7 reference assemblies used when Mono's own are not installed). Mono (6.8 or newer) is needed only for `contract-tool/`.
+
+**Source changes needed by .NET 10** (none touch consensus logic):
+- type annotations where .NET 10 added `ReadOnlySpan` overloads (`File.WriteAllText`, `Int32/UInt32.TryParse`, `String.Split`)
+- removed two unused `open` lines (`FStar` in `Http.fs`, Windows event log in `Weight.fs`); `Hopac` became a direct reference of Consensus (it was indirect under paket)
+- `Platform.monoVersion` asks `mono --version` when the node is not running on Mono; the node checks for Mono 6.8+ and the contract tool at startup
+- loading a contract that is already loaded returns the loaded assembly (.NET refuses two assemblies with the same name; the name is the contract hash, so it is the same code)
+
+**Not yet ported:** the SpecFlow feature tests (`Consensus.Features.Tests`, to Reqnroll).
+
+**Build and run:**
+
+```
+dotnet build src/ContractTool/ContractTool.fsproj -c Release
+dotnet build src/Node/Node.fsproj -c Release
+cd src/Node/bin/Release && dotnet zen-node.dll
+```
+
+or the image: `docker build -f Docker/Dockerfile.net10 -t zen-node:net10 .` (`.NET 10 runtime + Mono`). CI: `.github/workflows/net10.yml` builds, runs the unit tests and checks that the image syncs mainnet blocks.
+
+**Gate before merging:** a full mainnet replay of the .NET 10 image from genesis must match the reference (`.github/workflows/net10-replay.yml`, started by pushing to the `net10-replay` branch; it runs on GitHub-hosted runners in parts of ~5 hours, passing the chain data on through the Actions cache), and the CGP, supply and winner state must match the release node at the same tip.
+
 ## Running the replay test
 
 1. Create a server with 4+ dedicated cores and 16 GB RAM (Ubuntu 24.04), e.g. Hetzner CCX23. Hourly-billed; delete it after the run. 40 GB disk is enough: the script frees the Docker build cache, logs free space every 5 minutes and stops with a clear error below 1 GB.
