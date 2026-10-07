@@ -12,11 +12,11 @@ let run () : bool =
     let data = [ "EURUSD", 1.0832M; "GBPUSD", 1.2711M; "USDJPY", 149.5M; "EURGBP", 0.852M; "USDCHF", 0.9M ]
     let root = Leaf.root data
     let results =
-        [ check "value encoding is value x 1000, big endian" (Leaf.encodeValue 1.0832M = [| 0uy; 0uy; 4uy; 56uy |])
+        [ check "value encoding is value x 1000, big endian" (Leaf.encodeValue 1.0832M = [| 0uy; 0uy; 4uy; 59uy |])
           check "every leaf verifies against the root with its audit path"
               (data |> List.mapi (fun i (t, v) -> Leaf.verify root (Leaf.auditPath data i) i t v) |> List.forall id)
           check "a changed value does not verify"
-              (not (Leaf.verify root (Leaf.auditPath data 0) 0 "EURUSD" 1.0833M))
+              (not (Leaf.verify root (Leaf.auditPath data 0) 0 "EURUSD" 1.084M))
           check "a wrong index does not verify"
               (not (Leaf.verify root (Leaf.auditPath data 0) 1 "EURUSD" 1.0832M))
           check "the Commit message body is a node data dictionary holding the root"
