@@ -9,7 +9,7 @@ on:
       split:   { description: 'outputs per splitting transaction (fewer mined blocks needed when higher)', default: '500' }
   push:
     branches: [node-upgrade-script]
-    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
+    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'scripts/testnet-oracle.sh', 'src/Oracle/**', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
 
 jobs:
   testnet:
@@ -47,6 +47,16 @@ jobs:
           bash scripts/testnet-contract.sh http://127.0.0.1:31567 testnet > /tmp/contract.txt 2>&1
           RC=$?
           tail -n 25 /tmp/contract.txt | python3 -c "import sys;print('::notice title=contract output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - name: Oracle on the testnet (Oracle contract, one round, proof)
+        run: |
+          set +e
+          dotnet restore src/Oracle/Oracle.fsproj -v q >/dev/null 2>&1; dotnet build src/Oracle/Oracle.fsproj -c Release --no-restore -v q >/dev/null 2>&1
+          bash scripts/testnet-oracle.sh http://127.0.0.1:31567 testnet > /tmp/oracle.txt 2>&1
+          RC=$?
+          tail -n 25 /tmp/oracle.txt | python3 -c "import sys;print('::notice title=oracle output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
       - name: Load test on the release build
         run: |

@@ -20,6 +20,8 @@ for i in $(seq 90); do
 done
 curl -fs "$API/contract/active" | grep -q "$CID" || { echo "contract never became active"; exit 1; }
 echo "active after $((i*10)) s: $ADDR"
+echo "CONTRACT_ADDRESS=$ADDR"
+[ "${EXECUTE:-1}" = 0 ] && exit 0
 
 echo "== execute: buy tokens with 1000 kalapas"
 BODY=$(ADDR="$ADDR" PW="$PW" python3 -c "import json,os;print(json.dumps({'address':os.environ['ADDR'],'command':'buy','messageBody':'','options':{'returnAddress':True},'spends':[{'asset':'00','amount':1000}],'password':os.environ['PW']}))")
