@@ -115,7 +115,7 @@ Nothing was lost or rejected and the nodes never fell behind, but intake fell as
 
 ## Moving or adding a seed
 
-Edit `testnetSeeds` in `network.json`; every node reads it at start. A seed is a node that stays online with its P2P port (29555) open: `EXTERNAL_IP=<public ip> docker compose -f docker-compose.testnet.yml up -d`. The first public seed is planned on `zen.sealinkgps.com` (port 29555) and is not up yet.
+Edit `testnetSeeds` in `network.json`; every node reads it at start. A seed is a node that stays online with its P2P port (29555) open: `EXTERNAL_IP=<public ip> docker compose -f docker-compose.testnet.yml up -d`. On a fresh server one command does it all (Docker, firewall, image, start): `curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-testnet-seed.sh | bash`; give a second seed the first one with `SEEDS=<first seed>`. The first public seed is planned on `zen.sealinkgps.com` (port 29555) and is not up yet.
 
 ## Plan
 
