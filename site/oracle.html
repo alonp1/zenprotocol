@@ -73,7 +73,7 @@
   <section>
     <h2>Values in this round</h2>
     <table>
-      <thead><tr><th>Ticker</th><th class="num">Value</th><th class="num">Index</th><th></th></tr></thead>
+      <thead><tr><th>Ticker</th><th class="num">Value (in USD)</th><th class="num">Index</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <p style="margin:14px 0 0;color:var(--muted);font-size:14px">The proof is the leaf plus the audit path. A contract (for example a bet) rebuilds the root from them and compares it with the committed root.</p>
@@ -82,7 +82,7 @@
   <section>
     <h2>History</h2>
     <table>
-      <thead><tr><th>Time (UTC)</th><th>Block</th><th>Root</th><th class="num">EURUSD</th></tr></thead>
+      <thead><tr><th>Time (UTC)</th><th>Block</th><th>Root</th><th class="num">EUR</th></tr></thead>
       <tbody id="hist"></tbody>
     </table>
   </section>
@@ -107,7 +107,7 @@
   <footer>Testnet, no value. Part of the community node: <a href="/">home</a> · <a href="/explorer.html">explorer</a> · <a href="/stats.html">stats</a></footer>
 </main>
 <script>
-const DATA = {"timestamp": 1791390000000, "root": "30c8461b09fdde71df3ba5db747eff582108839501bb01a5570fa7070266c54a", "tx": "015f7f2a3f1fc6c8bd94515a91b77ad0f3292a5d998153343c9c656327a065e3", "block": 1042, "rows": [{"ticker": "EURUSD", "value": 1.0832, "leaf": "9f99879a71e0458ff19b99a4956f93740e5c694ca0122a96b55a821b16cbcb11", "index": 0}, {"ticker": "GBPUSD", "value": 1.2711, "leaf": "a380029280cf37a08fbcd20bdbe718884340efcc8d3925d3add9b45ec2e60e03", "index": 1}, {"ticker": "USDJPY", "value": 149.5, "leaf": "9f3344e2e0d815a0ca30dd0ff1c6b06bc3a75dfa5cdc676caf1a6fdc8aab353c", "index": 2}, {"ticker": "EURGBP", "value": 0.852, "leaf": "5cd6a0a7d1e4d4d4c626212c7bf3d0df0bec112c4b3ebc4d4e3e3323be4945e0", "index": 3}, {"ticker": "USDCHF", "value": 0.9, "leaf": "2508ec4053e4773586f459c7cfce8d7cb78e3b31b02610eff4bb2c1395c6f97d", "index": 4}, {"ticker": "BTCUSD", "value": 67250.12, "leaf": "9be7eab68d2cd0340eefe5ce9f06a0bdb22714d26c9c8a1015af264f5b8a1e03", "index": 5}]};
+const DATA = {"timestamp": 1791390000000, "root": "30c8461b09fdde71df3ba5db747eff582108839501bb01a5570fa7070266c54a", "tx": "015f7f2a3f1fc6c8bd94515a91b77ad0f3292a5d998153343c9c656327a065e3", "block": 1042, "rows": [{"ticker": "EUR", "value": 1.083, "leaf": "0009b79f80a82d5b2a1df89793398f08ef955bb346d15dcab9537e45c1e898ee", "index": 0}, {"ticker": "GBP", "value": 1.271, "leaf": "32a60fff3e90a693db33d87f57861366bbaa36d417d56bd65d38c3be09aa9e31", "index": 1}, {"ticker": "CHF", "value": 1.111, "leaf": "26b3cad501cb773f6b7dbe6ba32a41c231dbf28a83526b48b814fc313069210e", "index": 2}, {"ticker": "AUD", "value": 0.655, "leaf": "328f3f3eca377e6eeefd6e031a618fbcac37d35c700755977f1f3979f53a04de", "index": 3}, {"ticker": "BTC", "value": 67250.12, "leaf": "9ba04e2fb7d26f94ede29f3c8a646674dbd29725af4f98b89971bd8011fd5440", "index": 4}, {"ticker": "ETH", "value": 2450.5, "leaf": "3aba1f0e0fa8db4e8bd36034653819dc37dabf6466b1f0ba2428916f6a84a703", "index": 5}]};
 const $ = id => document.getElementById(id);
 const fmt = v => v >= 1000 ? v.toLocaleString('en', {maximumFractionDigits: 2}) : String(v);
 $('when').textContent = new Date(DATA.timestamp).toISOString().slice(0, 16).replace('T', ' ');
@@ -124,11 +124,11 @@ $('rows').onclick = e => { const i = e.target.dataset && e.target.dataset.i; if 
 $('hist').innerHTML = [0,1,2,3,4,5].map(n => {
   const t = new Date(DATA.timestamp - n * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
   const root = n === 0 ? DATA.root : Array.from({length: 64}, (_, k) => '0123456789abcdef'[(k * 7 + n * 13 + (k * k) % 5) % 16]).join('');
-  return '<tr><td>' + t + '</td><td>' + (DATA.block - n * 15) + '</td><td class="mono">' + root.slice(0, 10) + '…' + root.slice(-6) + '</td><td class="num">' + (1.0832 + ((n + 1) % 3 - 1) * 0.0007).toFixed(4) + '</td></tr>';
+  return '<tr><td>' + t + '</td><td>' + (DATA.block - n * 15) + '</td><td class="mono">' + root.slice(0, 10) + '…' + root.slice(-6) + '</td><td class="num">' + (1.083 + ((n + 1) % 3 - 1) * 0.001).toFixed(4) + '</td></tr>';
 }).join('');
 const TABS = {
-  api: '<pre>GET /oracle/rounds/latest\nGET /oracle/auditpath?ticker=EURUSD\nGET /oracle/auditpath?ticker=EURUSD&amp;timestamp=1791390000000\nGET /oracle/health</pre><p style="color:var(--muted);margin:0">Answers are JSON: value, timestamp, root, index, audit path, commitment transaction.</p>',
-  verify: '<pre>leaf  = SHA3-256( "EURUSD" + ";" + uint32_be(value × 1000) )\nroot  = merkle(leaves)          // same tree as the node (Consensus.MerkleTree)\ncheck = root == committed root  // from the chain, via the Oracle contract</pre><p style="color:var(--muted);margin:0">A reference implementation and test are in <code>src/Oracle</code>.</p>',
+  api: '<pre>GET /oracle/rounds/latest\nGET /oracle/auditpath?ticker=EUR\nGET /oracle/auditpath?ticker=EUR&amp;timestamp=1791390000000\nGET /oracle/health</pre><p style="color:var(--muted);margin:0">Answers are JSON: value, timestamp, root, index, audit path, commitment transaction.</p>',
+  verify: '<pre>leaf  = SHA3-256( "EUR" + ";" + uint32_be(value × 1000) )\nroot  = merkle(leaves)          // same tree as the node (Consensus.MerkleTree)\ncheck = root == committed root  // from the chain, via the Oracle contract</pre><p style="color:var(--muted);margin:0">A reference implementation and test are in <code>src/Oracle</code>.</p>',
   contract: '<pre>Oracle contract:      ctzn1…  (Commit, Attest)\nFixedPayout contract: Issue / Redeem / Cancel bull and bear positions on a ticker</pre><p style="color:var(--muted);margin:0">Try bets on the testnet; see the docs for the message bodies.</p>'
 };
 const showTab = k => { $('tab').innerHTML = TABS[k]; document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); };

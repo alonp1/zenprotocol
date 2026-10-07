@@ -6,7 +6,7 @@ Status: the contracts are the developers' originals (repository `zenprotocol/con
 
 ## How it works
 
-1. Every interval (default hourly) the service reads the price of each ticker, e.g. `EURUSD = 1.0832`.
+1. Every interval (default hourly) the service reads the price of each ticker, e.g. `EUR = 1.083` (USD per euro).
 2. For each ticker it builds a **leaf**: `Hash(identifier bytes ‖ ';' ‖ uint32 big-endian(value × 1000))`. The leaves, in the configured order, form a **Merkle tree** (the tree of the node's `Consensus` library, so the root is identical to what contracts compute).
 3. The service executes the Oracle contract with command `Commit` and the **root** as `Commit`. The transaction is signed with the oracle's key. The contract mints a *commitment token* derived from `(root ‖ oracle public key)` and keeps it. Now the chain proves *that root existed at that block*.
 4. Anyone who needs the value asks the service `GET /auditpath?...` for: timestamp, value, root, index, audit path.
@@ -27,6 +27,7 @@ Message bodies (dictionaries) are listed in each contract's README (`zenprotocol
 
 - The old service sent the command `Add`; the contract expects `Commit`. The new service uses `Commit`.
 - **What is committed.** FixedPayout expects the commitment to be `SHA3(root ‖ uint64 timestamp)` (its `hashCommit`), not the bare root. The old service committed the bare root, so a payout could not have worked against it. The new service builds the commit hash with the same Zulib function the contract uses, and serves `timestamp` and `root` with every proof.
+- **Tickers are at most 4 characters** (FixedPayout refuses longer ones), so the service uses symbols (`EUR`, `GBP`, `BTC`) quoted in one currency (`ORACLE_QUOTE`, USD by default). Values keep 3 decimals (value × 1000 in a 32 bit number), which suits `EUR`, `GBP`, `BTC` but not a currency that is worth a fraction of a cent, such as `JPY`; for those, quote the other way round.
 - A commitment token is bound to the oracle's public key, so a second oracle can use the same contract without clashing.
 - FixedPayout does not know tickers by name in the tree; it recomputes the leaf from `Ticker` and `Value`, so the service and the contract must build leaves identically (see step 2).
 

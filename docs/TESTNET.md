@@ -106,6 +106,10 @@ Nothing was lost or rejected and the nodes never fell behind, but intake fell as
 | `net10` | Unit tests, node starts and syncs mainnet blocks |
 | mainnet replay (`net10-replay`) | The whole mainnet chain, 1,053 block hashes and the CGP state, still match the reference |
 
+## Contracts and instruments on the testnet
+
+Contracts can be activated and executed on the testnet with the node API (`/wallet/contract/activate`, `/wallet/contract/execute`). The CI workflow `testnet` does it for a token, a named token, an issuer-controlled token, the oracle, a decentralised exchange and a bet. See [INSTRUMENTS.md](INSTRUMENTS.md) and [ORACLE.md](ORACLE.md).
+
 ## Proposing a change and testing it
 
 1. Fork the repository and change the code (consensus rules for the testnet only go in `Chain.fs` parameters and the files they use).
