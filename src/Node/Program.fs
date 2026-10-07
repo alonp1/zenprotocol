@@ -146,6 +146,18 @@ module Init =
     
     let miner (config:MainConfig) =
         if config.miner then
+            // The wallet loads its account in its own actor, and the miner asks for the address only once, at start.
+            // Without this wait the miner can start first ("Miner could not get address: no account") and then never
+            // mines on a node whose tip does not change (seen on a restarted testnet node). No wallet at all: waits 30 s, then goes on.
+            use client = ServiceBus.Client.create busName
+            let rec waitForAccount attempts =
+                match Messaging.Services.Wallet.getAddressPKHash client with
+                | Ok _ -> ()
+                | Error _ when attempts > 0 ->
+                    System.Threading.Thread.Sleep 500
+                    waitForAccount (attempts - 1)
+                | Error _ -> ()
+            waitForAccount 60
             Miner.Main.main busName config.minerThreads
             |> Disposables.toDisposable
         else
