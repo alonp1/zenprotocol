@@ -21,7 +21,7 @@ echo "$DOMAIN -> ${IP:-<no DNS yet>}"
 echo "== Files"
 mkdir -p "$WEB/snapshots"
 cp "$REPO/site/index.html" "$WEB/index.html"
-cp "$REPO/site/stats.html" "$REPO/site/assets.html" "$REPO/site/cgp.html" "$WEB/"
+cp "$REPO/site/stats.html" "$REPO/site/assets.html" "$REPO/site/cgp.html" "$REPO/site/explorer.html" "$WEB/"
 
 echo "== ZP Wallet (built in a throwaway node container: nothing to install on the server)"
 if command -v docker >/dev/null; then
@@ -109,6 +109,25 @@ systemctl daemon-reload
 systemctl enable --now zen-index.timer
 systemctl start --no-block zen-index.service
 
+echo "== Explorer API (read-only, 127.0.0.1:11580, published by nginx as /explorer/api/)"
+cat > /etc/systemd/system/zen-explorer.service <<UNIT
+[Unit]
+Description=ZP explorer API over the chain index
+After=docker.service
+Requires=docker.service
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f zen-explorer
+ExecStart=/usr/bin/docker run --rm --name zen-explorer --network host -v $REPO:/r:ro -v /var/lib/zen-stats:/var/lib/zen-stats node:22-alpine node --no-warnings --experimental-sqlite /r/site/explorer-api.mjs
+ExecStop=/usr/bin/docker stop zen-explorer
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable zen-explorer.service
+systemctl restart zen-explorer.service
+
 echo "== HTTPS"
 if ! command -v certbot >/dev/null; then apt-get install -y certbot python3-certbot-nginx; fi
 # Always run: copying nginx-zen.conf above replaces the HTTPS block certbot added last time.
@@ -119,5 +138,6 @@ certbot --nginx -d "$DOMAIN" $(for d in $EXTRA_DOMAINS; do echo -n " -d $d"; don
 echo "== Check"
 curl -fsS "https://$DOMAIN/api/info" && echo
 curl -s -o /dev/null -w "ZP Wallet: HTTP %{http_code}\n" "https://$DOMAIN/wallet/"
+sleep 5; curl -s -o /dev/null -w "Explorer API: HTTP %{http_code}\n" "https://$DOMAIN/explorer/api/blocks?take=1"
 curl -s -o /dev/null -w "wallet API blocked: HTTP %{http_code}\n" "https://$DOMAIN/api/wallet/balance"
 echo "== Done: https://$DOMAIN"

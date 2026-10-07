@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Explorer</title>
+<meta name="description" content="ZP block explorer: blocks, transactions and their summary, from the community node.">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --faint: #9a9890;
+    --line: #e3e1da; --grid: #eeece6; --accent: #1f6f5c; --series: #00866c;
+    --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890; --faint: #6b6a64;
+            --line: #2c2d2a; --grid: #252623; --accent: #5cc3a6; --series: #22a985;
+            --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  nav { font-size: 14px; margin-bottom: 18px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+       margin: 0 0 14px; font-weight: 600; }
+  p.lead { margin: 0 0 24px; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 20px; margin-bottom: 18px; min-width: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid.four { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 760px) { .grid, .grid.four { grid-template-columns: repeat(2, 1fr); } .stat .v { font-size: 20px; } }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
+  .two > section { margin-bottom: 0; }
+  .two + .two, .two + details { margin-top: 18px; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 13px; color: var(--muted); }
+  a { color: var(--accent); }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+         white-space: nowrap; display: none; z-index: 2; }
+  .tip b { font-variant-numeric: tabular-nums; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase;
+       letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  td.warn { color: var(--warn); font-weight: 600; } td.bad { color: var(--bad); font-weight: 600; }
+  .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
+  .supply { height: 12px; border-radius: 6px; background: var(--grid); overflow: hidden; margin: 4px 0 6px; }
+  .supply div { height: 100%; background: var(--series); border-radius: 6px 0 0 6px; }
+  .supply-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .phase { display: flex; gap: 2px; margin: 14px 0 6px; height: 10px; }
+  .phase div { background: var(--grid); border-radius: 2px; position: relative; }
+  .phase div.done { background: var(--series); }
+  .phase div.now { background: linear-gradient(90deg, var(--series) var(--p), var(--grid) var(--p)); }
+  .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
+  .phase-l span { position: absolute; top: 0; white-space: nowrap; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+</style>
+<style>
+  input.q { width: 100%; max-width: 360px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--card); color: var(--ink); font: inherit; margin-bottom: 12px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); } .pill.no { color: var(--faint); }
+  .sub { color: var(--muted); }
+  details.iv { border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin: 0 0 10px; padding: 0; }
+  details.iv > summary { list-style: none; padding: 14px 16px; display: grid; grid-template-columns: 1.1fr 1fr 1fr 1fr 1.3fr; gap: 10px; align-items: center; color: var(--ink); }
+  details.iv > summary::-webkit-details-marker { display: none; }
+  details.iv > summary .k { font-size: 12px; color: var(--muted); }
+  details.iv > summary .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  details.iv > summary .v.n { font-weight: 500; }
+  details.iv[open] > summary { border-bottom: 1px solid var(--line); }
+  details.iv .in { padding: 12px 16px 16px; }
+  @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+</style>
+<style>
+  .kv2 { display: grid; grid-template-columns: 200px 1fr; border-top: 1px solid var(--line); }
+  .kv2 > div { padding: 9px 4px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .kv2 > div:nth-child(odd) { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  @media (max-width: 640px) { .kv2 { grid-template-columns: 1fr; } .kv2 > div:nth-child(odd) { border-bottom: 0; padding-bottom: 0; } }
+  .tx { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin: 10px 0; }
+  .tx .io { display: grid; grid-template-columns: 1fr 24px 1fr; gap: 8px; align-items: start; margin-top: 8px; }
+  .tx .io .arrow { text-align: center; color: var(--muted); padding-top: 2px; }
+  .tx .line { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+  .tx .line .a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 640px) { .tx .io { grid-template-columns: 1fr; } .tx .io .arrow { transform: rotate(90deg); } }
+  form.search { display: flex; gap: 8px; margin-bottom: 18px; }
+  form.search input { flex: 1; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font: inherit; }
+  form.search button { padding: 9px 16px; border: 1px solid var(--accent); background: var(--accent); color: var(--card); border-radius: 8px; font: inherit; cursor: pointer; }
+  .pager { display: flex; justify-content: space-between; margin-top: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="/">← Community node</a> · <a href="/stats.html">Stats</a> · <a href="/explorer.html">Explorer</a> · <a href="/assets.html">Assets</a> · <a href="/cgp.html">CGP history</a> · <a href="/wallet/">ZP Wallet</a></nav>
+  <h1 id="title">Explorer</h1>
+  <p class="lead" id="sub">Loading…</p>
+  <form class="search" id="search"><input name="q" placeholder="Block number, block or transaction hash" aria-label="Search" autocomplete="off"><button>Search</button></form>
+  <div id="view"></div>
+  <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
+</main>
+<script>
+
+const fmt = n => n == null ? '–' : Number(n).toLocaleString('en-US');
+const amt = v => v == null ? '–' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = a => a ? a.slice(0, 10) + '…' + a.slice(-6) : '–';
+const day = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '–';
+const $ = id => document.getElementById(id);
+document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
+
+const API = '/explorer/api';
+let names = {};
+const zp = v => amt(Number(v) / 1e8);
+const assetName = a => a === '00' ? 'ZP' : names[a] || short(a);
+const dt = ms => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const link = (kind, id, text) => `<a href="?${kind}=${encodeURIComponent(id)}">${esc(text ?? id)}</a>`;
+const party = a => a == null ? '<span class="sub">earlier output</span>' : a === 'mint' ? '<b>Minted</b>' : /^c?zen1|^c?tzn1/.test(a) ? `<span class="mono" title="${esc(a)}">${esc(short(a))}</span>` : esc(a);
+async function get(p) { const r = await fetch(API + p, { cache: 'no-cache' }); if (!r.ok) throw new Error(r.status === 404 ? 'Not found' : 'The node is busy, try again'); return r.json(); }
+function txHtml(t) {
+  const side = rows => rows.length ? rows.map(r => `<div class="line"><span class="a">${party(r[0])}</span><span>${r[1] ? amt(Number(r[2]) / 1e8) + ' ' + esc(assetName(r[1])) : `<span class="mono sub" title="${esc(r[3] || '')}">${esc(short(r[3] || ''))}</span>`}</span></div>`).join('') : '<div class="line sub">none (block reward)</div>';
+  const label = t.index === 0 ? '<span class="pill ok">block reward</span>' : t.contract === 'deploy' ? '<span class="pill">contract deploy</span>' : t.contract ? `<span class="pill">contract ${esc(t.command || '')}</span>` : '';
+  return `<div class="tx"><div class="line"><span class="a mono">${link('tx', t.hash, short(t.hash))}</span><span>${label}</span></div>
+    <div class="io"><div>${side(t.inputs)}</div><div class="arrow">→</div><div>${side(t.outputs)}</div></div></div>`;
+}
+function summary(b, tip) {
+  const conf = tip ? tip - b.number + 1 : null;
+  const rows = [
+    ['Block', fmt(b.number)], ['Hash', `<span class="mono">${esc(b.hash)}</span>`],
+    ['Parent', b.number > 1 ? link('block', b.parent, b.parent) : '–'], ['Time', dt(b.time) + ' · ' + new Date(b.time).toISOString().slice(0, 19).replace('T', ' ') + ' UTC'],
+    ['Confirmations', conf != null ? fmt(conf) : '–'], ['Transactions', fmt(b.txs)],
+    ['ZP transferred', zp(b.moved) + ' ZP'], ['Block reward', zp(b.reward) + ' ZP'], ['Fees', zp(b.fees) + ' ZP'],
+    ['Miner', b.miner ? `<span class="mono">${esc(b.miner)}</span>` : '–'], ['Difficulty (compact)', fmt(b.difficulty)],
+  ];
+  return '<section><h2>Summary</h2><div class="kv2">' + rows.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join('') + '</div>' +
+    `<div class="pager"><span>${b.number > 1 ? link('block', b.number - 1, '← Block ' + fmt(b.number - 1)) : ''}</span><span>${tip && b.number < tip ? link('block', b.number + 1, 'Block ' + fmt(b.number + 1) + ' →') : ''}</span></div></section>`;
+}
+async function showBlock(id) {
+  const d = await get('/block/' + id);
+  $('title').textContent = 'Block ' + fmt(d.block.number);
+  $('sub').textContent = dt(d.block.time) + (d.source === 'node' ? ' · read from the node (not indexed yet)' : '');
+  $('view').innerHTML = summary(d.block, d.tip) + `<section><h2>Transactions (${d.transactions.length})</h2>${d.transactions.map(txHtml).join('')}</section>`;
+}
+async function showTx(id) {
+  const d = await get('/tx/' + id);
+  $('title').textContent = 'Transaction';
+  $('sub').innerHTML = 'In ' + link('block', d.block.number, 'block ' + fmt(d.block.number)) + ' · ' + dt(d.block.time);
+  $('view').innerHTML = `<section><h2>Summary</h2><div class="kv2"><div>Hash</div><div class="mono">${esc(d.transaction.hash)}</div><div>Block</div><div>${link('block', d.block.number, fmt(d.block.number))}</div><div>Confirmations</div><div>${fmt(d.tip - d.block.number + 1)}</div><div>Inputs · outputs</div><div>${d.transaction.inputs.length} · ${d.transaction.outputs.length}</div>${d.transaction.contract ? `<div>Contract</div><div>${esc(d.transaction.contract === 'deploy' ? 'deploys a contract' : d.transaction.contract + ' · ' + (d.transaction.command || ''))}</div>` : ''}</div></section>` +
+    `<section><h2>Inputs → outputs</h2>${txHtml(d.transaction)}</section>`;
+}
+async function showBlocks(before) {
+  const d = await get('/blocks?take=50' + (before ? '&before=' + before : ''));
+  $('title').textContent = 'Latest blocks';
+  $('sub').textContent = 'Tip ' + fmt(d.tip) + (d.indexedTo < d.tip - 20 ? ' · history indexed to block ' + fmt(d.indexedTo) + ' (in progress)' : '');
+  const last = d.blocks.at(-1)?.number;
+  $('view').innerHTML = '<section><div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
+    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td class="mono" title="${esc(b.miner || '')}">${esc(short(b.miner))}</td></tr>`).join('') +
+    `</table></div><div class="pager"><span></span><span>${last > 1 ? `<a href="?before=${last}">Older →</a>` : ''}</span></div></section>`;
+}
+$('search').addEventListener('submit', async e => {
+  e.preventDefault();
+  const s = new FormData(e.target).get('q').trim(); if (!s) return;
+  try { const r = await get('/search/' + encodeURIComponent(s));
+    if (r.kind === 'block' || r.kind === 'tx') location.search = '?' + r.kind + '=' + encodeURIComponent(r.id);
+    else if (r.kind === 'address') location.href = '/wallet/';
+    else $('sub').textContent = 'Nothing found for that text.';
+  } catch (err) { $('sub').textContent = err.message; }
+});
+fetch('/assets.json').then(r => r.json()).then(d => { for (const a of d.assets || []) if (a.name) names[a.asset] = a.name; }).catch(() => {}).finally(() => {
+  const p = new URLSearchParams(location.search);
+  const go = p.get('block') ? showBlock(p.get('block')) : p.get('tx') ? showTx(p.get('tx')) : showBlocks(p.get('before'));
+  go.catch(err => { $('sub').textContent = err.message; $('view').innerHTML = ''; });
+});
+</script>
+</body>
+</html>
