@@ -112,7 +112,7 @@ dotnet restore --source ./packages-mirror --source https://api.nuget.org/v3/inde
 2. **Snapshots.** After each snapshot refresh run `bash scripts/publish-snapshot-release.sh` on the server (needs `gh auth login` once) to update the GitHub copy. Anyone who runs a node can publish a snapshot the same way.
 3. **The GitHub repository.** Anyone can `git clone` it; keep at least one more clone or fork in another account.
 
-Anyone can verify a snapshot before trusting it: the node validates every block it replays from its own database only up to what it has, so the strongest check is the replay gate (`scripts/check-against-reference.sh`, hashes of the first 1,053 blocks and the CGP state).
+Every download is checked against its sha256 before use. A snapshot is only a shortcut: the node keeps validating every new block, and the replay gate (`scripts/check-against-reference.sh`: hashes of the first 1,053 blocks and the CGP state) shows that a node built from the sources reproduces the same chain.
 
 ## Linux server (node only)
 
