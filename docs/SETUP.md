@@ -128,7 +128,7 @@ curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-scr
 | 4. Firewall | Opens 9655 in `ufw` when it is active; otherwise reminds you about a cloud firewall | |
 | 5. Settings | Writes `.env`: external IP, miner threads (0), public-node flag | |
 | 6. Image | `docker compose pull`: the ready image `ghcr.io/alonp1/zen-node` (official 1.0.13 binaries, Mono 6.12) | Registry not reachable: builds the image locally, taking the binaries from MyGet or, if gone, from our `upstream-mirror` release |
-| 7. Snapshot | Loads the newest chain snapshot (about 2.5 GB, chain data only, never a wallet) unless chain data already exists. Sources in order: `SNAPSHOT_URL`, each entry of `snapshotSources` in `network.json` (this server, then the GitHub release), the official Feb-2023 file. Every source is checked against the sha256 in its `latest.json`, the zip is test-extracted, the chain folder is located and only then replaces `/data/main` (wallet files are skipped) | A source that is down or has a wrong checksum is skipped; with none left the old official snapshot is used and the node syncs the rest |
+| 7. Snapshot | Loads the newest chain snapshot (about 5 GB, chain data only, never a wallet) unless chain data already exists. Sources in order: `SNAPSHOT_URL`, each entry of `snapshotSources` in `network.json` (this server, then the GitHub release), the official Feb-2023 file. Every source is checked against the sha256 in its `latest.json`, the zip is test-extracted, the chain folder is located and only then replaces `/data/main` (wallet files are skipped) | A source that is down or has a wrong checksum is skipped; with none left the old official snapshot is used and the node syncs the rest |
 | 8. Start | `docker compose up -d`; at start the node refreshes its seeds from `network.json`; waits for the API and prints `blockchain/info` | API not up after about 2 minutes: prints where to read the logs |
 
 Done when `blocks` equals `headers` and `initialBlockDownload` is `false`. Run the command again to update (code and image; chain data is kept). Options: `MINER_THREADS`, `PUBLIC_NODE=1`, `SKIP_SNAPSHOT=1`, `DIR`.
@@ -202,7 +202,7 @@ docker compose up -d
 bash site/setup-site.sh
 ```
 
-The node is down for about 10 minutes while zipping. Snapshots never contain wallets. Old snapshots in `zen-data/snapshots` can be deleted manually (about 2.5 GB each).
+The node is down for about 10 minutes while zipping. Snapshots never contain wallets. Old snapshots in `zen-data/snapshots` can be deleted manually (about 5 GB each).
 
 ## Home computer (node + miner)
 

@@ -21,7 +21,7 @@ SUDO=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo"
 
 echo "== Checks"
 FREE_GB=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc '0-9')
-echo "free disk: ${FREE_GB}G (needs 20)"
+echo "free disk: ${FREE_GB}G (needs 20, the snapshot is about 5 GB)"
 [ "$FREE_GB" -ge 20 ] || { echo "Need at least 20 GB free disk. Aborting."; exit 1; }
 if [ ! -d "$DIR/.git" ]; then   # first install: the ports must be free
   for p in 9655 11567; do
@@ -57,7 +57,7 @@ echo "== Node image"
 $D compose pull zen-node 2>/dev/null || { echo "Registry not reachable: building the image here (10-20 minutes)"; $D compose build; }
 
 if [ "${SKIP_SNAPSHOT:-0}" != "1" ] && [ ! -d "${ZEN_DATA:-$DIR/zen-data}/main/blockchaindb" ]; then
-  echo "== Chain snapshot (about 2.5 GB, checked against its sha256)"
+  echo "== Chain snapshot (about 5 GB, checked against its sha256)"
   $D compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
 fi
 

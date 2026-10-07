@@ -24,7 +24,7 @@ docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
 docker compose up -d
 ```
 
-The snapshot (~2.4 GB, chain data only, no wallets) lets the node skip almost all of the initial sync. If the community snapshot is unavailable the loader falls back to the official Feb-2023 one. Run it from one terminal only – two parallel downloads corrupt the file.
+The snapshot (~5 GB, chain data only, no wallets) lets the node skip almost all of the initial sync. If the community snapshot is unavailable the loader falls back to the official Feb-2023 one. Run it from one terminal only – two parallel downloads corrupt the file.
 
 **Windows:** first run `Set-Content .env "ZEN_DATA=zen-data"` so data lives in a Docker volume. A Windows folder is ~4x slower for the database.
 
