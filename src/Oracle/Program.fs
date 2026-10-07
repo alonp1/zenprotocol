@@ -97,6 +97,9 @@ let serve (s: Settings) =
 let main argv =
     match List.ofArray argv with
     | [ "selftest" ] -> if SelfTest.run () then 0 else 1
+    | "body" :: specs ->
+        printfn "%s" (Body.build specs)
+        0
     | [ "once" ] ->
         let s = settings ()
         round s (Providers.create s.Provider)
@@ -112,5 +115,5 @@ let main argv =
             Thread.Sleep(TimeSpan.FromMinutes(float s.IntervalMinutes))
         0
     | _ ->
-        eprintfn "usage: zen-oracle [run|once|selftest]   (settings from ORACLE_* environment variables, see docs/ORACLE.md)"
+        eprintfn "usage: zen-oracle [run|once|selftest|body]   (settings from ORACLE_* environment variables, see docs/ORACLE.md)"
         2

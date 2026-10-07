@@ -29,6 +29,8 @@ let run () : bool =
                            | Zen.Types.Data.Hash h -> h = Hash.bytes root
                            | _ -> false))
                | _ -> false)
+          check "body builder: the Commit dictionary equals the hand-built one"
+              (Body.build [ "Commit:h=" + Leaf.hex root ] = Leaf.commitMessageBody root)
           check "the commit hash depends on root and timestamp and is stable"
               (let a = Leaf.commitHash root 1234UL
                a = Leaf.commitHash root 1234UL && a <> Leaf.commitHash root 1235UL && a <> root)
