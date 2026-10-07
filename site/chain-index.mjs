@@ -85,6 +85,7 @@ try {                                           // one run at a time
 }
 process.on('exit', () => { try { fs.unlinkSync(lockFile); } catch { /* gone */ } });
 
+const T0 = Date.now(), lap = what => console.log(`chain-index: timing ${what} at +${((Date.now() - T0) / 1000).toFixed(1)} s`);
 const db = new DatabaseSync(DB);
 db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=60000;
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
@@ -109,6 +110,7 @@ CREATE INDEX IF NOT EXISTS addr_txs_block ON addr_txs(address, block, idx);`);
 // ZP in the outputs of a transaction (without the fee), for searching by amount; added after the first release of the index
 if (!db.prepare("SELECT 1 FROM pragma_table_info('txs') WHERE name='zp'").get()) db.exec('ALTER TABLE txs ADD COLUMN zp INTEGER');
 db.exec('CREATE INDEX IF NOT EXISTS txs_zp ON txs(zp)');
+lap('database opened and tables checked');
 const q = {
   meta: db.prepare('SELECT v FROM meta WHERE k=?'), setMeta: db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)'),
   utxoGet: db.prepare('SELECT asset, address, amount FROM utxo WHERE outpoint=?'),
@@ -247,6 +249,7 @@ if (!migrated) {
 
 // ---- index new blocks ------------------------------------------------------------------------
 const tip = (await api('/blockchain/info')).blocks;
+lap('node answered /blockchain/info');
 let last = Number(meta('last', '0'));
 const target = tip - CONFIRM, start = Date.now(), from = last;
 while (migrated && last < target && Date.now() - start < BUDGET) {
@@ -275,6 +278,7 @@ while (migrated && last < target && Date.now() - start < BUDGET) {
     last = upto;
   } catch (e) { db.exec('ROLLBACK'); console.log(`chain-index: stopped in ${last + 1}-${upto}: ${e.stack}`); process.exitCode = 1; break; }
 }
+lap('new blocks indexed');
 const secs = (Date.now() - start) / 1000;
 console.log(`chain-index: block ${last} of ${tip} (${last >= target ? 'synced' : 'catching up'}, ${Math.round((last - from) / Math.max(1, secs))} blocks/s)`);
 const complete = last >= target;
@@ -340,6 +344,7 @@ function writeJson(name, data) {
   const tmp = path.join(WEB, name + '.tmp');
   fs.writeFileSync(tmp, JSON.stringify(data)); fs.renameSync(tmp, path.join(WEB, name));
 }
+lap('vote weights and cgp history ready');
 writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, intervals: out });
 
 // ---- assets.json ------------------------------------------------------------------------------
@@ -362,4 +367,5 @@ const rows = db.prepare('SELECT asset, contract, minted, destroyed, txs, first_b
            outstanding: Number(outstanding.get(r.asset) || 0n) / 1e8, minted: Number(BigInt(r.minted)) / 1e8,
            destroyed: Number(BigInt(r.destroyed)) / 1e8, holders: holders.get(r.asset)?.size || 0, txs: r.txs, firstBlock: r.first_block };
 }).sort((x, y) => (x.asset !== '00') - (y.asset !== '00') || y.txs - x.txs);
+lap('assets computed');
 writeJson('assets.json', { updated: Date.now(), indexedTo: last, tip, complete, assets: rows });
