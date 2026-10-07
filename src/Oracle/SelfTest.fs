@@ -23,9 +23,11 @@ let run () : bool =
               (let bytes = Convert.FromHexString(Leaf.commitMessageBody root)
                match Serialization.Data.deserialize bytes with
                | Some (Zen.Types.Data.Collection (Zen.Types.Data.Dict (map, _))) ->
-                   (match Map.tryFind "Commit" map with
-                    | Some (Zen.Types.Data.Hash h) -> h = Hash.bytes root
-                    | _ -> false)
+                   map |> Map.toList |> List.exists (fun (k, v) ->
+                       ZFStar.fstToFsString k = "Commit"
+                       && (match v with
+                           | Zen.Types.Data.Hash h -> h = Hash.bytes root
+                           | _ -> false))
                | _ -> false)
           check "the mock provider is deterministic"
               (let m = Providers.Mock() :> Providers.Provider
