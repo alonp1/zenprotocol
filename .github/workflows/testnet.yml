@@ -6,6 +6,7 @@ on:
     inputs:
       rates:   { description: 'tx/s steps, comma separated', default: '5,20' }
       seconds: { description: 'seconds per step', default: '10' }
+      split:   { description: 'outputs per splitting transaction (fewer mined blocks needed when higher)', default: '500' }
   push:
     branches: [node-upgrade-script]
     paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
@@ -44,7 +45,7 @@ jobs:
         run: |
           cd wallet && npm ci --no-audit --no-fund && cd ..
           set +e
-          node scripts/devnet/loadgen.mjs --node http://127.0.0.1:31567 --nodes 31567,31568,31569 --rates "${{ inputs.rates || '5,20' }}" --seconds "${{ inputs.seconds || '10' }}" --out testnet-result.json > /tmp/load.txt 2>&1
+          node scripts/devnet/loadgen.mjs --node http://127.0.0.1:31567 --nodes 31567,31568,31569 --rates "${{ inputs.rates || '5,20' }}" --seconds "${{ inputs.seconds || '10' }}" --split "${{ inputs.split || '100' }}" --out testnet-result.json > /tmp/load.txt 2>&1
           RC=$?
           tail -n 45 /tmp/load.txt | python3 -c "import sys;print('::notice title=load output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
