@@ -100,12 +100,21 @@ CREATE TABLE IF NOT EXISTS blocks (number INTEGER PRIMARY KEY, hash TEXT, parent
                                    txs INTEGER, reward TEXT, fees TEXT, moved TEXT, miner TEXT);
 CREATE INDEX IF NOT EXISTS blocks_hash ON blocks(hash);
 CREATE TABLE IF NOT EXISTS txs (hash TEXT PRIMARY KEY, block INTEGER, idx INTEGER, inputs TEXT, outputs TEXT, contract TEXT, command TEXT);
-CREATE INDEX IF NOT EXISTS txs_block ON txs(block);`);
+CREATE INDEX IF NOT EXISTS txs_block ON txs(block);
+CREATE INDEX IF NOT EXISTS blocks_time ON blocks(time);
+CREATE INDEX IF NOT EXISTS blocks_ntx ON blocks(txs);
+-- one row per (address, transaction): ZP received and sent by the address in that transaction (base units)
+CREATE TABLE IF NOT EXISTS addr_txs (address TEXT, tx TEXT, block INTEGER, idx INTEGER, recv INTEGER, sent INTEGER, PRIMARY KEY (address, tx));
+CREATE INDEX IF NOT EXISTS addr_txs_block ON addr_txs(address, block, idx);`);
+// ZP in the outputs of a transaction (without the fee), for searching by amount; added after the first release of the index
+if (!db.prepare("SELECT 1 FROM pragma_table_info('txs') WHERE name='zp'").get()) db.exec('ALTER TABLE txs ADD COLUMN zp INTEGER');
+db.exec('CREATE INDEX IF NOT EXISTS txs_zp ON txs(zp)');
 const q = {
   meta: db.prepare('SELECT v FROM meta WHERE k=?'), setMeta: db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)'),
   utxoGet: db.prepare('SELECT asset, address, amount FROM utxo WHERE outpoint=?'),
   blockPut: db.prepare('INSERT OR REPLACE INTO blocks VALUES (?,?,?,?,?,?,?,?,?,?)'),
-  txPut: db.prepare('INSERT OR REPLACE INTO txs VALUES (?,?,?,?,?,?,?)'), utxoDel: db.prepare('DELETE FROM utxo WHERE outpoint=?'),
+  txPut: db.prepare('INSERT OR REPLACE INTO txs(hash, block, idx, inputs, outputs, contract, command, zp) VALUES (?,?,?,?,?,?,?,?)'),
+  addrPut: db.prepare('INSERT OR IGNORE INTO addr_txs VALUES (?,?,?,?,?,?)'), utxoDel: db.prepare('DELETE FROM utxo WHERE outpoint=?'),
   utxoPut: db.prepare('INSERT OR REPLACE INTO utxo VALUES (?,?,?,?)'),
   assetNew: db.prepare('INSERT OR IGNORE INTO assets(asset, contract, first_block) VALUES (?,?,?)'),
   assetGet: db.prepare('SELECT minted, destroyed FROM assets WHERE asset=?'),
@@ -122,6 +131,19 @@ function addressOf(lock) {
   if (lock.type === 'Coinbase') return encodeAddress(lock.pkHash, 'main');
   if (lock.type === 'Contract') return contractAddress(cidStr(lock.contractId));
   return null;
+}
+
+// rows [address|kind, asset, amount] -> ZP total of real outputs, and per address ZP received / sent
+const isAddr = a => typeof a === 'string' && /^c?(zen|tzn)1/.test(a);
+function txFigures(ins, outs) {
+  let zp = 0, by = new Map();
+  const get = a => by.get(a) || by.set(a, { recv: 0, sent: 0 }).get(a);
+  for (const [a, asset, amount] of outs) {
+    if (asset === '00' && a !== 'Fee') zp += Number(amount);
+    if (isAddr(a)) get(a).recv += asset === '00' ? Number(amount) : 0;
+  }
+  for (const [a, asset, amount] of ins) if (isAddr(a)) get(a).sent += asset === '00' ? Number(amount) : 0;
+  return { zp, by };
 }
 
 function indexBlock(n, raw) {
@@ -167,7 +189,9 @@ function indexBlock(n, raw) {
       if (o.lock.type === 'Coinbase' && !blockMiner) blockMiner = addr;
     });
     const cw0 = tx.witnesses.find(w => w.type === 'Contract');
-    q.txPut.run(th, n, txIdx, JSON.stringify(ins), JSON.stringify(outs), tx.contract ? 'deploy' : cw0 ? cidStr(cw0.contractId) : null, cw0 ? cw0.command : null);
+    const fig = txFigures(ins, outs);
+    q.txPut.run(th, n, txIdx, JSON.stringify(ins), JSON.stringify(outs), tx.contract ? 'deploy' : cw0 ? cidStr(cw0.contractId) : null, cw0 ? cw0.command : null, fig.zp);
+    for (const [a, v] of fig.by) q.addrPut.run(a, th, n, txIdx, v.recv, v.sent);
     // allocation in force: CGP share of the coinbase of the first block seen in each interval
     if (miner > 0n) {
       const iv = Math.floor((n - 1) / INTERVAL) + 1;
@@ -197,11 +221,35 @@ function indexBlock(n, raw) {
                  String(reward), String(fees), String(moved), blockMiner);
 }
 
+// ---- one-time backfill: address rows and ZP amounts for the transactions indexed before they existed -----------
+// Resumable inside the time budget; new blocks are only indexed once it is done, so no block is skipped.
+const start0 = Date.now();
+let migrated = meta('addrmig', '') === 'done';
+if (!migrated) {
+  const sel = db.prepare('SELECT rowid AS rid, hash, block, idx, inputs, outputs FROM txs WHERE rowid > ? ORDER BY rowid LIMIT 5000');
+  const upd = db.prepare('UPDATE txs SET zp=? WHERE hash=?');
+  let cur = Number(meta('addrmig_cursor', '0')), rows;
+  while (Date.now() - start0 < BUDGET * 0.8 && (rows = sel.all(cur)).length) {
+    db.exec('BEGIN');
+    for (const r of rows) {
+      const f = txFigures(JSON.parse(r.inputs), JSON.parse(r.outputs));
+      upd.run(f.zp, r.hash);
+      for (const [a, v] of f.by) q.addrPut.run(a, r.hash, r.block, r.idx, v.recv, v.sent);
+    }
+    cur = rows.at(-1).rid;
+    q.setMeta.run('addrmig_cursor', String(cur));
+    db.exec('COMMIT');
+  }
+  migrated = sel.all(cur).length === 0;
+  if (migrated) { q.setMeta.run('addrmig', 'done'); console.log('chain-index: address index and amounts backfilled'); }
+  else console.log(`chain-index: backfilling the address index (row ${cur}), indexing continues when done`);
+}
+
 // ---- index new blocks ------------------------------------------------------------------------
 const tip = (await api('/blockchain/info')).blocks;
 let last = Number(meta('last', '0'));
 const target = tip - CONFIRM, start = Date.now(), from = last;
-while (last < target && Date.now() - start < BUDGET) {
+while (migrated && last < target && Date.now() - start < BUDGET) {
   const upto = Math.min(target, last + TAKE);
   let blocks;
   try {

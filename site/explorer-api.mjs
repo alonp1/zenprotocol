@@ -5,6 +5,11 @@
 //   GET /explorer/api/block/<number|hash>               block summary + its transactions
 //   GET /explorer/api/tx/<hash>                         one transaction
 //   GET /explorer/api/search/<text>                     where a number, hash or address leads
+//   GET /explorer/api/address/<address>?page=&take=&from=&to=&minZp=&maxZp=
+//                                                       live balances (node address index) + the address's transactions
+//   GET /explorer/api/find/blocks?from=&to=&minTxs=&maxTxs=&minZp=&maxZp=&miner=&order=&page=&take=
+//   GET /explorer/api/find/txs?address=&from=&to=&minZp=&maxZp=&asset=&kind=&order=&page=&take=
+//                                                       dates are YYYY-MM-DD (UTC), amounts are in ZP, order/kind: see below
 //
 // Blocks not indexed yet (the index fills from genesis) are read from the node directly; near
 // the tip that is fast. Run by the zen-explorer service (setup-site.sh).
@@ -17,6 +22,7 @@ const DB = arg('db', '/var/lib/zen-stats/chain-index.sqlite');
 const HEX64 = /^[0-9a-f]{64}$/;
 
 let db = null, q = null;
+const ready = () => open() && q.mig.get()?.v === 'done';
 function open() {
   if (db) return true;
   try {
@@ -27,6 +33,7 @@ function open() {
       blocks: db.prepare('SELECT * FROM blocks WHERE number < ? ORDER BY number DESC LIMIT ?'),
       byNum: db.prepare('SELECT * FROM blocks WHERE number=?'), byHash: db.prepare('SELECT * FROM blocks WHERE hash=?'),
       txsOf: db.prepare('SELECT * FROM txs WHERE block=? ORDER BY idx'), tx: db.prepare('SELECT * FROM txs WHERE hash=?'),
+      mig: db.prepare("SELECT v FROM meta WHERE k='addrmig'"),
     };
     return true;
   } catch { db = null; return false; }
@@ -76,6 +83,72 @@ function fromNodeJson(j) {
   };
 }
 
+
+// ---- search --------------------------------------------------------------------------------------
+const bad = m => Object.assign(new Error(m), { status: 400 });
+const ADDRESS = /^c?(zen|tzn)1[0-9a-z]{20,90}$/, ASSET = /^[0-9a-f]{8,144}$/;
+const whole = (v, name) => { if (v == null || v === '') return undefined; if (!/^\d{1,15}$/.test(v)) throw bad(name + ' must be a whole number'); return Number(v); };
+const zpUnits = (v, name) => { if (v == null || v === '') return undefined; if (!/^\d{1,10}(\.\d{1,8})?$/.test(v)) throw bad(name + ' must be an amount in ZP'); return Math.round(Number(v) * 1e8); };
+const day = (v, name, end) => { if (!v) return undefined; if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v + 'T00:00:00Z'))) throw bad(name + ' must be a date YYYY-MM-DD'); return Date.parse(v + 'T00:00:00Z') + (end ? 86399999 : 0); };
+const pick = (v, allowed, def) => { if (v == null || v === '') return def; if (!allowed.includes(v)) throw bad('unknown option ' + v); return v; };
+const LIMIT = 100000;   // counts and offsets stop here
+
+// a growing list of conditions: where.add('b.time >= ?', value) is skipped when value is undefined
+function conditions() {
+  const parts = [], params = [];
+  return { add(sql, v) { if (v !== undefined) { parts.push(sql); params.push(v); } }, raw(sql) { parts.push(sql); },
+           get sql() { return parts.length ? 'WHERE ' + parts.join(' AND ') : ''; }, params };
+}
+function paging(query) {
+  const take = Math.min(100, Math.max(1, whole(query.get('take')) || 25)), page = Math.min(Math.floor(LIMIT / take), Math.max(1, whole(query.get('page')) || 1));
+  return { take, page, offset: (page - 1) * take };
+}
+const total = (from, w) => { const c = db.prepare(`SELECT COUNT(*) c FROM (SELECT 1 ${from} ${w.sql} LIMIT ${LIMIT + 1})`).get(...w.params).c; return { total: Math.min(c, LIMIT), capped: c > LIMIT }; };
+
+function findBlocks(query) {
+  const w = conditions(), { take, page, offset } = paging(query);
+  w.add('time >= ?', day(query.get('from'), 'from')); w.add('time <= ?', day(query.get('to'), 'to', true));
+  w.add('txs >= ?', whole(query.get('minTxs'), 'minTxs')); w.add('txs <= ?', whole(query.get('maxTxs'), 'maxTxs'));
+  w.add('CAST(moved AS INTEGER) >= ?', zpUnits(query.get('minZp'), 'minZp')); w.add('CAST(moved AS INTEGER) <= ?', zpUnits(query.get('maxZp'), 'maxZp'));
+  const miner = query.get('miner'); if (miner) { if (!ADDRESS.test(miner)) throw bad('miner must be an address'); w.add('miner = ?', miner); }
+  const order = { newest: 'number DESC', oldest: 'number ASC', txs: 'txs DESC, number DESC', zp: 'CAST(moved AS INTEGER) DESC, number DESC' }[pick(query.get('order'), ['newest', 'oldest', 'txs', 'zp'], 'newest')];
+  const rows = db.prepare(`SELECT * FROM blocks ${w.sql} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...w.params, take, offset);
+  return { ...total('FROM blocks', w), page, take, blocks: rows.map(blockRow) };
+}
+
+// kind: all | transfers (not block rewards) | rewards | contracts;  order: newest | oldest | largest
+function findTxs(query, address) {
+  const w = conditions(), { take, page, offset } = paging(query);
+  address ??= query.get('address') || undefined;
+  if (address && !ADDRESS.test(address)) throw bad('not an address');
+  const from = address ? 'FROM addr_txs a JOIN txs t ON t.hash = a.tx JOIN blocks b ON b.number = a.block' : 'FROM txs t JOIN blocks b ON b.number = t.block';
+  if (address) w.add('a.address = ?', address);
+  w.add('b.time >= ?', day(query.get('from'), 'from')); w.add('b.time <= ?', day(query.get('to'), 'to', true));
+  w.add('t.zp >= ?', zpUnits(query.get('minZp'), 'minZp')); w.add('t.zp <= ?', zpUnits(query.get('maxZp'), 'maxZp'));
+  const asset = query.get('asset');
+  if (asset && asset !== '00' && asset.toLowerCase() !== 'zp') { if (!ASSET.test(asset)) throw bad('asset must be an asset ID'); w.add('instr(t.outputs, ?) > 0', '"' + asset + '"'); }
+  const kind = pick(query.get('kind'), ['all', 'transfers', 'rewards', 'contracts'], 'all');
+  if (kind === 'transfers') w.raw('t.idx > 0'); else if (kind === 'rewards') w.raw('t.idx = 0'); else if (kind === 'contracts') w.raw('t.contract IS NOT NULL');
+  const order = { newest: 't.block DESC, t.idx DESC', oldest: 't.block ASC, t.idx ASC', largest: 't.zp DESC, t.block DESC' }[pick(query.get('order'), ['newest', 'oldest', 'largest'], 'newest')];
+  const rows = db.prepare(`SELECT t.hash, t.block, t.idx, t.zp, t.contract, t.command, b.time${address ? ', a.recv, a.sent' : ''} ${from} ${w.sql} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...w.params, take, offset);
+  return { ...total(from, w), page, take, transactions: rows.map(r => ({ hash: r.hash, block: r.block, index: r.idx, time: r.time, zp: r.zp, contract: r.contract, command: r.command, ...(address ? { received: r.recv, sent: r.sent } : {}) })) };
+}
+
+async function nodePost(path, body, timeout = 20000) {
+  const r = await fetch(NODE + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) });
+  if (!r.ok) throw new Error('node ' + r.status);
+  return r.json();
+}
+async function address(addr, query) {
+  if (!ADDRESS.test(addr)) throw bad('not an address');
+  const sum = db.prepare('SELECT COUNT(*) n, MIN(block) fb, MAX(block) lb, SUM(recv) r, SUM(sent) s FROM addr_txs WHERE address=?').get(addr);
+  const timeOf = n => n == null ? null : q.byNum.get(n)?.time ?? null;
+  let balances = null;   // live from the node's address index; the history comes from our index
+  try { balances = (await nodePost('/addressdb/balance', { addresses: [addr] })).map(x => ({ asset: x.asset, amount: String(x.balance) })); } catch { /* node busy or not a known address */ }
+  return { address: addr, balances, summary: { transactions: sum.n, firstBlock: sum.fb, firstTime: timeOf(sum.fb), lastBlock: sum.lb, lastTime: timeOf(sum.lb), receivedZp: sum.r ?? 0, sentZp: sum.s ?? 0 },
+           ...findTxs(query, addr) };
+}
+
 async function handle(p, query) {
   const t = await tip();
   const indexed = open() ? Number(q.last.get()?.v || 0) : 0;
@@ -104,6 +177,15 @@ async function handle(p, query) {
     const row = db && q.tx.get(m[1]);
     return row ? { tip: t, transaction: txRow(row), block: blockRow(q.byNum.get(row.block)) } : null;
   }
+  if ((m = p.match(/^\/address\/([0-9a-z]{10,120})$/))) {
+    if (!ready()) throw Object.assign(new Error('the address index is being built'), { status: 503 });
+    return { tip: t, indexedTo: indexed, ...(await address(m[1], query)) };
+  }
+  if (p === '/find/blocks') { if (!open()) throw Object.assign(new Error('index not ready'), { status: 503 }); return { tip: t, indexedTo: indexed, ...findBlocks(query) }; }
+  if (p === '/find/txs') {
+    if (!ready()) throw Object.assign(new Error('the address index is being built'), { status: 503 });
+    return { tip: t, indexedTo: indexed, ...findTxs(query) };
+  }
   if ((m = p.match(/^\/search\/(.{1,100})$/))) {
     const s = decodeURIComponent(m[1]).trim().toLowerCase();
     if (/^\d{1,9}$/.test(s)) return { kind: 'block', id: s };
@@ -129,6 +211,6 @@ http.createServer(async (req, res) => {
     if (out === null) { res.statusCode = 404; return res.end('{"error":"not found"}'); }
     res.end(JSON.stringify(out));
   } catch (e) {
-    res.statusCode = 502; res.end(JSON.stringify({ error: 'node busy, try again' }));
+    res.statusCode = e.status || 502; res.end(JSON.stringify({ error: e.status ? e.message : 'node busy, try again' }));
   }
 }).listen(PORT, '127.0.0.1', () => console.log('explorer api on 127.0.0.1:' + PORT));
