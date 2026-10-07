@@ -85,6 +85,7 @@ systemctl daemon-reload
 systemctl enable --now zen-stats.timer
 systemctl start zen-stats.service || echo "stats not built yet (node busy or syncing) - the timer retries every 5 minutes"
 
+mkdir -p /var/lib/zen-stats
 echo "== Chain index (assets.json, cgp-history.json; first run indexes from genesis in 5-minute steps)"
 cat > /etc/systemd/system/zen-index.service <<UNIT
 [Unit]
@@ -92,7 +93,8 @@ Description=Index the ZP chain for the assets and CGP history pages
 [Service]
 Type=oneshot
 TimeoutStartSec=20min
-ExecStart=/usr/bin/python3 $REPO/site/chain-index.py --web $WEB --budget 270
+# Node 22 in a throwaway container (built-in SQLite; the wallet's block decoder, installed by the wallet build above)
+ExecStart=/usr/bin/docker run --rm --name zen-index --network host -v $REPO:/r:ro -v /var/lib/zen-stats:/var/lib/zen-stats -v $WEB:$WEB node:22-alpine node --no-warnings --experimental-sqlite /r/site/chain-index.mjs --web $WEB --budget 270
 UNIT
 cat > /etc/systemd/system/zen-index.timer <<UNIT
 [Unit]
