@@ -26,12 +26,13 @@ jobs:
           dotnet restore src/Node/Node.fsproj 2>&1 | tee /tmp/restore.log || { grep -E "error" /tmp/restore.log | sort -u | head -40 | sed 's/^/::error title=restore::/'; exit 1; }
 
       - name: Package layout (for porting notes)
-        if: always()
+        continue-on-error: true
         shell: bash
         run: |
+          set +e +o pipefail
           for p in zulib zfstar fsbech32 cgpcontract zen.fsharp.compiler.service zfs-tools zen_secp256k1_linux zen_z3_linux fsnetmq fsharp.core lightningdb; do
             d=$(ls -d ~/.nuget/packages/$p/*/ 2>/dev/null | head -1); [ -n "$d" ] || continue
-            echo "::notice title=pkg $p::$(cd $d && find . -maxdepth 3 -not -name '*.xml' -not -name '*.fst*' | sort | head -40 | tr '\n' ' ')"
+            echo "::notice title=pkg $p::$(cd $d && find . -maxdepth 3 -not -name '*.xml' -not -name '*.fst*' | sort | head -60 | tr '\n' ' ')"
           done
 
       - name: Build node
