@@ -65,9 +65,11 @@ jobs:
       - name: Contract tool runs on Mono
         shell: bash
         run: |
-          cd src/Node/bin/Debug/contract-tool
-          echo '{}' > /tmp/empty.hints
-          mono zen-contract-tool.exe total-queries /tmp/empty.hints; echo "exit $?"
+          cd src/Node/bin/Debug
+          H=$(ls compatibility/v0_contract_hints/*.hints | head -1)
+          Q=$(mono contract-tool/zen-contract-tool.exe total-queries "$H")
+          echo "::notice title=contract tool::total queries of $(basename $H): $Q"
+          [[ "$Q" =~ ^[0-9]+$ ]]
 
       - name: Build tests
         shell: bash

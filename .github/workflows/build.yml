@@ -2,6 +2,7 @@ name: build
 
 on:
   push:
+    branches-ignore: [net10]   # the .NET 10 port has its own workflow (net10.yml)
   pull_request:
   workflow_dispatch:
 
