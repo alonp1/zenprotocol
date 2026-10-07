@@ -9,7 +9,7 @@ on:
       split:   { description: 'outputs per splitting transaction (fewer mined blocks needed when higher)', default: '500' }
   push:
     branches: [node-upgrade-script]
-    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
+    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
 
 jobs:
   testnet:
@@ -41,6 +41,13 @@ jobs:
           curl -fs http://127.0.0.1:31567/blockchain/info | tr -d '\n ' | cut -c1-300
           echo "::notice title=heights::A $(tip 31567) B $(tip 31568) C $(tip 31569); $(curl -fs http://127.0.0.1:31568/blockchain/info | grep -o '"chain": *"[a-z]*"')"
           [ "$(tip 31568)" -ge 10 ] && [ "$(tip 31569)" -ge 10 ]
+      - name: Contract experiment (activate and execute Token.fst)
+        run: |
+          set +e
+          bash scripts/testnet-contract.sh http://127.0.0.1:31567 testnet > /tmp/contract.txt 2>&1
+          RC=$?
+          tail -n 25 /tmp/contract.txt | python3 -c "import sys;print('::notice title=contract output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
       - name: Load test on the release build
         run: |
           cd wallet && npm ci --no-audit --no-fund && cd ..
