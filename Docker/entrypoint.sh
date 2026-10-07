@@ -23,7 +23,7 @@ if [ "$NETWORK_URL" != "off" ]; then
     echo "seeds from network.json: $(echo $NEW)"
   fi
 fi
-run_node() { if [ -f /zen/zen-node.dll ]; then dotnet /zen/zen-node.dll "$@"; else mono /zen/zen-node.exe "$@"; fi; }
+if [ -f /zen/zen-node.dll ]; then NODE=(dotnet /zen/zen-node.dll); else NODE=(mono /zen/zen-node.exe); fi
 ARGS=(--data-path /data --api "*:$API_PORT")
 [ "$NET" = test ] && ARGS+=(--test)
 [ "${MINER_THREADS:-0}" -gt 0 ] && ARGS+=(--miner "$MINER_THREADS")
@@ -32,7 +32,7 @@ if [ "${PUBLIC_NODE:-0}" = "1" ]; then ARGS+=(--remote --origin any)
 elif [ "${WALLET_API:-0}" = "1" ]; then ARGS+=(--addressdb --origin any); fi
 # A known wallet phrase for the miner (test networks only): import it once, before the first real start.
 if [ -n "${TESTNET_MNEMONIC:-}" ] && [ "$NET" = test ] && [ ! -f /data/wallet-imported ]; then
-  run_node "${ARGS[@]}" > /tmp/setup.log 2>&1 & P=$!
+  "${NODE[@]}" "${ARGS[@]}" > /tmp/setup.log 2>&1 & P=$!   # directly, so that kill reaches the node itself
   for _ in $(seq 120); do curl -fs "http://127.0.0.1:$API_PORT/blockchain/info" >/dev/null && break; sleep 1; done
   JSON=$(printf '{"password":"%s","words":[%s]}' "${TESTNET_PASSWORD:-testnet}" "$(echo "$TESTNET_MNEMONIC" | sed 's/[^ ][^ ]*/"&"/g; s/ /,/g')")
   OUT=$(curl -s -X POST -H "Content-Type: application/json" -d "$JSON" "http://127.0.0.1:$API_PORT/wallet/import")
