@@ -21,7 +21,7 @@ if [ ! -f /data/node0/wallet-imported ]; then
   P=$!
   if ! wait_api 20000; then echo "devnet: node 0 did not start"; tail -n 40 /data/logs/node0-setup.log; exit 1; fi
   JSON=$(printf '{"password":"%s","words":[%s]}' "$PASS" "$(echo "$WORDS" | sed 's/[^ ][^ ]*/"&"/g; s/ /,/g')")
-  OUT=$(curl -s -X POST -d "$JSON" http://127.0.0.1:20000/wallet/import)
+  OUT=$(curl -s -X POST -H "Content-Type: application/json" -d "$JSON" http://127.0.0.1:20000/wallet/import)
   echo "devnet: wallet import: $OUT"
   case "$OUT" in *imported*) touch /data/node0/wallet-imported ;; *) tail -n 20 /data/logs/node0-setup.log; exit 1 ;; esac
   kill $P; wait $P 2>/dev/null
