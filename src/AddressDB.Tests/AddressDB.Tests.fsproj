@@ -15,12 +15,7 @@
     <Tailcalls>true</Tailcalls>
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
-  <Import Project="..\..\packages\NUnit\build\NUnit.props" Condition="Exists('..\..\packages\NUnit\build\NUnit.props')" Label="Paket" />
   <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
     <Content Include="app.config" />
   </ItemGroup>
   <ItemGroup>
@@ -28,79 +23,14 @@
     <Compile Include="SerializationTests.fs" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="paket.references" />
+    <ProjectReference Include="..\AddressDB\AddressDB.fsproj" />
+    <ProjectReference Include="..\Consensus.Tests\Consensus.Tests.fsproj" />
+    <ProjectReference Include="..\Consensus\Consensus.fsproj" />
+    <ProjectReference Include="..\Wallet\Wallet.fsproj" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\AddressDB\AddressDB.fsproj">
-      <Project>{9be81a69-5452-4b96-805a-c0906c767adc}</Project>
-      <Name>AddressDB</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Consensus.Tests\Consensus.Tests.fsproj">
-      <Project>{b5e951fc-ae90-4ef1-9365-3e2b5a56b510}</Project>
-      <Name>Consensus.Tests</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Consensus\Consensus.fsproj">
-      <Project>{5ec4457b-615a-4bbd-b3d5-d0e311b9d5e9}</Project>
-      <Name>Consensus</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\Wallet\Wallet.fsproj">
-      <Project>{289a59eb-d1d4-499f-87b9-f75b799829c0}</Project>
-      <Name>Wallet</Name>
-    </ProjectReference>
+    <PackageReference Include="FsUnit" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="FsCheck.NUnit" />
   </ItemGroup>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7'">
-      <ItemGroup>
-        <Reference Include="FsCheck">
-          <HintPath>..\..\packages\FsCheck\lib\net452\FsCheck.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7'">
-      <ItemGroup>
-        <Reference Include="FsCheck.NUnit">
-          <HintPath>..\..\packages\FsCheck.NUnit\lib\net452\FsCheck.NUnit.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7'">
-      <ItemGroup>
-        <Reference Include="FSharp.Core">
-          <HintPath>..\..\packages\FSharp.Core\lib\net45\FSharp.Core.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7'">
-      <ItemGroup>
-        <Reference Include="FsUnit.NUnit">
-          <HintPath>..\..\packages\FsUnit\lib\net46\FsUnit.NUnit.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
-  <Choose>
-    <When Condition="$(TargetFrameworkIdentifier) == '.NETFramework' And $(TargetFrameworkVersion) == 'v4.7'">
-      <ItemGroup>
-        <Reference Include="nunit.framework">
-          <HintPath>..\..\packages\NUnit\lib\net45\nunit.framework.dll</HintPath>
-          <Private>True</Private>
-          <Paket>True</Paket>
-        </Reference>
-      </ItemGroup>
-    </When>
-  </Choose>
 </Project>

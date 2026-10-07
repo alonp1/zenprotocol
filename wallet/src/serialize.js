@@ -144,6 +144,7 @@ const P10 = e => 10n ** BigInt(e);
 export const Amount = {
   write(w, amount) {
     amount = BigInt(amount);
+    if (amount < 0n || amount >= 2n ** 64n) throw new Error('Amount out of range');
     let s = amount, e = 0, f = 0;
     if (amount !== 0n) {
       while (s % 10n === 0n) { s /= 10n; e++; }

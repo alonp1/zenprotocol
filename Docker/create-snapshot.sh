@@ -21,17 +21,21 @@ HEIGHT="${1:-latest}"
 NAME="zen-node-$(date -u +%Y%m%d)-$HEIGHT"
 STAGE="$OUT/.stage"
 
-rm -rf "$STAGE" && mkdir -p "$STAGE/zen-node/$CHAIN" "$OUT"
-cp -a "$SRC" "$STAGE/zen-node/$CHAIN/"
+# stage = symlinks only (zip follows them), so no second copy of the data is needed on disk
+rm -rf "$STAGE" "$OUT/$NAME.zip" "$OUT/$NAME.zip.sha256" && mkdir -p "$STAGE/zen-node/$CHAIN" "$OUT"
+ln -s "$SRC" "$STAGE/zen-node/$CHAIN/blockchaindb"
 # contracts folder (compiled contracts) speeds up startup; include if present
-[ -d "$DATA/$CHAIN/contracts" ] && cp -a "$DATA/$CHAIN/contracts" "$STAGE/zen-node/$CHAIN/" || true
+[ -d "$DATA/$CHAIN/contracts" ] && ln -s "$DATA/$CHAIN/contracts" "$STAGE/zen-node/$CHAIN/contracts" || true
 # address index (if this node runs with WALLET_API/PUBLIC_NODE) saves hours of indexing
-[ -d "$DATA/$CHAIN/addressdb" ] && cp -a "$DATA/$CHAIN/addressdb" "$STAGE/zen-node/$CHAIN/" || true
-# make sure no wallet data slipped in
-find "$STAGE" -iname "*wallet*" -prune -exec rm -rf {} +
+[ -d "$DATA/$CHAIN/addressdb" ] && ln -s "$DATA/$CHAIN/addressdb" "$STAGE/zen-node/$CHAIN/addressdb" || true
+
+need=$(du -sLk "$STAGE" | cut -f1); free=$(df -k --output=avail "$OUT" | tail -1)
+echo "data $((need/1024)) MB, free $((free/1024)) MB"
+[ "$free" -gt "$((need / 2))" ] || { echo "not enough free disk for the zip (needs about half the data size)"; rm -rf "$STAGE"; exit 1; }
 
 echo "== Zipping"
-(cd "$STAGE" && zip -qr -9 "$OUT/$NAME.zip" zen-node)
+# never include wallet data
+(cd "$STAGE" && zip -qr -9 "$OUT/$NAME.zip" zen-node -x '*wallet*' '*Wallet*')
 rm -rf "$STAGE"
 
 (cd "$OUT" && sha256sum "$NAME.zip" > "$NAME.zip.sha256")

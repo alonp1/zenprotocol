@@ -1,49 +1,37 @@
-# ZP node built from THIS repository's source (not the npm release).
-# Used for the replay test and, later, for releases of the community version.
+# ZP node on .NET 10, built from this repository (stage 4 of docs/MIGRATION.md).
+# F* and the contract compiler still run on Mono (contract-tool/), everything else on .NET 10.
 #
-#   docker build -f Docker/Dockerfile.source -t zen-node:source .
+#   docker build -f Docker/Dockerfile.source -t zen-node:source .  (same file as Dockerfile.net10)
 
 # ---- build ----
-FROM mono:6.12 AS build
-RUN sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list \
- && sed -i '/buster-updates/d' /etc/apt/sources.list \
- && apt-get -o Acquire::Check-Valid-Until=false update \
- && apt-get install -y --no-install-recommends git fsharp libgomp1 liblmdb0 ca-certificates curl \
- && curl -fsSL https://curl.se/ca/cacert.pem -o /tmp/cacert.pem && cert-sync /tmp/cacert.pem \
- && curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
- && bash /tmp/dotnet-install.sh --channel 8.0 --install-dir /usr/share/dotnet \
- && rm -rf /var/lib/apt/lists/*
-ENV PATH="/usr/share/dotnet:${PATH}" DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
-
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
-COPY . .
-RUN mono .paket/paket.exe restore \
- && chmod +x packages/zen_z3_linux/output/z3-linux \
- && (chmod +x packages/SpecFlow/tools/specflow.exe || true) \
- && dotnet build src/Node/Node.fsproj -c Release -v minimal -nologo -p:SolutionDir=/src/src/ \
- && dotnet build src/Cli/Cli.fsproj -c Release -v minimal -nologo -p:SolutionDir=/src/src/ \
+COPY nuget.config ./
+COPY src ./src
+RUN dotnet restore src/ContractTool/ContractTool.fsproj \
+ && dotnet restore src/Node/Node.fsproj \
+ && dotnet restore src/Cli/Cli.fsproj \
+ && dotnet build src/ContractTool/ContractTool.fsproj -c Release --no-restore -v minimal \
+ && dotnet build src/Node/Node.fsproj -c Release --no-restore -v minimal \
+ && dotnet build src/Cli/Cli.fsproj -c Release --no-restore -v minimal \
  && mkdir -p /out \
  && cp -r src/Node/bin/Release/. /out/ \
  && cp -rn src/Cli/bin/Release/. /out/ \
- && cp packages/zen_secp256k1_linux/output/libsecp256k1.so /out/ \
- && (cp packages/zen_z3_linux/output/z3-linux /out/ 2>/dev/null || true) \
- && ls /out | head -50
+ && test -f /out/contract-tool/zen-contract-tool.exe && test -f /out/libsecp256k1.so && test -x /out/z3-linux
 
-# ---- runtime ----
-FROM mono:6.12
-RUN sed -i 's|deb.debian.org/debian-security|archive.debian.org/debian-security|g; s|deb.debian.org/debian|archive.debian.org/debian|g; s|security.debian.org|archive.debian.org/debian-security|g' /etc/apt/sources.list \
- && sed -i '/buster-updates/d' /etc/apt/sources.list \
- && apt-get -o Acquire::Check-Valid-Until=false update \
- && apt-get install -y --no-install-recommends liblmdb0 libgomp1 curl unzip zip \
+# ---- runtime: .NET 10 + Mono (for F* and the contract tool only) ----
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends mono-devel liblmdb-dev libgomp1 curl unzip zip ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /out /zen
-RUN cp /zen/libsecp256k1.so /usr/lib/ && (chmod +x /zen/z3-linux 2>/dev/null || true)
 COPY Docker/entrypoint.sh /entrypoint.sh
 COPY Docker/load-snapshot.sh /load-snapshot.sh
 COPY Docker/create-snapshot.sh /create-snapshot.sh
 RUN sed -i "s/\r$//" /entrypoint.sh /load-snapshot.sh /create-snapshot.sh \
- && chmod +x /entrypoint.sh /load-snapshot.sh /create-snapshot.sh
+ && chmod +x /entrypoint.sh /load-snapshot.sh /create-snapshot.sh /zen/z3-linux /zen/contract-tool/z3-linux \
+ && (grep -q "zen.sealinkgps.com" /zen/main.yaml || sed -i 's|^seeds:\s*$|seeds:\n  - zen.sealinkgps.com|' /zen/main.yaml)
 
 WORKDIR /zen
 VOLUME /data

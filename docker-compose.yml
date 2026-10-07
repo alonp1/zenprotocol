@@ -1,5 +1,6 @@
 services:
   zen-node:
+    image: ${ZEN_IMAGE:-ghcr.io/alonp1/zen-node:latest}   # ready-made image; `docker compose build` makes it locally instead
     build:
       context: .
       dockerfile: Docker/Dockerfile

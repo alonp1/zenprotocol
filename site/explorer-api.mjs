@@ -1,0 +1,134 @@
+// Read-only explorer API for the community site, over the chain index (site/chain-index.mjs).
+// Listens on 127.0.0.1 only; nginx publishes it as /explorer/api/ with a rate limit.
+//
+//   GET /explorer/api/blocks?before=<n>&take=<1..100>   latest blocks (summary rows)
+//   GET /explorer/api/block/<number|hash>               block summary + its transactions
+//   GET /explorer/api/tx/<hash>                         one transaction
+//   GET /explorer/api/search/<text>                     where a number, hash or address leads
+//
+// Blocks not indexed yet (the index fills from genesis) are read from the node directly; near
+// the tip that is fast. Run by the zen-explorer service (setup-site.sh).
+import http from 'node:http';
+import { DatabaseSync } from 'node:sqlite';
+
+const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : def; };
+const NODE = arg('api', 'http://127.0.0.1:11567'), PORT = Number(arg('port', 11580));
+const DB = arg('db', '/var/lib/zen-stats/chain-index.sqlite');
+const HEX64 = /^[0-9a-f]{64}$/;
+
+let db = null, q = null;
+function open() {
+  if (db) return true;
+  try {
+    db = new DatabaseSync(DB, { readOnly: true });
+    db.exec('PRAGMA busy_timeout=5000');
+    q = {
+      last: db.prepare("SELECT v FROM meta WHERE k='last'"),
+      blocks: db.prepare('SELECT * FROM blocks WHERE number < ? ORDER BY number DESC LIMIT ?'),
+      byNum: db.prepare('SELECT * FROM blocks WHERE number=?'), byHash: db.prepare('SELECT * FROM blocks WHERE hash=?'),
+      txsOf: db.prepare('SELECT * FROM txs WHERE block=? ORDER BY idx'), tx: db.prepare('SELECT * FROM txs WHERE hash=?'),
+    };
+    return true;
+  } catch { db = null; return false; }
+}
+
+async function node(path, timeout = 30000) {
+  const r = await fetch(NODE + path, { signal: AbortSignal.timeout(timeout) });
+  if (!r.ok) throw new Error('node ' + r.status);
+  return r.json();
+}
+let tipCache = { at: 0, tip: 0 };
+async function tip() {
+  if (Date.now() - tipCache.at > 20000) tipCache = { at: Date.now(), tip: (await node('/blockchain/info')).blocks };
+  return tipCache.tip;
+}
+
+const blockRow = b => ({ number: b.number, hash: b.hash, parent: b.parent, time: b.time, difficulty: b.difficulty, txs: b.txs,
+  reward: b.reward, fees: b.fees, moved: b.moved, miner: b.miner });
+const txRow = t => ({ hash: t.hash, block: t.block, index: t.idx, inputs: JSON.parse(t.inputs), outputs: JSON.parse(t.outputs),
+  contract: t.contract, command: t.command });
+
+// a block straight from the node (JSON form), in the same shape as the index
+function fromNodeJson(j) {
+  const h = j.header, txs = Object.entries(j.transactions || {});
+  let reward = 0n, moved = 0n, miner = null;
+  const subsidy = h.blockNumber < 2 ? 0n : (5000000000n >> BigInt(Math.floor((h.blockNumber - 2) / 800000)));
+  const rows = txs.map(([hash, tx], idx) => {
+    const outs = (tx.outputs || []).map(o => {
+      const l = o.lock, kind = typeof l === 'string' ? l : Object.keys(l)[0], v = typeof l === 'string' ? null : l[kind];
+      const addr = v && typeof v === 'object' ? v.address || null : null, amt = BigInt(o.spend.amount);
+      if (o.spend.asset === '00') {
+        if (idx === 0 && (kind === 'Coinbase' || kind === 'PK' || kind === 'Contract')) reward += amt;
+        else if (kind !== 'Fee') moved += amt;
+      }
+      if (idx === 0 && !miner && (kind === 'Coinbase' || kind === 'PK')) miner = addr;
+      return [addr || kind, o.spend.asset, o.spend.amount];
+    });
+    const ins = (tx.inputs || []).map(i => i.outpoint ? [null, null, null, i.outpoint.txHash + ':' + i.outpoint.index]
+      : ['mint', i.mint.asset, i.mint.amount]);
+    const cw = (tx.witness || []).map(w => w.ContractWitness).find(Boolean);
+    return { hash, block: h.blockNumber, index: idx, inputs: ins, outputs: outs, contract: tx.contract ? 'deploy' : cw?.contractId || null, command: cw?.command || null };
+  });
+  return {
+    block: { number: h.blockNumber, hash: j.hash, parent: h.parent, time: h.timestamp, difficulty: h.difficulty, txs: rows.length,
+             reward: String(reward), fees: String(reward > subsidy ? reward - subsidy : 0n), moved: String(moved), miner },
+    transactions: rows, source: 'node',
+  };
+}
+
+async function handle(p, query) {
+  const t = await tip();
+  const indexed = open() ? Number(q.last.get()?.v || 0) : 0;
+  let m;
+  if (p === '/blocks') {
+    const take = Math.min(100, Math.max(1, Number(query.get('take')) || 25));
+    const before = Math.min(t + 1, Number(query.get('before')) || t + 1);
+    const out = [];
+    // newest blocks may not be indexed yet: read those from the node (cheap near the tip)
+    for (let n = before - 1; n > indexed && out.length < take && n >= 1; n--) out.push(fromNodeJson(await node('/blockchain/block?blockNumber=' + n)).block);
+    if (out.length < take && db) out.push(...q.blocks.all(Math.min(before, indexed + 1), take - out.length).map(blockRow));
+    return { tip: t, indexedTo: indexed, blocks: out };
+  }
+  if ((m = p.match(/^\/block\/(\d{1,9}|[0-9a-f]{64})$/))) {
+    const key = m[1];
+    const row = db && (HEX64.test(key) ? q.byHash.get(key) : q.byNum.get(Number(key)));
+    if (row) return { tip: t, block: blockRow(row), transactions: q.txsOf.all(row.number).map(txRow), source: 'index' };
+    if (!HEX64.test(key) && Number(key) >= 1 && Number(key) <= t)
+      return { tip: t, ...fromNodeJson(await node('/blockchain/block?blockNumber=' + Number(key), 60000)) };
+    if (HEX64.test(key)) {
+      try { return { tip: t, ...fromNodeJson(await node('/blockchain/block?hash=' + key)) }; } catch { /* not a block hash */ }
+    }
+    return null;
+  }
+  if ((m = p.match(/^\/tx\/([0-9a-f]{64})$/))) {
+    const row = db && q.tx.get(m[1]);
+    return row ? { tip: t, transaction: txRow(row), block: blockRow(q.byNum.get(row.block)) } : null;
+  }
+  if ((m = p.match(/^\/search\/(.{1,100})$/))) {
+    const s = decodeURIComponent(m[1]).trim().toLowerCase();
+    if (/^\d{1,9}$/.test(s)) return { kind: 'block', id: s };
+    if (HEX64.test(s)) {
+      if (db && q.tx.get(s)) return { kind: 'tx', id: s };
+      return { kind: 'block', id: s };
+    }
+    if (/^c?(zen|tzn)1[0-9a-z]{20,90}$/.test(s)) return { kind: 'address', id: s };
+    return { kind: 'none' };
+  }
+  return undefined;
+}
+
+http.createServer(async (req, res) => {
+  const u = new URL(req.url, 'http://x');
+  const p = u.pathname.replace(/^\/explorer\/api/, '');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache');
+  if (req.method !== 'GET') { res.statusCode = 405; return res.end('{}'); }
+  try {
+    const out = await handle(p, u.searchParams);
+    if (out === undefined) { res.statusCode = 404; return res.end('{"error":"unknown path"}'); }
+    if (out === null) { res.statusCode = 404; return res.end('{"error":"not found"}'); }
+    res.end(JSON.stringify(out));
+  } catch (e) {
+    res.statusCode = 502; res.end(JSON.stringify({ error: 'node busy, try again' }));
+  }
+}).listen(PORT, '127.0.0.1', () => console.log('explorer api on 127.0.0.1:' + PORT));

@@ -1,0 +1,81 @@
+<Project>
+  <!-- Versions pinned exactly to paket.lock of release 1.0.13 (consensus safety: same libraries).
+       Transitive pinning makes indirect dependencies use these versions too. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.NETFramework.ReferenceAssemblies.net47" Version="[1.0.3]" />
+    <!-- 16.11: last test SDK that accepts Newtonsoft.Json 12.0.1 (the node's pinned version) -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
+    <PackageVersion Include="NUnit3TestAdapter" Version="4.6.0" />
+    <PackageVersion Include="Argu" Version="[5.1]" />
+    <PackageVersion Include="AsyncIO" Version="[0.1.69]" />
+    <PackageVersion Include="Base58Check" Version="[0.2]" />
+    <PackageVersion Include="BouncyCastle" Version="[1.8.4]" />
+    <PackageVersion Include="CGPContract" Version="[0.0.3]" />
+    <PackageVersion Include="FAKE" Version="[4.64.13]" />
+    <PackageVersion Include="FParsec" Version="[1.0.3]" />
+    <PackageVersion Include="FsBech32" Version="[0.1.5]" />
+    <PackageVersion Include="FsCheck" Version="[3.0.0-alpha4]" />
+    <PackageVersion Include="FsCheck.NUnit" Version="[3.0.0-alpha4]" />
+    <PackageVersion Include="FSharp.Compatibility.OCaml" Version="[0.1.14]" />
+    <PackageVersion Include="FSharp.Configuration" Version="[1.5]" />
+    <PackageVersion Include="FSharp.Control.AsyncSeq" Version="[2.0.21]" />
+    <PackageVersion Include="FSharp.Control.Reactive" Version="[4.1]" />
+    <PackageVersion Include="FSharp.Core" Version="[4.3.4]" />
+    <PackageVersion Include="FSharp.Data" Version="[3.0]" />
+    <PackageVersion Include="FSharpx.Async" Version="[1.13.2]" />
+    <PackageVersion Include="FSharpx.Collections" Version="[1.17]" />
+    <PackageVersion Include="FSharpx.Extras" Version="[2.2.1]" />
+    <PackageVersion Include="FsNetMQ" Version="[0.2.8]" />
+    <PackageVersion Include="FsPickler" Version="[5.2]" />
+    <PackageVersion Include="FsUnit" Version="[3.4]" />
+    <PackageVersion Include="Hopac" Version="[0.3.23]" />
+    <PackageVersion Include="LightningDB" Version="[0.10]" />
+    <PackageVersion Include="Logary" Version="[4.2.1]" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="[2.1.1]" />
+    <PackageVersion Include="NBitcoin" Version="[4.1.1.72]" />
+    <PackageVersion Include="NetMQ" Version="[4.0.0.207-pre]" />
+    <PackageVersion Include="Newtonsoft.Json" Version="[12.0.1]" />
+    <PackageVersion Include="NodaTime" Version="[1.3.2]" />
+    <PackageVersion Include="NUnit" Version="[3.11]" />
+    <PackageVersion Include="NUnit.ConsoleRunner" Version="[3.9]" />
+    <PackageVersion Include="secp256k1-vc140" Version="[0.1.0.16]" />
+    <PackageVersion Include="System.Buffers" Version="[4.5]" />
+    <PackageVersion Include="System.Collections.Immutable" Version="[1.5]" />
+    <PackageVersion Include="System.IO" Version="[4.3]" />
+    <PackageVersion Include="System.Net.Http" Version="[4.3.4]" />
+    <PackageVersion Include="System.Net.Requests" Version="[4.3]" />
+    <PackageVersion Include="System.Reactive" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Compatibility" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Core" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Experimental" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Interfaces" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Linq" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.PlatformServices" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Providers" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Runtime.Remoting" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Windows.Forms" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reactive.Windows.Threading" Version="[4.1.2]" />
+    <PackageVersion Include="System.Reflection.Metadata" Version="[1.6]" />
+    <PackageVersion Include="System.Runtime" Version="[4.3]" />
+    <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="[4.5.2]" />
+    <PackageVersion Include="System.Security.Cryptography.Algorithms" Version="[4.3.1]" />
+    <PackageVersion Include="System.Security.Cryptography.Encoding" Version="[4.3]" />
+    <PackageVersion Include="System.Security.Cryptography.Primitives" Version="[4.3]" />
+    <PackageVersion Include="System.Security.Cryptography.X509Certificates" Version="[4.3.2]" />
+    <PackageVersion Include="System.Threading.Tasks.Extensions" Version="[4.5.1]" />
+    <PackageVersion Include="System.ValueTuple" Version="[4.5]" />
+    <PackageVersion Include="Zen.FSharp.Compiler.Service" Version="[17.0.2]" />
+    <PackageVersion Include="zen_secp256k1_linux" Version="[0.1.0.26-v6ad5cdb42a1a]" />
+    <PackageVersion Include="zen_secp256k1_osx" Version="[0.1.0.26-v6ad5cdb42a1a]" />
+    <PackageVersion Include="zen_z3_linux" Version="[4.5.1.8-v1f29cebd4df]" />
+    <PackageVersion Include="zen_z3_osx" Version="[4.5.1.8-v1f29cebd4df6]" />
+    <PackageVersion Include="zen_z3_windows" Version="[4.5.1.7-v1f29cebd4df]" />
+    <PackageVersion Include="ZFS-Tools" Version="[0.0.24]" />
+    <PackageVersion Include="ZFStar" Version="[0.0.26]" />
+    <PackageVersion Include="Zulib" Version="[0.3.43]" />
+  </ItemGroup>
+</Project>

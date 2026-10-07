@@ -21,7 +21,16 @@ echo "$DOMAIN -> ${IP:-<no DNS yet>}"
 echo "== Files"
 mkdir -p "$WEB/snapshots"
 cp "$REPO/site/index.html" "$WEB/index.html"
-cp "$REPO/site/stats.html" "$WEB/stats.html"
+cp "$REPO/site/stats.html" "$REPO/site/assets.html" "$REPO/site/cgp.html" "$REPO/site/explorer.html" "$WEB/"
+
+echo "== ZP Wallet (built in a throwaway node container: nothing to install on the server)"
+if command -v docker >/dev/null; then
+  docker run --rm -v "$REPO:/r" -w /r/wallet node:22-alpine sh -c "npm ci --no-audit --no-fund && npm test && npm run build" \
+    && { rm -rf "$WEB/wallet"; mkdir -p "$WEB/wallet"; cp "$REPO"/wallet/dist/* "$WEB/wallet/"; echo "wallet published at /wallet/"; } \
+    || echo "wallet build or tests failed: /wallet/ left as it was"
+else
+  echo "docker not found: skipping the wallet"
+fi
 
 echo "== Publish newest snapshot (hard link, no extra disk)"
 LATEST=$(ls -1t "$SNAPDIR"/zen-node-*.zip 2>/dev/null | head -1 || true)
@@ -76,6 +85,49 @@ systemctl daemon-reload
 systemctl enable --now zen-stats.timer
 systemctl start zen-stats.service || echo "stats not built yet (node busy or syncing) - the timer retries every 5 minutes"
 
+mkdir -p /var/lib/zen-stats
+echo "== Chain index (assets.json, cgp-history.json; first run indexes from genesis in 5-minute steps)"
+cat > /etc/systemd/system/zen-index.service <<UNIT
+[Unit]
+Description=Index the ZP chain for the assets and CGP history pages
+[Service]
+Type=oneshot
+TimeoutStartSec=20min
+# Node 22 in a throwaway container (built-in SQLite; the wallet's block decoder, installed by the wallet build above)
+ExecStart=/usr/bin/docker run --rm --name zen-index --network host -v $REPO:/r:ro -v /var/lib/zen-stats:/var/lib/zen-stats -v $WEB:$WEB node:22-alpine node --no-warnings --experimental-sqlite /r/site/chain-index.mjs --web $WEB --budget 270
+UNIT
+cat > /etc/systemd/system/zen-index.timer <<UNIT
+[Unit]
+Description=Update the ZP chain index every 5 minutes
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now zen-index.timer
+systemctl start --no-block zen-index.service
+
+echo "== Explorer API (read-only, 127.0.0.1:11580, published by nginx as /explorer/api/)"
+cat > /etc/systemd/system/zen-explorer.service <<UNIT
+[Unit]
+Description=ZP explorer API over the chain index
+After=docker.service
+Requires=docker.service
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f zen-explorer
+ExecStart=/usr/bin/docker run --rm --name zen-explorer --network host -v $REPO:/r:ro -v /var/lib/zen-stats:/var/lib/zen-stats node:22-alpine node --no-warnings --experimental-sqlite /r/site/explorer-api.mjs
+ExecStop=/usr/bin/docker stop zen-explorer
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable zen-explorer.service
+systemctl restart zen-explorer.service
+
 echo "== HTTPS"
 if ! command -v certbot >/dev/null; then apt-get install -y certbot python3-certbot-nginx; fi
 # Always run: copying nginx-zen.conf above replaces the HTTPS block certbot added last time.
@@ -85,5 +137,7 @@ certbot --nginx -d "$DOMAIN" $(for d in $EXTRA_DOMAINS; do echo -n " -d $d"; don
 
 echo "== Check"
 curl -fsS "https://$DOMAIN/api/info" && echo
+curl -s -o /dev/null -w "ZP Wallet: HTTP %{http_code}\n" "https://$DOMAIN/wallet/"
+sleep 5; curl -s -o /dev/null -w "Explorer API: HTTP %{http_code}\n" "https://$DOMAIN/explorer/api/blocks?take=1"
 curl -s -o /dev/null -w "wallet API blocked: HTTP %{http_code}\n" "https://$DOMAIN/api/wallet/balance"
 echo "== Done: https://$DOMAIN"

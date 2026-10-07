@@ -1,0 +1,37 @@
+name: mirror-upstream
+# Keeps our own copy of everything the node build needs from the original project's servers (MyGet feed,
+# released node binaries, all repositories of the zenprotocol organization) as the 'upstream-mirror' release.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 1 * *'
+  push:
+    paths: [scripts/mirror-upstream.py, .github/workflows/mirror-upstream.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: python3 scripts/mirror-upstream.py mirror-out | tee /tmp/mirror.log
+      - name: Publish release
+        env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+        run: |
+          set -e
+          gh release view upstream-mirror >/dev/null 2>&1 || gh release create upstream-mirror --title "Upstream mirror" --notes "Copy of the original project's packages, node binaries and repositories. Built by the mirror-upstream workflow; see MANIFEST.json."
+          # a release holds flat files: put the folder name in the file name
+          find mirror-out -type f -not -name '*.part' | while read f; do
+            rel=${f#mirror-out/}; flat=$(echo "$rel" | sed 's|/|__|g')
+            [ "$f" = "mirror-out/$flat" ] || cp "$f" "mirror-out/$flat"
+            gh release upload upstream-mirror "mirror-out/$flat" --clobber
+          done
+      - name: Summary
+        run: |
+          { echo '### Mirror'; tail -n 30 /tmp/mirror.log | sed 's/^/    /'; echo; ls -lh mirror-out/packages mirror-out/npm mirror-out/repos 2>/dev/null | sed 's/^/    /'; } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^(PROBLEM|\{)' /tmp/mirror.log | sed 's/%/%25/g' | head -20 | sed 's/^/::notice title=mirror::/'

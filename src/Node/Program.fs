@@ -343,7 +343,8 @@ module CheckPlatform =
                 Log.error (eventX "Please install mono.")
                 System.Environment.FailFast("Please install mono", null)
             | Some version ->
-                let boundedToVersion = Version(6,12,0)
+                // the node itself needed Mono 6.12; on .NET only F* and the contract tool run on Mono (6.8 is enough)
+                let boundedToVersion = if Platform.isRunningOnMono then Version(6,12,0) else Version(6,8,0)
                 if version >= boundedToVersion then
                     Log.info (eventX "Mono check passed")
                 else
@@ -355,6 +356,9 @@ module CheckPlatform =
         checkZ3Availability()
         checkOSArchitecture()
         checkMonoVersion()
+        if not (System.IO.File.Exists (System.IO.Path.Combine(ZFStar.toolDirectory, "zen-contract-tool.exe"))) then
+            Log.error (eventX "Contract tool missing in {dir}. Exit node." >> setField "dir" ZFStar.toolDirectory)
+            System.Environment.FailFast("Contract tool missing", null)
 
 
 [<EntryPoint>]

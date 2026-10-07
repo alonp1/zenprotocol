@@ -346,7 +346,7 @@ let parseChangePassword json =
 let parseTransactionsRequestJson query =
     match Map.tryFind "take" query, Map.tryFind "skip" query with
     | Some take, Some skip ->
-        match System.Int32.TryParse take, System.Int32.TryParse skip with
+        match System.Int32.TryParse (take: string), System.Int32.TryParse (skip: string) with
         | (true,take),(true,skip) ->
             if skip < 0 || take < 0 then
                 Error "Invalid values"
@@ -361,12 +361,12 @@ let parseHeadersRequestJson query defaultTip =
     | Some take ->
         let blockNumber =
             Map.tryFind "blockNumber" query
-            |> Option.map System.Int32.TryParse
+            |> Option.map (fun (s: string) -> System.Int32.TryParse (s: string))
             |> Option.filter fst
             |> Option.map snd
             |> Option.defaultValue defaultTip
                 
-        match System.Int32.TryParse take with
+        match System.Int32.TryParse (take: string) with
         | (true,take) ->
             if take < 0 then
                 Error "Invalid values"

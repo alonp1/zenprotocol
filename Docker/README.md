@@ -8,15 +8,23 @@ Network status, seed and snapshots: **https://zen.sealinkgps.com**
 
 ## 1. Install and load a snapshot
 
+One command (Linux, macOS; installs Docker on Linux, loads the verified snapshot, starts the node):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-node.sh | bash
+```
+
+Or step by step (this is also the Windows way):
+
 ```bash
 git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
 cd zenprotocol
-docker compose build
+docker compose pull   # or: docker compose build
 docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
 docker compose up -d
 ```
 
-The snapshot (~2.4 GB, chain data only, no wallets) lets the node skip almost all of the initial sync. If the community snapshot is unavailable the loader falls back to the official Feb-2023 one. Run it from one terminal only – two parallel downloads corrupt the file.
+The snapshot (~5 GB, chain data only, no wallets) lets the node skip almost all of the initial sync. If the community snapshot is unavailable the loader falls back to the official Feb-2023 one. Run it from one terminal only – two parallel downloads corrupt the file.
 
 **Windows:** first run `Set-Content .env "ZEN_DATA=zen-data"` so data lives in a Docker volume. A Windows folder is ~4x slower for the database.
 

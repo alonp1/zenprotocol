@@ -1,0 +1,31 @@
+<Project>
+  <!-- The zen packages' own build targets assume the paket packages/ folder; their files are copied here instead. -->
+  <ItemGroup>
+    <PackageReference Update="Zulib;ZFStar;zen_z3_linux;zen_secp256k1_linux;CGPContract" ExcludeAssets="build" GeneratePathProperty="true" />
+  </ItemGroup>
+  <!-- Zulib and CGPContract put their dll directly in lib/ (no framework folder), which NuGet ignores for net10.0 -->
+  <ItemGroup>
+    <Reference Include="Zulib" Condition="'$(PkgZulib)' != '' And Exists('$(PkgZulib)/lib/Zulib.dll')"><HintPath>$(PkgZulib)/lib/Zulib.dll</HintPath></Reference>
+    <Reference Include="CGPContract" Condition="'$(PkgCGPContract)' != '' And Exists('$(PkgCGPContract)/lib/CGPContract.dll')"><HintPath>$(PkgCGPContract)/lib/CGPContract.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <!-- Node and test projects: native secp256k1, z3, and the contract tool (Mono) in contract-tool/.
+       Build src/ContractTool first (net47; a ProjectReference across frameworks is refused by NuGet). -->
+  <PropertyGroup Condition="'$(ZenRuntimeFiles)' == '' And ('$(OutputType)' == 'Exe' Or $(MSBuildProjectName.EndsWith('.Tests'))) And '$(TargetFramework)' == 'net10.0'">
+    <ZenRuntimeFiles>true</ZenRuntimeFiles>
+  </PropertyGroup>
+  <Target Name="CopyZenRuntimeFiles" AfterTargets="Build" Condition="'$(ZenRuntimeFiles)' == 'true'">
+    <PropertyGroup>
+      <_ToolOut>$(MSBuildThisFileDirectory)ContractTool/bin/$(Configuration)/</_ToolOut>
+      <_Secp>$(NuGetPackageRoot)zen_secp256k1_linux/0.1.0.26-v6ad5cdb42a1a/output/libsecp256k1.so</_Secp>
+    </PropertyGroup>
+    <Warning Text="contract tool not built: run dotnet build src/ContractTool first" Condition="!Exists('$(_ToolOut)zen-contract-tool.exe')" />
+    <ItemGroup>
+      <_ToolFiles Include="$(_ToolOut)**/*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ToolFiles)" DestinationFiles="@(_ToolFiles->'$(OutDir)contract-tool/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(_ToolOut)z3-linux" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(_ToolOut)z3-linux')" />
+    <Exec Command="chmod +x &quot;$(OutDir)z3-linux&quot; &quot;$(OutDir)contract-tool/z3-linux&quot;" Condition="'$(OS)' != 'Windows_NT' And Exists('$(OutDir)z3-linux')" />
+    <Copy SourceFiles="$(_Secp)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('$(_Secp)')" />
+  </Target>
+</Project>

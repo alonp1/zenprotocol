@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The contract toolchain of release 1.0.13 as a separate Mono program (stage 4 of docs/MIGRATION.md).
+       Same code, same .NET Framework 4.7 libraries, so compiled contracts are identical to the old node's.
+       Built into the node's output folder under contract-tool/. -->
+  <PropertyGroup>
+    <TargetFramework>net47</TargetFramework>
+    <RuntimeIdentifier></RuntimeIdentifier>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>zen-contract-tool</AssemblyName>
+    <RootNamespace>ContractTool</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <Tailcalls>false</Tailcalls>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <Tailcalls>true</Tailcalls>
+    <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+  <Import Project="..\RefFStar.props" />
+  <ItemGroup>
+    <Compile Include="..\Infrastructure\LogEvent.fs" Link="LogEvent.fs" />
+    <Compile Include="Log.fs" />
+    <Compile Include="..\Infrastructure\Exception.fs" Link="Exception.fs" />
+    <Compile Include="..\Infrastructure\Result.fs" Link="Result.fs" />
+    <Compile Include="..\Infrastructure\Platform.fs" Link="Platform.fs" />
+    <Compile Include="ZFStar.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.Numerics" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net47" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="FSharp.Core" />
+    <PackageReference Include="FSharpx.Extras" />
+    <PackageReference Include="Zen.FSharp.Compiler.Service" />
+    <PackageReference Include="ZFS-Tools" />
+    <!-- referenced by compiled contracts (-r ... in ZFStar.fs), so they must sit next to the tool -->
+    <PackageReference Include="Zulib" ExcludeAssets="build" GeneratePathProperty="true" />
+    <PackageReference Include="FSharp.Compatibility.OCaml" />
+    <PackageReference Include="BouncyCastle" />
+    <PackageReference Include="FSharpx.Collections" />
+    <PackageReference Include="FsBech32" />
+    <PackageReference Include="zen_z3_linux" ExcludeAssets="build" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!-- what the paket-era package targets used to copy (they rely on a paket packages/ folder) -->
+  <Target Name="CopyContractToolchain" AfterTargets="Build">
+    <ItemGroup>
+      <_FStarTools Include="$(PkgZFStar)/tools/*.*" Exclude="$(PkgZFStar)/tools/FSharp.Core.dll;$(PkgZFStar)/tools/FSharp.Compatibility.OCaml.dll;$(PkgZFStar)/tools/*.XML;$(PkgZFStar)/tools/*.pdb" />
+      <_Zulib Include="$(PkgZulib)/output/Zulib/**/*.*" />
+      <_RefNet47 Include="$(PkgMicrosoft_NETFramework_ReferenceAssemblies_net47)/build/.NETFramework/v4.7/*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_FStarTools)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_Zulib)" DestinationFiles="@(_Zulib->'$(OutDir)zulib/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_RefNet47)" DestinationFolder="$(OutDir)ref-net47" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(Pkgzen_z3_linux)/output/z3-linux" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Exec Command="chmod +x &quot;$(OutDir)z3-linux&quot;" Condition="'$(OS)' != 'Windows_NT'" />
+  </Target>
+</Project>

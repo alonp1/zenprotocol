@@ -1,21 +1,25 @@
-# Migration to .NET 8
+# Migration to .NET 10
 
-Status: 2026-10-06
+Status: 2026-10-07
 
 ## Goal
 
-Run the node on .NET 8 instead of Mono 6.12 (unmaintained, Debian 10 base without security updates), without changing consensus behaviour. Every step must keep the node fully compatible with the existing mainnet.
+Run the node on .NET 10 instead of Mono 6.12 (unmaintained, Debian 10 base without security updates), without changing consensus behaviour. Every step must keep the node fully compatible with the existing mainnet.
+
+**Why .NET 10.** The plan first targeted .NET 8, but .NET 8 support ends on 10 November 2026. .NET 10 is the current long-term support release (November 2025, supported until November 2028). The porting work is the same, so the node goes straight to .NET 10. The next LTS (.NET 12, late 2027) should be a routine retarget.
+
+**Why not a rewrite in another language.** Consensus rules, serialization and the contract system (F\* extracted to F#) are tied to .NET. A rewrite would risk a chain split for no gain at the current network size.
 
 ## Stages
 
 | # | Stage | Risk | Status |
 | --- | --- | --- | --- |
-| 1 | Convert all 23 projects to SDK-style, still `net47` on Mono | Low | Done – builds with the .NET 8 SDK, all tests pass |
+| 1 | Convert all 23 projects to SDK-style, still `net47` on Mono | Low | Done – builds with the .NET SDK, all tests pass |
 | 2 | Replace or upgrade dependencies that only ship .NET Framework builds | Low–medium | 4 of 9 done. The rest are compiled into contracts or drag in FSharp.Core – gated on stage 3 |
 | 3 | Mainnet replay test: old and new node sync from genesis and must reach the same tip and CGP state | None (test only) | Done 2026-10-06: PASS from genesis to block 1,052,885; reference stored (see Reference file) |
-| 4 | Retarget libraries and node to `net8.0`; F\* keeps running as an external tool on Mono | Medium | Planned |
-| 5 | Contract pipeline on .NET 8: F# compiler service, in-memory contract loading | High | Planned |
-| 6 | Load test on a private network: real throughput limit of Mono vs .NET 8 nodes | None (test only) | Planned, see Capacity and load test |
+| 4 | Retarget libraries and node to `net10.0`; F\* keeps running as an external tool on Mono | Medium | Done: replay matches the reference (1,053 hashes, CGP state); merged |
+| 5 | Contract pipeline on .NET 10 without Mono: F# compiler service, in-memory contract loading | High | Planned |
+| 6 | Load test on a private network: real throughput limit of Mono vs .NET 10 nodes | None (test only) | Planned, see Capacity and load test |
 
 ## Dependency map
 
@@ -29,7 +33,7 @@ Argu 5.1, AsyncIO, NetMQ 4, FsPickler 5.2, FSharp.Data 3, FSharp.Control.Reactiv
 
 | Package | Pinned | Used in (main / tests) | Action |
 | --- | --- | --- | --- |
-| FSharp.Core | 4.3.4 | everywhere | Upgrade to 8.x |
+| FSharp.Core | 4.3.4 | everywhere | Keep 4.3.4 in stage 4 (it ships `netstandard2.0`; contracts are compiled against it); upgrade later |
 | FSharp.Configuration | 1.5.0 | – | Done: replaced by a small YAML loader in `Node/Program.fs` |
 | Base58Check | 0.2.0 | 0 / 0 | Done: removed (unused) |
 | Logary | 4.2.1 (`net452`) | 33 / 0 files | Done: replaced by `Infrastructure.LogEvent` + `Infrastructure.Log` (same API and output format) |
@@ -52,7 +56,35 @@ Argu 5.1, AsyncIO, NetMQ 4, FsPickler 5.2, FSharp.Data 3, FSharp.Control.Reactiv
 
 ## Why the remaining stage-2 packages wait for stage 3
 
-Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, `FsBech32`, `BouncyCastle.Crypto`, `FSharp.Compatibility.OCaml` and `Zulib` (see `Infrastructure/ZFStar.fs`), and the CGP tally uses `FSharpx.Extras`. Changing any of them can change contract results or vote counting, so they are only touched once the replay test can prove identical behaviour. `FsNetMQ` 0.3.6 supports `netstandard2.0` but requires a newer `FSharp.Core`, so it goes with that upgrade. `net452` assemblies may also load unchanged on .NET 8; stage 4 will tell.
+Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, `FsBech32`, `BouncyCastle.Crypto`, `FSharp.Compatibility.OCaml` and `Zulib` (see `Infrastructure/ZFStar.fs`), and the CGP tally uses `FSharpx.Extras`. Changing any of them can change contract results or vote counting, so they are only touched once the replay test can prove identical behaviour. `FsNetMQ` 0.3.6 supports `netstandard2.0` but requires a newer `FSharp.Core`, so it goes with that upgrade. `net452` assemblies may also load unchanged on .NET 10; stage 4 will tell.
+
+## Stage 4: how the node runs on .NET 10
+
+**Projects.** All projects target `net10.0` (`src/Directory.Build.props`). Packages come from NuGet as `PackageReference`; `src/Directory.Packages.props` pins every package, including indirect ones, to the exact version in `paket.lock` of release 1.0.13, so the libraries are the same as before. `nuget.config` adds the zenprotocol MyGet feed for `Zulib`, `CGPContract`, `FsBech32` and the native `zen_*` packages. FSharp.Core stays at 4.3.4 (it ships a `netstandard` build).
+
+**Contract toolchain.** Contracts are written in F\*, extracted to F# and compiled to a DLL when activated. That code (`ZFStar.fs` of 1.0.13: elaboration, `fstar.exe`, compilation with the patched `Zen.FSharp.Compiler.Service`, hints) moved unchanged into `src/ContractTool`, a `net47` command line program (`zen-contract-tool.exe`) that runs on Mono with the same .NET Framework libraries as the old node. The .NET 10 node calls it as a separate process; `Infrastructure/ZFStar.fs` keeps the same functions (`compile`, `recordHints`, `totalQueries`, `calculateMetrics`, `load`), so nothing else changed. Compiled contract DLLs are loaded into the node as before. This keeps compiled contracts byte-identical while the node itself leaves Mono. Stage 5 replaces this with an in-process compiler on .NET 10.
+
+Output layout: the node folder holds `zen-node.dll`, `zen-cli.dll`, `libsecp256k1.so`, `z3-linux` and `contract-tool/` (the tool, F\*, Zulib sources, `z3-linux`, and the .NET Framework 4.7 reference assemblies used when Mono's own are not installed). Mono (6.8 or newer) is needed only for `contract-tool/`.
+
+**Source changes needed by .NET 10** (none touch consensus logic):
+- type annotations where .NET 10 added `ReadOnlySpan` overloads (`File.WriteAllText`, `Int32/UInt32.TryParse`, `String.Split`)
+- removed two unused `open` lines (`FStar` in `Http.fs`, Windows event log in `Weight.fs`); `Hopac` became a direct reference of Consensus (it was indirect under paket)
+- `Platform.monoVersion` asks `mono --version` when the node is not running on Mono; the node checks for Mono 6.8+ and the contract tool at startup
+- loading a contract that is already loaded returns the loaded assembly (.NET refuses two assemblies with the same name; the name is the contract hash, so it is the same code)
+
+**Not yet ported:** the SpecFlow feature tests (`Consensus.Features.Tests`, to Reqnroll).
+
+**Build and run:**
+
+```
+dotnet build src/ContractTool/ContractTool.fsproj -c Release
+dotnet build src/Node/Node.fsproj -c Release
+cd src/Node/bin/Release && dotnet zen-node.dll
+```
+
+or the image: `docker build -f Docker/Dockerfile.net10 -t zen-node:net10 .` (`.NET 10 runtime + Mono`). CI: `.github/workflows/net10.yml` builds, runs the unit tests and checks that the image syncs mainnet blocks.
+
+**Gate before merging:** a full mainnet replay of the .NET 10 image from genesis must match the reference (`.github/workflows/net10-replay.yml`, started by pushing to the `net10-replay` branch; it runs on GitHub-hosted runners in parts of ~5 hours, passing the chain data on through the Actions cache), and the CGP, supply and winner state must match the release node at the same tip.
 
 ## Running the replay test
 
@@ -65,7 +97,7 @@ Contracts are compiled at runtime against `FSharp.Core`, `FSharpx.Collections`, 
 
 **What it is.** A small record of the real mainnet as the official 1.0.13 node sees it: block hashes every 1000 blocks up to a fixed height, plus the CGP and supply state at that height. It is the yardstick for every later change to the node.
 
-**Why it matters.** Each block header contains the hash of its parent, so a matching hash at block N proves the whole chain up to N is identical. A node built from changed code (new dependencies, .NET 8, refactoring) that reproduces these hashes validated every historical block exactly like the original. Without the reference, each test would need the old node again: a second full sync, 10+ hours on a rented server.
+**Why it matters.** Each block header contains the hash of its parent, so a matching hash at block N proves the whole chain up to N is identical. A node built from changed code (new dependencies, .NET 10, refactoring) that reproduces these hashes validated every historical block exactly like the original. Without the reference, each test would need the old node again: a second full sync, 10+ hours on a rented server.
 
 **Current reference**
 
@@ -109,7 +141,7 @@ The script fetches the newest reference from `reference-data`, verifies its chec
 2. Funding: mine a few hundred blocks, then split the rewards into thousands of small outputs so many transactions can be signed in parallel.
 3. Load generator: a script on the wallet library (`wallet/src/tx.js`, already verified byte for byte against mainnet) that signs transfers and posts them to `/blockchain/publishtransaction` at a fixed rate, stepping up: 1, 10, 50, 100, 250 tx/s.
 4. Measure at each step: transactions accepted to the mempool per second, transactions per block, block validation time (node log), time for a block to reach the other nodes, CPU, RAM and disk per node, and whether any node falls behind the tip.
-5. Repeat with the .NET 8 build and compare. Publish the results in this file and on the stats page.
+5. Repeat with the .NET 10 build and compare. Publish the results in this file and on the stats page.
 
 Pass criterion for the network: the sustained rate at which every node stays at the tip, with block propagation well under the block interval.
 

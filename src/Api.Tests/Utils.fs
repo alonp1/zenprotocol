@@ -100,7 +100,7 @@ let customChainBasicActor chainParams =
     |> List.map Disposables.toDisposable
     |> Disposables.fromList
 
-let split value seperators =
+let split value (seperators: char array) =
     (value:String).Split seperators
     |> Array.choose (fun value ->
         if String.IsNullOrWhiteSpace value then

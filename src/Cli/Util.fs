@@ -6,7 +6,7 @@ open FSharp.Data
 
 let getUri' = sprintf "http://127.0.0.1:%s/%s"
  
-let split value seperators =
+let split value (seperators: char array) =
     (value:String).Split seperators
     |> Array.choose (fun value ->
         if String.IsNullOrWhiteSpace value then

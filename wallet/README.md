@@ -1,4 +1,4 @@
-# ZP Wallet (work in progress)
+# ZP Wallet
 
 Non-custodial browser wallet for the ZP network. Keys are derived and kept in the browser; the wallet talks to a public node (`/node/` on the community site) only for balances and to broadcast signed transactions.
 
@@ -19,8 +19,11 @@ Built on audited libraries: `@scure/bip39`, `@scure/bip32`, `@noble/curves` (sec
 
 1. Keys and addresses - done
 2. Transaction serialization and signing, checked byte for byte against mainnet - done
-3. Balance, history, send, receive through the public node
+3. Balance, history, send, receive through the public node - done (UI in `web/`)
 4. CGP voting: contract witness to the voting contract, command `Allocation` / `Payout` / `Nomination`, message body `{<command>: hex(ballot), Signature: {pk: sig}}`, signatures over SHA3(hex(U32 interval) + hex(String phase) + hex(String ballot)) - see `src/Blockchain/Tally_VoteParser.fs`
+4b. Done in 0.1: phrase, private key and watch-only import, per-wallet and total balance, remove. Later: several accounts per phrase, rename, hide.
+    Several wallets in one app: import several existing wallets, each with its own balance - by recovery phrase or by a single private key (the old Zen Wallet's "Show private key" export) - each encrypted on the device and several accounts/addresses per phrase (`m/44'/258'/<account>'`, receive addresses `…/0/i`), with a total and per-wallet balances; switch, rename, hide, remove. Watch-only addresses (balance only, no keys) for cold storage.
+4c. Done in 0.1 (no public testnet node yet). Network settings: choose the node - the community public node (default), a list of other public nodes, a custom URL, or `http://localhost:11567` for your own node - with a connection check. Switch between **mainnet** and **testnet** (addresses `tzn1…`, test coins with no value); each network keeps its own wallets and balances, and testnet is clearly marked in the UI.
 5. Smart contracts: tokens issued by contracts (multi-asset balances), list of active contracts (`/contract/active`), execute a contract (command, message body, assets sent with it; the node runs the contract via `/blockchain/contract/execute`, the wallet checks and signs the result), deploy a contract (advanced)
 6. UI, security review, release
 7. Multi-chain: the same recovery phrase derives keys per network (BIP44 coin types: ZP 258, Bitcoin 0, Ethereum 60). Each network is a separate adapter (addresses, balance, build and sign, broadcast) with its own byte-for-byte tests against real transactions; Bitcoin and Ethereum use public APIs with a switchable provider. View-only first, sending after. Swaps are out of scope.
@@ -28,8 +31,11 @@ Built on audited libraries: `@scure/bip39`, `@scure/bip32`, `@noble/curves` (sec
 Code is organised per network from the start (`src/` today = the ZP adapter) so more networks plug in without a rewrite.
 
 ```
-npm install
+npm ci
 npm test
+npm run build    # dist/ = the static wallet
 ```
+
+Architecture, security model, build and deployment: [`docs/WALLET.md`](../docs/WALLET.md).
 
 Community project. Not affiliated with or endorsed by Zen Protocol Ltd.

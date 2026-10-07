@@ -55,6 +55,7 @@
        letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
   td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td.r, th.r { text-align: right; }
+  td.warn { color: var(--warn); font-weight: 600; } td.bad { color: var(--bad); font-weight: 600; }
   .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
   .supply { height: 12px; border-radius: 6px; background: var(--grid); overflow: hidden; margin: 4px 0 6px; }
   .supply div { height: 100%; background: var(--series); border-radius: 6px 0 0 6px; }
@@ -70,7 +71,7 @@
 </head>
 <body>
 <main>
-  <nav><a href="/">← Community node</a></nav>
+  <nav><a href="/">← Community node</a> · <a href="/stats.html">Stats</a> · <a href="/explorer.html">Explorer</a> · <a href="/assets.html">Assets</a> · <a href="/cgp.html">CGP history</a> · <a href="/wallet/">ZP Wallet</a></nav>
   <h1>ZP Network Stats</h1>
   <p class="lead" id="updated">Loading…</p>
 
@@ -127,10 +128,19 @@
       <div class="stat"><div class="k">Interval</div><div class="v" id="cgp-int">–</div><div class="s" id="cgp-range"></div></div>
       <div class="stat"><div class="k">Phase</div><div class="v" id="cgp-phase">–</div></div>
       <div class="stat"><div class="k" id="cgp-next-k">Next</div><div class="v" id="cgp-next">–</div><div class="s" id="cgp-eta"></div></div>
-      <div class="stat"><div class="k">Current allocation</div><div class="v" id="cgp-alloc">–</div><div class="s">of block rewards to the CGP</div></div>
+      <div class="stat"><div class="k">Current allocation</div><div class="v" id="cgp-alloc">–</div><div class="s" id="cgp-alloc-s">of block rewards to the CGP</div></div>
+    </div>
+    <div class="grid four" style="margin-top:12px">
+      <div class="stat"><div class="k">CGP fund balance</div><div class="v" id="cgp-bal">–</div><div class="s" id="cgp-bal-s"></div></div>
+      <div class="stat"><div class="k">Governance (protocol upgrade vote)</div><div class="v">Inactive</div><div class="s">Repo voting contract inactive since block 233,874</div></div>
     </div>
     <div class="phase" id="phase"></div>
     <div class="phase-l"><span style="left:0">Interval start</span><span style="right:0">snapshot → nomination → voting</span></div>
+  </section>
+
+  <section>
+    <h2>Active contracts</h2>
+    <div class="scroll" id="contracts">–</div>
   </section>
 
   <div class="two">
@@ -325,13 +335,24 @@ function render(d) {
     d.series.slice().reverse().map(p => `<tr><td>${dateTime(p.t)}</td><td class="r">${p.blocks}</td><td class="r">${fmtDur(p.blockTime)}</td><td class="r">${fmtHr(p.hashrate)}</td><td class="r">${fmtNum(p.difficulty)}</td></tr>`).join('') + '</table>';
 
   const c = d.cgp;
-  $('cgp-int').textContent = c.interval;
+  $('cgp-int').textContent = c.communityInterval != null ? c.communityInterval : c.interval;
+  if (c.communityInterval != null) $('cgp-int').title = 'Interval ' + c.interval + ' in the node (counted from block 0)';
   $('cgp-range').textContent = 'blocks ' + fmt(c.intervalEnd - 9999) + '–' + fmt(c.intervalEnd);
   $('cgp-phase').textContent = c.phase;
   $('cgp-next-k').textContent = c.next.name;
   $('cgp-next').textContent = 'in ' + fmt(c.next.block - d.height) + ' blocks';
   $('cgp-eta').textContent = 'block ' + fmt(c.next.block) + ' · around ' + new Date(c.next.eta).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   $('cgp-alloc').textContent = c.state && c.state.allocation != null ? c.state.allocation + '%' : '–';
+  if (c.state && c.state.allocation != null && d.supply) $('cgp-alloc-s').textContent = (d.supply.blockReward * c.state.allocation / 100).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' ZP per block to the CGP';
+  $('cgp-bal').textContent = c.balance ? fmtZP(c.balance.zp) + ' ZP' : '–';
+  $('cgp-bal-s').innerHTML = c.balance ? 'at block ' + fmt(c.balance.block) + ' · <span class="mono" title="' + esc(c.contractAddress) + '">' + esc(short(c.contractAddress)) + '</span>' : 'not available yet';
+  const cs = d.contracts || [];
+  $('contracts').innerHTML = cs.length ? '<table><tr><th>Name</th><th>Address</th><th class="r">Active until block</th><th class="r">Blocks left</th><th class="r">Expires around</th></tr>' +
+    cs.map(k => {
+      const cls = k.blocksLeft < 300 ? 'bad' : k.blocksLeft < 3000 ? 'warn' : '';
+      const eta = new Date(d.updated + k.blocksLeft * (d.avgBlockTime24h || d.targetBlockTime) * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      return `<tr><td>${esc(k.name || '–')}</td><td class="mono" title="${esc(k.address)}">${esc(short(k.address))}</td><td class="r">${fmt(k.expire)}</td><td class="r ${cls}">${fmt(k.blocksLeft)}</td><td class="r">${eta}</td></tr>`;
+    }).join('') + '</table>' : 'No active contracts.';
   const start = c.intervalEnd - 10000, segs = [[start, c.snapshotBlock], [c.snapshotBlock, c.nominationEnd], [c.nominationEnd, c.intervalEnd]];
   $('phase').innerHTML = segs.map(([a, b]) => {
     const w = (b - a) / 100, cls = d.height >= b ? 'done' : d.height > a ? 'now' : '';

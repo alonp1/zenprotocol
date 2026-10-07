@@ -1,3 +1,3 @@
 #!/bin/sh
-
-mono zen-node.exe $@
+# .NET 10 build: run from this folder
+exec dotnet "$(dirname "$0")/zen-node.dll" "$@"

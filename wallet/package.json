@@ -7,14 +7,15 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "build": "esbuild src/app.js --bundle --minify --format=esm --outfile=dist/app.js"
+    "build": "node build.mjs"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "@scure/base": "^2.4.0",
     "@scure/bip32": "^2.4.0",
-    "@scure/bip39": "^2.4.0"
+    "@scure/bip39": "^2.4.0",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "esbuild": "^0.28.2"
