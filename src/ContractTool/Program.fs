@@ -13,9 +13,10 @@ open System
 open System.IO
 open Infrastructure
 
+// result protocol with the node: on failure the error text goes to stdout (logs go to stderr)
 let private finish = function
     | Ok () -> 0
-    | Error (e: string) -> eprintfn "%s" e; 1
+    | Error (e: string) -> printf "%s" e; 1
 
 [<EntryPoint>]
 let main argv =
@@ -50,4 +51,5 @@ let main argv =
             2
     with ex ->
         eprintfn "%s" (ex.ToString())
+        printf "%s" ex.Message
         1

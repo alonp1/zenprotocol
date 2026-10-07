@@ -60,12 +60,14 @@ let private tool (args: string list) : Result<string, string> =
         if p.ExitCode = 0 then
             Ok (out.ToString())
         else
-            let e = err.ToString().Trim()
-            eventX "contract tool {args} failed: {error}"
+            // the tool prints the error result on stdout and its log on stderr
+            let result = out.ToString().Trim()
+            eventX "contract tool {args} failed: {error}\n{log}"
             >> setField "args" (String.concat " " (List.truncate 2 args))
-            >> setField "error" e
+            >> setField "error" result
+            >> setField "log" (err.ToString().Trim())
             |> Log.info
-            Error e
+            Error (if result = "" then err.ToString().Trim() else result)
     with ex ->
         Exception.toError "contract tool" ex
 
@@ -108,8 +110,12 @@ let load path moduleName =
 
     if File.Exists assemblyPath then
         try
-            assemblyPath
-            |> Assembly.LoadFrom
+            // .NET refuses a second assembly with the same name from another path (Mono allowed it).
+            // A contract's assembly name is its hash, so an already loaded one is the same contract.
+            let name = AssemblyName.GetAssemblyName assemblyPath
+            AppDomain.CurrentDomain.GetAssemblies()
+            |> Array.tryFind (fun a -> a.FullName = name.FullName)
+            |> Option.defaultWith (fun () -> Assembly.LoadFrom assemblyPath)
             |> Ok
         with _ as ex ->
             Error ex.Message
