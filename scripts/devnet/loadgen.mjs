@@ -53,9 +53,8 @@ async function heights() {
   return Promise.all(WATCH.map(async p => { try { return (await new NodeClient(`http://127.0.0.1:${p}`).info()).blocks; } catch { return null; } }));
 }
 const mkTx = (u, payments, state) => buildTransaction({
-  utxos: [{ ...u, key: [...w.keys.values()][0] }], payments, tipBlockNumber: state.tip, maturity: 10, changeLock: pk(myHash),
+  utxos: [{ ...u, spend: { asset: ZEN_ASSET, amount: u.spend.amount }, key: [...w.keys.values()][0] }], payments, tipBlockNumber: state.tip, maturity: 10, changeLock: pk(myHash),
 });
-const own = u => u.lock.type === 'PK' ? u : null;
 
 async function publishAll(txs, ratePerSec) {            // fire at a fixed rate, bounded concurrency
   const lat = [], errs = new Map(); let ok = 0, inflight = 0, i = 0;
