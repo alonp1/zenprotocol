@@ -9,7 +9,7 @@ on:
       split:   { description: 'outputs per splitting transaction (fewer mined blocks needed when higher)', default: '500' }
   push:
     branches: [node-upgrade-script]
-    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'scripts/testnet-oracle.sh', 'scripts/testnet-bet.sh', 'src/Oracle/**', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
+    paths: ['src/Consensus/Chain.fs', 'src/Node/**', 'Docker/entrypoint.sh', 'Docker/Dockerfile.net10', 'scripts/devnet/**', 'scripts/testnet-contract.sh', 'scripts/testnet-oracle.sh', 'scripts/testnet-bet.sh', 'scripts/testnet-instruments.sh', 'src/Oracle/**', 'src/ContractExamples/**', 'docker-compose.testnet.yml', '.github/workflows/testnet.yml']
 
 jobs:
   testnet:
@@ -75,6 +75,15 @@ jobs:
           bash scripts/testnet-bet.sh http://127.0.0.1:31567 testnet > /tmp/bet.txt 2>&1
           RC=$?
           tail -n 30 /tmp/bet.txt | python3 -c "import sys;print('::notice title=bet output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
+      - name: "Instruments: named token, authenticated supply, decentralised exchange"
+        if: always()
+        timeout-minutes: 40
+        run: |
+          set +e
+          bash scripts/testnet-instruments.sh http://127.0.0.1:31567 testnet > /tmp/instruments.txt 2>&1
+          RC=$?
+          tail -n 45 /tmp/instruments.txt | python3 -c "import sys;print('::notice title=instruments output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
       - uses: actions/upload-artifact@v4
         if: always()
