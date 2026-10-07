@@ -353,10 +353,10 @@ export const Witness = {
     const size = sizeOf(witnessPayload, x);
     if (size !== count) {
       // Strict (wallet): refuse anything that does not re-serialize to its declared length.
-      // Lenient (the chain indexer reading blocks the network already accepted): the declared length
-      // is authoritative, so continue after it and report the irregular witness.
-      if (!r.lenient || start + count > r.b.length) fail('witness size');
-      r.p = start + count;
+      // Lenient (the chain indexer reading blocks the network already accepted): the node's own reader
+      // follows the fields, not the declared length (block 117758 declares one byte more than its contract
+      // witness holds), so continue after the parsed fields and report the irregular witness.
+      if (!r.lenient) fail('witness size');
       (r.irregular ||= []).push({ id, count, size });
     }
     return x;

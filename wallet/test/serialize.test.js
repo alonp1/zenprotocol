@@ -54,10 +54,10 @@ test('mainnet blocks: every transaction re-serializes byte for byte, hashes and 
   assert.ok(txs > blocks.length, 'fixtures should contain non-coinbase transactions');
 });
 
-test('a witness longer than what it parses to: strict refuses, lenient (indexer) follows the declared length', () => {
+test('a witness whose declared length is off: strict refuses, lenient (indexer) follows the parsed fields', () => {
   const w = new Writer();
-  VarInt.write(w, 1); VarInt.write(w, 1 + 33 + 64 + 2);           // PK witness declaring 2 extra bytes
-  w.u8(1); w.bytes(new Uint8Array(33).fill(2)); w.bytes(new Uint8Array(64).fill(3)); w.bytes(Uint8Array.from([9, 9]));
+  VarInt.write(w, 1); VarInt.write(w, 1 + 33 + 64 + 1);           // PK witness declaring one byte more than it holds (as block 117758)
+  w.u8(1); w.bytes(new Uint8Array(33).fill(2)); w.bytes(new Uint8Array(64).fill(3));
   w.u8(0x77);                                                    // the next item in the stream
   const bytes = w.out();
   assert.throws(() => Witness.read(new Reader(bytes)), /witness size/);
@@ -65,5 +65,5 @@ test('a witness longer than what it parses to: strict refuses, lenient (indexer)
   const x = Witness.read(r);
   assert.equal(x.type, 'PK');
   assert.equal(r.u8(), 0x77);
-  assert.deepEqual(r.irregular, [{ id: 1, count: 100, size: 98 }]);
+  assert.deepEqual(r.irregular, [{ id: 1, count: 99, size: 98 }]);
 });
