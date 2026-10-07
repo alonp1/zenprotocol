@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set +e +o pipefail
-          for p in zulib zfstar fsbech32 cgpcontract zen.fsharp.compiler.service zfs-tools zen_secp256k1_linux zen_z3_linux fsnetmq fsharp.core lightningdb; do
+          for p in cgpcontract zulib zfstar fsbech32 zen.fsharp.compiler.service zfs-tools zen_secp256k1_linux zen_z3_linux fsnetmq fsharp.core lightningdb; do
             d=$(ls -d ~/.nuget/packages/$p/*/ 2>/dev/null | head -1); [ -n "$d" ] || continue
             echo "::notice title=pkg $p::$(cd $d && find . -maxdepth 3 -not -name '*.xml' -not -name '*.fst*' | sort | head -60 | tr '\n' ' ')"
           done

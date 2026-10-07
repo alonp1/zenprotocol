@@ -1,7 +1,12 @@
 <Project>
   <!-- The zen packages' own build targets assume the paket packages/ folder; their files are copied here instead. -->
   <ItemGroup>
-    <PackageReference Update="Zulib;ZFStar;zen_z3_linux;zen_secp256k1_linux;CGPContract" ExcludeAssets="build" />
+    <PackageReference Update="Zulib;ZFStar;zen_z3_linux;zen_secp256k1_linux;CGPContract" ExcludeAssets="build" GeneratePathProperty="true" />
+  </ItemGroup>
+  <!-- Zulib and CGPContract put their dll directly in lib/ (no framework folder), which NuGet ignores for net10.0 -->
+  <ItemGroup>
+    <Reference Include="Zulib" Condition="'$(PkgZulib)' != '' And Exists('$(PkgZulib)/lib/Zulib.dll')"><HintPath>$(PkgZulib)/lib/Zulib.dll</HintPath></Reference>
+    <Reference Include="CGPContract" Condition="'$(PkgCGPContract)' != '' And Exists('$(PkgCGPContract)/lib/CGPContract.dll')"><HintPath>$(PkgCGPContract)/lib/CGPContract.dll</HintPath></Reference>
   </ItemGroup>
 
   <!-- Node and test projects: native secp256k1, z3, and the contract tool (Mono) in contract-tool/.
