@@ -56,6 +56,9 @@ The node must run with the address index (`WALLET_API=1` or `PUBLIC_NODE=1`, see
 - **Content Security Policy**: scripts only from the wallet's own origin, no inline scripts or styles, no plugins, no forms posting elsewhere, no framing (`frame-ancestors 'none'`). Network access is limited to the same origin, `https:` nodes and localhost. The same policy is set as an HTTP header by nginx and as a meta tag in `index.html`.
 - **No third-party code at runtime**: no CDN, analytics, fonts or trackers. Everything is bundled from pinned packages (`package-lock.json`).
 - **Escaping**: every string from the user or a node is HTML-escaped before display. The test suite includes an injection check on wallet names.
+- **The node is not trusted**: answers are validated before use. Malformed rows, duplicate outputs, contract locks, negative or out-of-range amounts are dropped; a node on the other network (mainnet vs testnet) is refused; a publish answer with a different transaction hash is reported (`test/hostile.test.js`). A lying node can only show a wrong balance or make a send fail: the network rejects any transaction whose inputs and outputs do not balance.
+- **Amounts**: only digits with up to 8 decimals; `1,5` is refused rather than read as 15 (commas are accepted only as thousands separators).
+- **Lock**: on lock or auto-lock, private key bytes are zeroed and a not-yet-saved new phrase is cleared.
 - **Checks before signing**: the address must decode and belong to the selected network; contract addresses are refused for plain sends; amounts must balance; watch-only wallets cannot sign.
 - **Same origin as the community page**: the wallet shares its origin with `index.html` and `stats.html`, which carry no third-party code. Do not add third-party scripts anywhere on the site.
 
@@ -81,7 +84,7 @@ Requires Node.js 22.
 ```
 cd wallet
 npm ci          # exact versions from package-lock.json
-npm test        # 14 tests
+npm test        # 20 tests
 npm run build   # writes dist/: index.html, style.css, app.js
 ```
 

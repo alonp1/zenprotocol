@@ -4,7 +4,7 @@ import qrcode from 'qrcode-generator';
 import { newMnemonic, checkMnemonic, isValidAddress, decodeAddress } from '../src/keys.js';
 import { NodeClient, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
-import { openWallet, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
+import { openWallet, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
 import { parseZP, formatZP } from '../src/tx.js';
 
 const LOCK_AFTER_MS = 15 * 60 * 1000;
@@ -45,7 +45,7 @@ function fail(e) { S.error = e?.message || String(e); S.busy = false; render(); 
 // ---------------------------------------------------------------- views
 const top = () => `<div class="top"><span class="brand">ZP Wallet</span>
   <span class="row" data-s="fixed gap6">${net() === 'test' ? '<span class="pill test">TESTNET</span>' : ''}
-  <span class="pill" title="${esc(S.settings.nodes[net()])}"><span class="dot ${S.nodeOk === true ? 'ok' : S.nodeOk === false ? 'bad' : ''}"></span>${S.nodeOk === false ? 'Node offline' : S.tip ? 'Block ' + S.tip.toLocaleString('en-US') : 'Connecting…'}</span></span></div>`;
+  <span class="pill" title="${esc(S.settings.nodes[net()])}"><span class="dot ${S.nodeOk === true ? 'ok' : S.nodeOk === false ? 'bad' : ''}"></span>${S.nodeOk === false ? 'Node offline' : S.tip ? 'Block ' + esc(S.tip.toLocaleString('en-US')) : 'Connecting…'}</span></span></div>`;
 const backBar = (title, to = 'home') => `<div class="back"><button class="iconbtn" data-go="${to}" aria-label="Back">${I.back}</button><h1>${esc(title)}</h1></div>`;
 const errBox = () => S.error ? `<div class="err" role="alert">${esc(S.error)}</div>` : '';
 const nav = cur => `<nav class="nav">${[['home', 'Wallet', I.home], ['vote', 'Vote', I.vote], ['contracts', 'Contracts', I.doc], ['settings', 'Settings', I.gear]]
@@ -118,7 +118,7 @@ const views = {
       <div class="list">${!d.history ? '<p class="muted small">Loading…</p>' : d.history.length === 0 ? '<p class="muted small">No transactions yet.</p>' : d.history.map(h => {
         const amt = BigInt(h.amount), inn = amt > 0n;
         const what = h.lock?.Coinbase ? 'Mining reward' : inn ? 'Received' : 'Sent';
-        return `<div class="item"><div><div>${what}</div><div class="muted small">${h.timestamp ? ago(h.timestamp) : 'pending'} · ${h.confirmations ? h.confirmations.toLocaleString('en-US') + ' conf.' : 'unconfirmed'}</div></div>
+        return `<div class="item"><div><div>${what}</div><div class="muted small">${h.timestamp ? ago(h.timestamp) : 'pending'} · ${h.confirmations ? esc(h.confirmations.toLocaleString('en-US')) + ' conf.' : 'unconfirmed'}</div></div>
           <div class="amt ${inn ? 'in' : ''}">${inn ? '+' : '−'}${h.asset === '00' ? formatZP(inn ? amt : -amt) + ' ZP' : esc(String(inn ? amt : -amt))}</div></div>`;
       }).join('')}</div></div>${nav('home')}`;
   },
@@ -149,7 +149,7 @@ const views = {
     return `${top()}<div class="screen"><h1>Community vote</h1>
       ${c ? `<div class="card cgp"><div class="row k"><span>INTERVAL ${c.interval}</span><span data-s="right">${esc(c.phase)}</span></div>
         <div data-s="mt6">${esc(c.next)} in ${c.blocksLeft.toLocaleString('en-US')} blocks · around ${esc(c.eta)}</div>
-        <div class="muted small" data-s="mt6">Block reward split now: miners ${100 - (S.cgp?.allocation ?? 90)}%, CGP ${S.cgp?.allocation ?? 90}%.</div></div>` : '<p class="muted">Loading…</p>'}
+        <div class="muted small" data-s="mt6">Block reward split now: miners ${100 - alloc()}%, CGP ${alloc()}%.</div></div>` : '<p class="muted">Loading…</p>'}
       <div class="card"><h2>Voting from ZP Wallet</h2><p class="muted small">Casting allocation and payout ballots arrives in the next version. Until then your balance at the snapshot block already counts as your voting weight for the interval.</p></div></div>${nav('vote')}`;
   },
 
@@ -170,6 +170,8 @@ const views = {
     <button class="btn big" data-act="lock">Lock now</button>
     <p class="muted small">ZP Wallet is open source and community-run. Not affiliated with Zen Protocol Ltd.</p></div>${nav('settings')}`,
 };
+
+const alloc = () => { const a = S.cgp?.allocation; return Number.isInteger(a) && a >= 0 && a <= 100 ? a : 90; };
 
 // CGP cycle from the tip (Chain.fs: interval 10,000, snapshot +9,000, nomination 500)
 function cgpInfo() {
@@ -214,8 +216,8 @@ function render() {
 async function refreshNode() {
   const n = node();
   if (!n) { S.nodeOk = false; S.tip = null; return; }
-  try { const info = await n.info(); S.tip = info.blocks; S.nodeOk = true; S.cgp = await n.cgp().catch(() => null); }
-  catch { S.nodeOk = false; }
+  try { const info = checkInfo(await n.info(), net()); S.tip = info.blocks; S.nodeOk = true; S.nodeError = ''; S.cgp = await n.cgp().catch(() => null); }
+  catch (e) { S.nodeOk = false; S.nodeError = e.message; }
 }
 async function refreshWallet(id, full) {
   const n = node(), w = S.open.get(id); if (!n || !w) return;
@@ -238,7 +240,9 @@ async function openAll() {
   S.open.clear(); S.data.clear();
   for (const r of S.vault.wallets) S.open.set(r.id, openWallet(r, r.kind === 'watch' ? null : await open(S.key, r.box)));
 }
-function lock() { S.key = null; S.open.clear(); S.data.clear(); S.modal = null; go('unlock'); }
+function lock() {
+  for (const w of S.open.values()) { for (const k of w.keys.values()) k.privateKey?.fill?.(0); w.account?.wipePrivateData?.(); }
+  S.key = null; S.draft = {}; S.open.clear(); S.data.clear(); S.modal = null; go('unlock'); }
 
 // ---------------------------------------------------------------- events
 $app.addEventListener('click', async e => {
@@ -306,17 +310,22 @@ $app.addEventListener('submit', async e => {
       case 'send': {
         const to = v.to.trim(); S.draft = { to, amount: v.amount };
         if (!isValidAddress(to, net())) { decodeAddress(to); throw new Error('Not a valid address for this network'); }
-        const amount = parseZP(v.amount.replace(/,/g, ''));
+        const raw = v.amount.trim();
+        const amount = parseZP(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(raw) ? raw.replace(/,/g, '') : raw);   // only thousands separators; "1,5" is refused
         if (amount <= 0n) throw new Error('Enter an amount');
         const a = active(); await refreshWallet(a.id);
+        const d = S.data.get(a.id);
+        if (!d?.state || d.error) throw new Error('Could not read the balance from the node' + (d?.error ? ': ' + d.error : ''));
         const prepared = prepareSend(S.open.get(a.id), S.data.get(a.id).state, to, amount);
         S.modal = { type: 'confirm-send', to, amount, prepared }; S.error = ''; return render();
       }
       case 'node': {
         const url = v.url.trim().replace(/\/+$/, '');
-        if (url && !/^https:\/\/|^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(url)) throw new Error('Use https://, or http://localhost for a node on this computer');
+        let u = null; try { u = url && new URL(url); } catch { /* invalid */ }
+        if (url && !(u && (u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) && !u.username && !u.password))
+          throw new Error('Use https://, or http://localhost for a node on this computer');
         S.settings.nodes[net()] = url; saveSettings(); S.error = '';
-        await refreshAll(); if (!S.nodeOk) throw new Error('Saved, but the node does not answer');
+        await refreshAll(); if (!S.nodeOk) throw new Error('Saved, but ' + (S.nodeError || 'the node does not answer'));
         return;
       }
       case 'reveal': {

@@ -81,7 +81,8 @@ export function parsePrivateKey(text) {
     chainCode: raw.slice(13, 45), privateKey: raw.slice(46, 78) });
   if (depth === 0) return { kind: 'account', account: node.derive(ACCOUNT_PATH) };
   if (depth === 3) return { kind: 'account', account: node };
-  return { kind: 'single', key: singleKey(node.privateKey) };
+  if (depth === 5) return { kind: 'single', key: singleKey(node.privateKey) };   // one address key m/44'/258'/0'/b/i
+  throw new Error(`Extended key at depth ${depth} is not supported: use the root key, the account key (m/44'/258'/0'), or the 24 words`);
 }
 
 export function singleKey(privateKey) {

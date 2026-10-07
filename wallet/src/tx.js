@@ -6,7 +6,9 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { txHash, serializeTx, hex, ZEN_ASSET, assetToString } from './serialize.js';
 
-export const COINBASE_MATURITY = 100;
+export const COINBASE_MATURITY = 100;                              // mainnet (Consensus/Chain.fs)
+export const maturityFor = network => network === 'test' ? 10 : COINBASE_MATURITY;
+export const MAX_AMOUNT = 2n ** 64n - 1n;
 
 export function signDigest(privateKey, digest) {
   return secp256k1.sign(digest, privateKey, { prehash: false, lowS: true });
@@ -19,20 +21,21 @@ const keyOf = asset => assetToString(asset);
 
 // utxos: [{ outpoint:{txHash,index}, lock:{type,...}, spend:{asset,amount}, key:{privateKey,publicKey} }]
 // payments: [{ lock, spend:{asset, amount} }], changeLock: lock for change outputs
-export function buildTransaction({ utxos, payments, changeLock, tipBlockNumber, contract = null }) {
+export function buildTransaction({ utxos, payments, changeLock, tipBlockNumber, contract = null, maturity = COINBASE_MATURITY }) {
   const need = new Map();
   for (const p of payments) {
     if (p.spend.amount <= 0n) throw new Error('Amount must be positive');
+    if (p.spend.amount > MAX_AMOUNT) throw new Error('Amount too large');
     const k = keyOf(p.spend.asset);
     need.set(k, { asset: p.spend.asset, amount: (need.get(k)?.amount ?? 0n) + p.spend.amount });
   }
   const spendable = utxos.filter(u => u.lock.type !== 'Coinbase' ||
-    tipBlockNumber + 1 - u.lock.blockNumber >= COINBASE_MATURITY);
+    tipBlockNumber + 1 - u.lock.blockNumber >= maturity);
 
   const chosen = [], change = [];
   for (const [k, { asset, amount }] of need) {
     // largest first keeps transactions small
-    const pool = spendable.filter(u => keyOf(u.spend.asset) === k).sort((a, b) => (b.spend.amount > a.spend.amount ? 1 : -1));
+    const pool = spendable.filter(u => keyOf(u.spend.asset) === k).sort((a, b) => (b.spend.amount > a.spend.amount ? 1 : b.spend.amount < a.spend.amount ? -1 : 0));
     let sum = 0n;
     for (const u of pool) { if (sum >= amount) break; chosen.push(u); sum += u.spend.amount; }
     if (sum < amount) throw new Error(`Not enough funds (${k === '00' ? 'ZP' : 'asset ' + k})`);
@@ -62,9 +65,11 @@ export const KALAPAS = 100_000_000n;
 export function parseZP(text) {
   const m = String(text).trim().match(/^(\d+)(?:\.(\d{1,8}))?$/);
   if (!m) throw new Error('Invalid amount');
-  return BigInt(m[1]) * KALAPAS + BigInt((m[2] || '').padEnd(8, '0'));
+  const v = BigInt(m[1]) * KALAPAS + BigInt((m[2] || '').padEnd(8, '0'));
+  if (v > MAX_AMOUNT) throw new Error('Amount too large');
+  return v;
 }
 export function formatZP(kalapas) {
-  const k = BigInt(kalapas), whole = k / KALAPAS, frac = (k % KALAPAS).toString().padStart(8, '0').replace(/0+$/, '');
-  return whole.toLocaleString('en-US') + (frac ? '.' + frac : '');
+  const n = BigInt(kalapas), neg = n < 0n, k = neg ? -n : n, whole = k / KALAPAS, frac = (k % KALAPAS).toString().padStart(8, '0').replace(/0+$/, '');
+  return (neg ? '-' : '') + whole.toLocaleString('en-US') + (frac ? '.' + frac : '');
 }
