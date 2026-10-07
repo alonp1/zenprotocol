@@ -2,7 +2,7 @@ name: net10
 # Stage 4 of docs/MIGRATION.md: the node on .NET 10. F* (fstar.exe) still runs on Mono as an external tool.
 on:
   push:
-    branches: [net10, integrate-net10]
+    branches: [net10, integrate-net10, node-upgrade-script, master]
   workflow_dispatch:
 
 jobs:
