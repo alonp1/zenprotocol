@@ -21,7 +21,7 @@ echo "$DOMAIN -> ${IP:-<no DNS yet>}"
 echo "== Files"
 mkdir -p "$WEB/snapshots"
 cp "$REPO/site/index.html" "$WEB/index.html"
-cp "$REPO/site/stats.html" "$WEB/stats.html"
+cp "$REPO/site/stats.html" "$REPO/site/assets.html" "$REPO/site/cgp.html" "$WEB/"
 
 echo "== ZP Wallet (built in a throwaway node container: nothing to install on the server)"
 if command -v docker >/dev/null; then
@@ -84,6 +84,28 @@ UNIT
 systemctl daemon-reload
 systemctl enable --now zen-stats.timer
 systemctl start zen-stats.service || echo "stats not built yet (node busy or syncing) - the timer retries every 5 minutes"
+
+echo "== Chain index (assets.json, cgp-history.json; first run indexes from genesis in 5-minute steps)"
+cat > /etc/systemd/system/zen-index.service <<UNIT
+[Unit]
+Description=Index the ZP chain for the assets and CGP history pages
+[Service]
+Type=oneshot
+TimeoutStartSec=20min
+ExecStart=/usr/bin/python3 $REPO/site/chain-index.py --web $WEB --budget 270
+UNIT
+cat > /etc/systemd/system/zen-index.timer <<UNIT
+[Unit]
+Description=Update the ZP chain index every 5 minutes
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now zen-index.timer
+systemctl start --no-block zen-index.service
 
 echo "== HTTPS"
 if ! command -v certbot >/dev/null; then apt-get install -y certbot python3-certbot-nginx; fi

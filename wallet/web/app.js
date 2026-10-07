@@ -26,7 +26,7 @@ const I = {
 // ---------------------------------------------------------------- state
 const S = {
   vault: storage.load(), key: null, open: new Map(), data: new Map(),
-  screen: null, tab: 'new', draft: {}, error: '', busy: false, modal: null, nodeOk: null, tip: null, cgp: null,
+  screen: null, tab: 'new', assetNames: {}, draft: {}, error: '', busy: false, modal: null, nodeOk: null, tip: null, cgp: null,
   settings: loadSettings(), lastActivity: Date.now(),
 };
 function loadSettings() {
@@ -122,7 +122,7 @@ const views = {
         <div class="row k"><span>CGP · INTERVAL ${c.community}</span><span data-s="right">${esc(c.phase)}</span></div>
         <div data-s="mt4">${esc(c.next)} in ${c.blocksLeft.toLocaleString('en-US')} blocks · around ${esc(c.eta)}</div>
         <div class="muted small">Fund ${cgpBalance()} · ${zpStr(c.cgpPerBlock)} ZP per block to the CGP · your vote weight ${formatZP(voteWeight())} ZP</div></button>` : ''}
-      ${others.length ? `<div class="card"><h2>Tokens</h2><div class="list">${others.map(x => `<div class="item"><span class="mono small">${esc(x.asset.slice(0, 18))}…</span><span class="amt">${esc(String(x.spendable + x.maturing))}</span></div>`).join('')}</div></div>` : ''}
+      ${others.length ? `<div class="card"><h2>Tokens</h2><div class="list">${others.map(x => `<div class="item"><span title="${esc(x.asset)}">${S.assetNames[x.asset] ? esc(S.assetNames[x.asset]) : `<span class="mono small">${esc(x.asset.slice(0, 18))}…</span>`}</span><span class="amt">${formatZP(x.spendable + x.maturing)}</span></div>`).join('')}</div></div>` : ''}
       <div class="row"><h2>Activity</h2><button class="iconbtn" data-act="refresh" aria-label="Refresh" data-s="fixed">${S.busy ? '<span class="spin"></span>' : I.refresh}</button></div>
       <div class="list">${!d.history ? '<p class="muted small">Loading…</p>' : d.history.length === 0 ? '<p class="muted small">No transactions yet.</p>' : d.history.map(h => {
         const amt = BigInt(h.amount), inn = amt > 0n;
@@ -258,6 +258,12 @@ async function refreshNode() {
     if (/\/node$/.test(u.pathname)) {
       const r = await fetch(u.origin + '/stats.json', { cache: 'no-cache' });
       if (r.ok) { const j = await r.json(); if (j && typeof j === 'object') S.stats = j; }
+      const ra = await fetch(u.origin + '/assets.json', { cache: 'no-cache' });
+      if (ra.ok) {
+        const j = await ra.json(), names = {};
+        for (const x of Array.isArray(j?.assets) ? j.assets : []) if (typeof x?.asset === 'string' && typeof x?.name === 'string') names[x.asset] = x.name.slice(0, 40);
+        S.assetNames = names;
+      }
     }
   } catch { /* optional */ }
   const list = Array.isArray(S.stats?.contracts) ? S.stats.contracts : await n.activeContracts().catch(() => null);
