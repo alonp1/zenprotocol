@@ -170,6 +170,16 @@ The script fetches the newest reference from `reference-data`, verifies its chec
 4. Measure at each step: transactions accepted to the mempool per second, transactions per block, block validation time (node log), time for a block to reach the other nodes, CPU, RAM and disk per node, and whether any node falls behind the tip.
 5. Repeat with the .NET 10 build and compare. Publish the results in this file and on the stats page.
 
+**First measurement (devnet, .NET 10 Debug build, 3 nodes + miner + load generator on one 4-vCPU GitHub runner; `devnet.yml`, one run).** Signed transfers of 1 input, 2 outputs:
+
+| Offered rate | Accepted per second | Publish latency p50 / p95 | Rejected | Confirmed | Largest block | Node lag |
+|---|---|---|---|---|---|---|
+| 5/s | 5.0 | 4 / 6 ms | 0 | 150 of 150 | 33 txs | 0 blocks |
+| 20/s | 19.7 | 17 / 162 ms | 0 | 600 of 600 | 474 txs | 0 blocks |
+| 50/s | 16.7 | 4,147 / 5,998 ms | 0 | 1,500 of 1,500 | 924 txs | 0 blocks |
+
+Reading: nothing was lost or rejected and the three nodes stayed on the same block, but at 50/s the node took in only about 17 transactions a second (latency grew to seconds): on this setup the mempool intake is the limit, around 17-20 tx/s. Blocks (60 s target on the `local` chain) then carried hundreds of transactions each. Caveats: Debug build (slower than Release), all processes share 4 shared vCPUs, one run, no Mono comparison yet (the release Mono image has no `local` chain). Treat it as a lower bound and a baseline for the next runs.
+
 Pass criterion for the network: the sustained rate at which every node stays at the tip, with block propagation well under the block interval.
 
 ## Consensus safety rules
