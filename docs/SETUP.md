@@ -120,6 +120,8 @@ DOMAIN=your.domain bash site/setup-site.sh
 
 The script adds a separate Nginx site (existing sites are untouched), publishes the newest snapshot, installs the `zen-stats` timer (rebuilds `stats.json` for the stats page every 5 minutes from the local API; visitors never reach the node) and issues an auto-renewing HTTPS certificate. Without `DOMAIN` it uses `zen.sealinkgps.com`.
 
+It also installs the `zen-index` timer: `site/chain-index.py` reads every block from the local API into `/var/lib/zen-stats/chain-index.sqlite` and writes `assets.json` (all assets: tokens outstanding, holders, transactions) and `cgp-history.json` (every CGP interval: ballots with voter and weight at the snapshot block, allocation in force and decided, payouts) for the pages `assets.html` and `cgp.html`. The first index from genesis takes a few hours in 5-minute steps (`journalctl -u zen-index` shows progress); afterwards each run adds the new blocks. Names of assets and contracts: `site/asset-names.json`, `site/contract-names.json`. To rebuild the index: `rm /var/lib/zen-stats/chain-index.sqlite`.
+
 ### Refreshing the snapshot (monthly)
 
 ```
