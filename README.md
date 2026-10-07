@@ -1,6 +1,8 @@
 Zen Protocol 
 ============
 
+Community revival of the ZP network. Guides: [node setup and keeping the chain alive](docs/SETUP.md) · [testnet and private test networks](docs/TESTNET.md) · [.NET 10 migration and load tests](docs/MIGRATION.md) · [wallet](docs/WALLET.md).
+
 # Build 
 
 ## Linux
