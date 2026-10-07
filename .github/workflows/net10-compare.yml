@@ -17,17 +17,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Image
         run: |
-          if [ "${{ matrix.variant }}" = mono ]; then docker pull ghcr.io/alonp1/zen-node:latest && docker tag ghcr.io/alonp1/zen-node:latest img
-          else docker build -q -f Docker/Dockerfile.net10 -t img . ; fi
-          docker images img --format 'size {{.Size}}' | sed 's/^/::notice title=image size ${{ matrix.variant }}::/'
+          if [ "${{ matrix.variant }}" = mono ]; then docker pull ghcr.io/alonp1/zen-node:latest && docker tag ghcr.io/alonp1/zen-node:latest zen-cmp:test
+          else docker build -q -f Docker/Dockerfile.net10 -t zen-cmp:test . ; fi
+          docker images zen-cmp:test --format 'size {{.Size}}' | sed 's/^/::notice title=image size ${{ matrix.variant }}::/'
       - name: Sync for 10 minutes
         run: |
-          docker run -d --name n -e NETWORK_URL=off img
+          docker run -d --name zcmp -e NETWORK_URL=off zen-cmp:test 2>/tmp/run.err || { echo "::error title=docker run::$(tr '\n' ' ' </tmp/run.err)"; exit 1; }
           T0=$(date +%s); : > /tmp/s.txt
           for i in $(seq 1 20); do
             sleep 30
-            B=$(docker exec n curl -fs http://127.0.0.1:11567/blockchain/info 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["blocks"])' 2>/dev/null || echo 0)
-            S=$(docker stats --no-stream --format '{{.MemUsage}} {{.CPUPerc}}' n | sed 's/ \/ [^ ]*//')
+            B=$(docker exec zcmp curl -fs http://127.0.0.1:11567/blockchain/info 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["blocks"])' 2>/dev/null || echo 0)
+            S=$(docker stats --no-stream --format "{{.MemUsage}} {{.CPUPerc}}" zcmp | sed 's/ \/ [^ ]*//')
             echo "$(( $(date +%s) - T0 ))s blocks=$B $S" | tee -a /tmp/s.txt
           done
           LAST=$(tail -1 /tmp/s.txt | sed 's/.*blocks=\([0-9]*\).*/\1/')
