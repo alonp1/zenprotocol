@@ -348,6 +348,10 @@ lap('vote weights and cgp history ready');
 writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, intervals: out });
 
 // ---- assets.json ------------------------------------------------------------------------------
+// Assets change slowly and computing them reads every unspent output (about 45 s): every 30 minutes is enough, or at once when the file is missing
+const assetsFresh = fs.existsSync(path.join(WEB, 'assets.json')) && Date.now() - Number(meta('assets_at', '0')) < 30 * 60000;
+if (assetsFresh) console.log('chain-index: assets.json is recent, not recomputed');
+else {
 const outstanding = new Map(), holders = new Map();
 for (const r of db.prepare('SELECT asset, address, amount FROM utxo').iterate()) {
   outstanding.set(r.asset, (outstanding.get(r.asset) || 0n) + BigInt(r.amount));
@@ -369,3 +373,6 @@ const rows = db.prepare('SELECT asset, contract, minted, destroyed, txs, first_b
 }).sort((x, y) => (x.asset !== '00') - (y.asset !== '00') || y.txs - x.txs);
 lap('assets computed');
 writeJson('assets.json', { updated: Date.now(), indexedTo: last, tip, complete, assets: rows });
+  q.setMeta.run('assets_at', String(Date.now()));
+}
+
