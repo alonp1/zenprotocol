@@ -30,7 +30,7 @@ let private compile' path moduleName code =
         if File.Exists assemblyPath then
             Ok ()
         else
-            File.WriteAllText(codeFileName, code)
+            File.WriteAllText(codeFileName, (code: string))
             let (+/) = (/) Platform.getFrameworkPath
 
             let errors, exitCode =
@@ -130,7 +130,7 @@ let private extract code hints limits rlimit moduleName =
 #endif
 
     File.WriteAllText(originalFile, sprintf "module %s\n%s" moduleName code)
-    File.WriteAllText(hintsFile, hints)
+    File.WriteAllText(hintsFile, (hints: string))
 
     try
         let maxFuel, maxIFuel = limits
@@ -160,7 +160,7 @@ let calculateMetrics hints =
     let file = Path.GetTempFileName()
     let hintsFile = changeExtention ".fst.hints" file
 
-    File.WriteAllText(hintsFile, hints)
+    File.WriteAllText(hintsFile, (hints: string))
 
     try
         try
@@ -248,7 +248,7 @@ let totalQueries hints =
     let file = Path.GetTempFileName()
     let hintsFile = changeExtention ".fst.hints" file
 
-    File.WriteAllText(hintsFile, hints)
+    File.WriteAllText(hintsFile, (hints: string))
 
     try (
         try
