@@ -78,9 +78,9 @@ const lockFile = DB + '.lock';
 try {                                           // one run at a time
   const fd = fs.openSync(lockFile, 'wx'); fs.writeSync(fd, String(process.pid)); fs.closeSync(fd);
 } catch {
-  const pid = Number(fs.readFileSync(lockFile, 'utf8'));
-  let alive = false; try { process.kill(pid, 0); alive = true; } catch { /* stale */ }
-  if (alive) { console.log('chain-index: another run is in progress'); process.exit(0); }
+  // in a container this process is often PID 1, so a PID alone proves nothing: a lock older than a run is stale
+  const age = Date.now() - fs.statSync(lockFile).mtimeMs;
+  if (age < BUDGET + 10 * 60000) { console.log('chain-index: another run is in progress'); process.exit(0); }
   fs.writeFileSync(lockFile, String(process.pid));
 }
 process.on('exit', () => { try { fs.unlinkSync(lockFile); } catch { /* gone */ } });
