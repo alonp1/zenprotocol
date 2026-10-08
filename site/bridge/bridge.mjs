@@ -9,7 +9,7 @@
 //   BRIDGE_PASSWORD  wallet password (testnet)    BRIDGE_SIGN  sign path (m/44'/258'/0'/3/0)
 //   BRIDGE_EVM       rpc URL, or  mock:<file>  (a JSON list of {tx, log, from, to, amount, block} for tests)
 //   BRIDGE_USDC      USDC token address on that chain      BRIDGE_EVM_KEY  private key of the bridge's EVM wallet (for withdrawals)
-//   BRIDGE_CONFIRMATIONS (12)   BRIDGE_DATA (./data)   BRIDGE_LISTEN (127.0.0.1:8090)   BRIDGE_INTERVAL (15 s)
+//   BRIDGE_LOG_RANGE (450) blocks per log query (public rpc nodes allow ~500)   BRIDGE_CONFIRMATIONS (12)   BRIDGE_DATA (./data)   BRIDGE_LISTEN (127.0.0.1:8090)   BRIDGE_INTERVAL (15 s)
 //   BRIDGE_ZO        command that runs zen-oracle (dotnet src/Oracle/bin/Release/zen-oracle.dll)
 //   BRIDGE_EXPLORER  explorer API for reading withdrawal transactions (http://127.0.0.1:11580/explorer/api)
 import http from 'node:http';
@@ -71,8 +71,9 @@ async function evmDeposits() {
   const to = tip - CONF; if (to < from) return [];
   const usdc = new ethers.Contract(USDC, ['event Transfer(address indexed from, address indexed to, uint256 value)'], provider);
   const out = [];
-  for (let a = from; a <= to; a += 2000) {
-    const evs = await usdc.queryFilter(usdc.filters.Transfer(null, bridgeEvm()), a, Math.min(to, a + 1999));
+  const RANGE = Number(env('BRIDGE_LOG_RANGE', '450'));   // public rpc nodes limit eth_getLogs to ~500 blocks
+  for (let a = from; a <= to; a += RANGE) {
+    const evs = await usdc.queryFilter(usdc.filters.Transfer(null, bridgeEvm()), a, Math.min(to, a + RANGE - 1));
     for (const e of evs) out.push({ tx: e.transactionHash, log: e.index, from: e.args.from.toLowerCase(), amount: String(e.args.value), block: e.blockNumber });
   }
   save('evm-cursor.json', { block: to + 1 });
