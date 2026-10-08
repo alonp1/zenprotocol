@@ -99,6 +99,7 @@ CREATE INDEX IF NOT EXISTS utxo_asset ON utxo(asset);
 CREATE TABLE IF NOT EXISTS assets (asset TEXT PRIMARY KEY, contract TEXT, minted TEXT DEFAULT '0', destroyed TEXT DEFAULT '0',
                                    txs INTEGER DEFAULT 0, first_block INTEGER);
 CREATE TABLE IF NOT EXISTS votes (tx TEXT, block INTEGER, time INTEGER, command TEXT, pk TEXT, ballot TEXT, PRIMARY KEY (tx, pk, command));
+CREATE TABLE IF NOT EXISTS vweights (block INTEGER, pk TEXT, zp TEXT, PRIMARY KEY (block, pk));
 CREATE TABLE IF NOT EXISTS commitvotes (tx TEXT, block INTEGER, time INTEGER, commit_id TEXT, pk TEXT, PRIMARY KEY (tx, pk));
 CREATE TABLE IF NOT EXISTS payouts (tx TEXT, block INTEGER, time INTEGER, recipient TEXT, asset TEXT, amount TEXT);
 CREATE TABLE IF NOT EXISTS dex (tx TEXT, block INTEGER, time INTEGER, command TEXT, under_asset TEXT, under_amount TEXT, pair_asset TEXT,
@@ -416,7 +417,21 @@ if (REPO_CONTRACT) {
     const counted = !it.seen.has(v.pk); if (counted) it.seen.add(v.pk);        // the first vote of a key in an interval counts, as in the CGP tally
     it.votes.push({ tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, voter: pkAddress(v.pk), counted, weight: null, _pk: v.pk, _iv: iv });
   }
-  if (complete) for (const it of byIv.values()) for (const v of it.votes) if (v.counted) { const w = await weight(v._iv, v._pk); v.weight = w === null ? null : Number(w) / 1e8; }
+  // weight of a vote = ZP balance of the voting key at the block of its vote (as the official Zen explorer shows it); cached, and filled in
+  // over several runs when the node is slow
+  const vwGet = db.prepare('SELECT zp FROM vweights WHERE block=? AND pk=?'), vwPut = db.prepare('INSERT OR REPLACE INTO vweights VALUES (?,?,?)');
+  let missing = 0;
+  if (complete) for (const it of byIv.values()) for (const v of it.votes) if (v.counted) {
+    let zp = vwGet.get(v.block, v._pk)?.zp ?? null;
+    if (zp === null && Date.now() - T0 < BUDGET * 0.85) {
+      try {
+        const bal = await api('/addressdb/balance', { addresses: [pkAddress(v._pk)], blockNumber: String(v.block) }, 60000, 2);
+        zp = String(bal.filter(x => x.asset === '00').reduce((t, x) => t + BigInt(x.balance), 0n)); vwPut.run(v.block, v._pk, zp);
+      } catch { zp = null; }
+    }
+    v.weight = zp === null ? null : Number(zp) / 1e8; if (zp === null) missing++;
+  }
+  if (missing) console.log(`chain-index: ${missing} community vote weights still to fetch (next run continues)`);
   const cvOut = [...byIv.entries()].sort((a, b) => b[0] - a[0]).map(([iv, it]) => {
     const commits = new Map();
     for (const { _pk, _iv, ...v } of it.votes) { const c = commits.get(v.commit) || { commit: v.commit, voters: 0, weight: 0, ballots: 0, votes: [] }; commits.set(v.commit, c); c.votes.push(v); c.ballots++; if (v.counted) { c.voters++; c.weight += v.weight || 0; } }

@@ -108,7 +108,7 @@
   <section>
     <div class="note" style="margin-top:0">Protocol upgrades are decided by a vote of coin holders. Each vote names a <b>commit id</b>: the exact version of the code in the
     <a href="https://github.com/zenprotocol/zenprotocol" rel="noopener">source repository</a>. A holder votes by sending a transaction to the Repo voting contract with that commit id as its command.
-    The contract keeps no tally on the chain, so this page computes one with the CGP's rules: intervals of 10,000 blocks, the balance at the interval's snapshot block as the vote weight, and only the first vote of a wallet in an interval counted. The Repo contract has been inactive since block 233,874.</div>
+    The contract keeps no tally on the chain, so this page computes one with the CGP's rules: intervals of 10,000 blocks, the vote weight is the balance of the voting wallet at the block of its vote, and only the first vote of a wallet in an interval is counted. The Repo contract has been inactive since block 233,874.</div>
   </section>
   <div id="list"></div>
   <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
@@ -139,7 +139,7 @@ fetch('/community-votes.json', { cache: 'no-cache' }).then(r => { if (!r.ok) thr
           return `<tr><td class="mono cid"><a href="${REPO}${encodeURIComponent(c.commit)}" rel="noopener">${esc(c.commit)}</a></td><td class="r">${c.voters}</td><td class="r">${amt(Math.round(c.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('')}</table></div>
         <h3>Votes (${i.commits.reduce((s, c) => s + c.ballots, 0)})</h3>
         <div class="scroll"><table><tr><th>Wallet (voter)</th><th>Commit</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>${i.commits.flatMap(c => c.votes).sort((a, b) => b.block - a.block).map(v =>
-          `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}">${esc(v.voter)}</a></td><td class="mono">${commitLink(v.commit)}</td><td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
+          `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}">${esc(v.voter)}</a></td><td class="mono">${commitLink(v.commit)}</td><td class="r" title="${v.weight == null ? 'weight still being fetched' : ''}">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
           <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="a repeated vote of this wallet in the interval">not counted</span>'}</td></tr>`).join('')}</table></div>
       </div></details>`;
   }).join('') || '<section>No community votes indexed yet.</section>';
