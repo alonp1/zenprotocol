@@ -82,8 +82,11 @@
       "yahoo"
     ],
     "XAU": [
-      "openrates",
+      "twelvedata",
       "yahoo"
     ]
+  },
+  "tolerances": {
+    "XAU": 0.02
   }
 }

@@ -226,10 +226,14 @@ let create (name: string) (quote: string) : Provider =
             | true, t ->
                 let minimum = match root.TryGetProperty("quorum") with | true, q -> (match q.TryGetProperty("min") with | true, x -> x.GetInt32() | _ -> 2) | _ -> 2
                 let tol = match root.TryGetProperty("quorum") with | true, q -> (match q.TryGetProperty("tolerance") with | true, x -> x.GetDecimal() | _ -> 0.01M) | _ -> 0.01M
+                // a ticker whose sources legitimately differ more (spot against futures) can have its own tolerance: "tolerances": { "XAU": 0.02 }
+                let tolOf name = match root.TryGetProperty("tolerances") with
+                                 | true, m -> (match m.TryGetProperty(name: string) with | true, x -> x.GetDecimal() | _ -> tol)
+                                 | _ -> tol
                 [ for kv in t.EnumerateObject() ->
                     kv.Name,
                     (if kv.Value.ValueKind = JsonValueKind.Array
-                     then Quorum([ for n in kv.Value.EnumerateArray() -> resolve (n.GetString()) ], minimum, tol) :> Provider
+                     then Quorum([ for n in kv.Value.EnumerateArray() -> resolve (n.GetString()) ], minimum, tolOf kv.Name) :> Provider
                      else resolve (kv.Value.GetString())) ]
                 |> Map.ofList
             | _ -> Map.empty

@@ -105,7 +105,7 @@ Free sources give no continuous trading for these, and none is needed: a ticker 
 
 A source entry can read **CSV** (`"format": "csv"`, `"path"` = the column name or a 0-based index; the last data row is used) and map tickers to its own symbols (`"symbols": { "XAU": "xauusd" }`, used as `{symbol}` and `{symbol_lower}` in the URL). A negative index counts from the end (`close[-1]`). A `User-Agent` header replaces the default one (Yahoo refuses unknown agents).
 
-`site/oracle-sources.json` is the ready file: crypto from CoinGecko, Binance and Coinbase (2 of 3 must agree within 1 %), currencies from Frankfurter (ECB) and open.er-api.com, stock closes from Twelve Data (free key in `TWELVEDATA_KEY`, written `{env:TWELVEDATA_KEY}` in the URL) and Yahoo Finance (2 of 2), gold from open.er-api and Yahoo. Stooq was dropped: it now asks for a JavaScript check. Oil (`WTI`) waits for a second free source. Free sources change without notice, so **check them from the server first**:
+`site/oracle-sources.json` is the ready file: crypto from CoinGecko, Binance and Coinbase (2 of 3 must agree within 1 %), currencies from Frankfurter (ECB) and open.er-api.com, stock closes from Twelve Data (free key in `TWELVEDATA_KEY`, written `{env:TWELVEDATA_KEY}` in the URL) and Yahoo Finance (2 of 2), gold from Twelve Data (spot XAU/USD) and Yahoo (`GC=F` futures, a little above spot, so `"tolerances": { "XAU": 0.02 }` widens the gap allowed for it). Stooq was dropped: it now asks for a JavaScript check. Oil (`WTI`) waits for a second free source. Free sources change without notice, so **check them from the server first**:
 
 ```
 ORACLE_SOURCES_FILE=/r/site/oracle-sources.json ORACLE_TICKERS=BTC,ETH,EUR,GBP,JPY,CHF,SPY,AAPL,MSFT,XAU zen-oracle probe
