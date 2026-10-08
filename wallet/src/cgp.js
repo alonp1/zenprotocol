@@ -2,7 +2,7 @@
 // This file builds and signs the ballots and the message body of the voting contract.
 // Sending them (contract/execute, signing the transaction, publishing) is in wallet.js.
 import { sha3_256 } from '@noble/hashes/sha3.js';
-import { Writer, Data, Spend, VarInt, hex, unhex, assetToString } from './serialize.js';
+import { Writer, Reader, Data, Spend, Asset, VarInt, hex, unhex, assetToString } from './serialize.js';
 import { decodeAddress } from './keys.js';
 import { signDigest } from './tx.js';
 
@@ -10,6 +10,12 @@ import { signDigest } from './tx.js';
 export const CGP_PARAMS = {
   main: { intervalLength: 10000, snapshot: 9000, nomination: 500, upperAllocationBound: 90, allocationCorrectionCap: 15 },
   test: { intervalLength: 100, snapshot: 90, nomination: 5, upperAllocationBound: 90, allocationCorrectionCap: 15 },
+};
+
+// the voting contract of each network (Chain.fs); the testnet id is that of the old testnet until ours is activated
+export const VOTING_CONTRACT = {
+  main: '000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12',
+  test: '00000000e89738718a802a7d217941882efe8e585e20b20901391bc37af25fac2f22c8ab',
 };
 
 export const getInterval = (p, bn) => bn > 0 ? Math.floor((bn - 1) / p.intervalLength) + 1 : 1;
@@ -24,6 +30,15 @@ export const phaseAt = (p, bn) => {
   if (bn <= s + p.nomination) return { interval: i, phase: 'Nomination', opens: s + 1, closes: s + p.nomination };
   return { interval: i, phase: 'Vote', opens: s + p.nomination + 1, closes: i * p.intervalLength };
 };
+
+// a candidate from /blockchain/candidates: {recipient: address, spendlist: [{asset: hex, amount}]} -> ballot hex
+export function candidateBallot(c) {
+  if (!c || typeof c.recipient !== 'string' || !Array.isArray(c.spendlist)) throw new Error('Invalid candidate');
+  return payoutBallot(c.recipient, c.spendlist.map(s => {
+    if (typeof s?.asset !== 'string' || !/^([0-9a-f]{2})+$/.test(s.asset) || !/^\d{1,20}$/.test(String(s.amount))) throw new Error('Invalid candidate');
+    return { asset: Asset.read(new Reader(unhex(s.asset))), amount: BigInt(s.amount) };
+  }));
+}
 
 // --- ballots ------------------------------------------------------------------------------------
 const bytesOf = fn => { const w = new Writer(); fn(w); return w.out(); };

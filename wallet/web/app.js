@@ -4,8 +4,9 @@ import qrcode from 'qrcode-generator';
 import { newMnemonic, checkMnemonic, isValidAddress, decodeAddress } from '../src/keys.js';
 import { NodeClient, NodeError, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
-import { openWallet, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
-import { parseZP, formatZP } from '../src/tx.js';
+import { CGP_PARAMS, VOTING_CONTRACT, allocationBallot, payoutBallot, candidateBallot, phaseAt } from '../src/cgp.js';
+import { openWallet, prepareVote, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
+import { parseZP, formatZP, ZP } from '../src/tx.js';
 import contractNames from '../../site/contract-names.json';
 
 const LOCK_AFTER_MS = 15 * 60 * 1000;
@@ -195,7 +196,7 @@ const views = {
           <span class="amt" data-s="fixed">${formatZP(zpOf(w.id))} ZP</span></button>`).join('') || '<p class="muted small">Add a wallet with its 24 words or key to vote. Watch-only wallets cannot sign a ballot.</p>'}</div>
         ${signers.length > 1 ? `<div class="row" data-s="mt10"><button class="btn" data-act="vote-all">All</button><button class="btn" data-act="vote-none">None</button></div>` : ''}
         <div class="kv" data-s="mt10"><span>Vote weight now</span><span class="amt">${formatZP(voteWeight())} ZP</span></div></div>
-      <div class="card"><h2>Casting ballots</h2><p class="muted small">Allocation and payout ballots are signed by the selected wallets and arrive in the next version. Your balance at the snapshot block already counts as your weight for the interval.</p></div>
+      ${ballotsCard(c)}
       <div class="card"><h2>Protocol upgrade vote</h2><p class="muted small">Inactive: the Repo voting contract has been inactive since block 233,874.</p></div></div>${nav('vote')}`;
   },
 
@@ -264,6 +265,39 @@ const cgpBalance = (withBlock = false) => {
   return b && Number.isFinite(b.zp) ? zpStr(b.zp) + ' ZP' + (withBlock ? ` <span class="muted small">at block ${Number(b.block).toLocaleString('en-US')}</span>` : '') : 'not available from this node';
 };
 
+// ---------------------------------------------------------------- CGP ballots
+function ballotsCard(c) {
+  if (!c) return '';
+  const ph = phaseAt(CGP_PARAMS[net()], (S.tip || 0) + 1), none = !voters().length;
+  const note = none ? '<p class="muted small">Select at least one wallet that can sign above.</p>' : '';
+  if (ph.phase === 'before') return `<div class="card"><h2>Casting ballots</h2><p class="muted small">Ballots open after the snapshot block (${c.snapshot.toLocaleString('en-US')}). Your balance at that block is your weight for this interval.</p></div>`;
+  const allocForm = `<form data-form="vote-alloc" class="screen" data-s="flush"><h2>Allocation vote</h2>
+      <p class="muted small">Share of each block reward paid to the CGP fund (now ${alloc()}%). Counted in the voting phase; the share may change by at most 15 points per interval and stays at most 90%.</p>
+      <label class="field">Allocation (%)<input name="pct" inputmode="numeric" autocomplete="off" value="${esc(S.draft.pct || '')}" required></label>
+      ${ph.phase === 'Vote' ? `<button class="btn primary" ${none ? 'disabled' : ''}>Review</button>` : '<p class="muted small">Opens with the voting phase.</p>'}</form>`;
+  const nom = `<form data-form="vote-nom" class="screen" data-s="flush"><h2>Payout nomination</h2>
+      <p class="muted small">Propose that the CGP fund pays an amount of ZP to an address. Needs 3% of all ZP behind it to become a candidate.</p>
+      <label class="field">Recipient address<input name="to" class="mono" autocomplete="off" spellcheck="false" value="${esc(S.draft.nto || '')}" required></label>
+      <label class="field">Amount (ZP)<input name="amount" inputmode="decimal" autocomplete="off" value="${esc(S.draft.namount || '')}" required></label>
+      ${ph.phase === 'Nomination' ? `<button class="btn primary" ${none ? 'disabled' : ''}>Review</button>` : '<p class="muted small">Opens in the nomination phase.</p>'}</form>`;
+  const cands = S.cands ? (S.cands.length ? S.cands.map((x, i) => `<button class="item" data-act="vote-cand" data-i="${i}" data-s="plain" ${ph.phase === 'Vote' && !none ? '' : 'disabled'}>
+      <span class="mono small" data-s="wrap">${esc(x.recipient)}</span><span class="amt">${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset ' + esc(s.asset.slice(0, 8)) + '…').join(' + ')}</span></button>`).join('') : '<p class="muted small">No candidates in this interval.</p>')
+    : `<button class="btn" data-act="load-cands">Show candidates</button>`;
+  return `<div class="card"><h2>Casting ballots</h2>
+    <p class="muted small">Signed on this device by the selected wallets; each sends one transaction with a 1 kalapa fee. Only the first vote of each key counts in a phase.</p>${note}
+    <div class="card">${allocForm}</div><div class="card">${nom}</div>
+    <div class="card"><h2>Payout vote</h2><p class="muted small">Pick a candidate. Counted in the voting phase.</p><div class="list">${cands}</div></div>${errBox()}</div>`;
+}
+async function reviewVote(kind, command, ballotHex, label) {
+  const sel = voters(); if (!sel.length) throw new Error('Select at least one wallet that can sign');
+  const funder = S.open.get(active().id) && canSpend(S.open.get(active().id)) && sel.some(w => w.id === active().id) ? active() : sel[0];
+  await refreshWallet(funder.id);
+  const d = S.data.get(funder.id); if (!d?.state) throw new Error('Could not read the balance from the node');
+  const voterKeys = sel.flatMap(w => [...S.open.get(w.id).keys.values()]);
+  const prepared = await prepareVote({ w: S.open.get(funder.id), state: d.state, node: node(), votingContractId: VOTING_CONTRACT[net()], command, ballotHex, voterKeys });
+  S.modal = { type: 'confirm-vote', kind, label, prepared, weight: voteWeight() }; S.error = ''; render();
+}
+
 // ---------------------------------------------------------------- modal
 function modalHtml() {
   const m = S.modal; if (!m) return '';
@@ -274,6 +308,17 @@ function modalHtml() {
     <div class="kv"><span class="muted">Fee</span><span>None</span></div></div>
     <p class="muted small">Transfers cannot be reversed. Check the address.</p>${errBox()}
     <div class="row"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-send" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Sign and send'}</button></div></div></div>`;
+  if (m.type === 'confirm-vote') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>Confirm ${esc(m.kind)}</h2>
+    <div class="card"><div class="kv"><span class="muted">Ballot</span><span>${esc(m.label)}</span></div>
+    <div class="kv"><span class="muted">Signing keys</span><span>${m.prepared.signers}</span></div>
+    <div class="kv"><span class="muted">Weight (balance at snapshot)</span><span>about ${formatZP(m.weight)} ZP</span></div>
+    <div class="kv"><span class="muted">Fee</span><span>1 kalapa</span></div></div>
+    <p class="muted small">Interval ${m.prepared.phase.interval}, ${esc(m.prepared.phase.phase)} phase. A vote cannot be changed after it is sent.</p>${errBox()}
+    <div class="row"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-vote" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Sign and send'}</button></div></div></div>`;
+  if (m.type === 'voted') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">Vote sent</h2>
+    <p>It counts once it is in a block of this phase (about 4 minutes).</p>
+    <div class="card small"><div class="muted">Transaction</div><div class="mono" data-s="wrap">${esc(m.hash)}</div></div>
+    <button class="btn primary big" data-act="close">Done</button></div></div>`;
   if (m.type === 'sent') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">Sent</h2>
     <p>${formatZP(m.amount)} ZP is on its way. It appears in the next block, about 4 minutes.</p>
     <div class="card small"><div class="muted">Transaction</div><div class="mono" data-s="wrap">${esc(m.hash)}</div></div>
@@ -395,6 +440,13 @@ $app.addEventListener('click', async e => {
     if (act === 'do-remove') { S.vault.wallets = S.vault.wallets.filter(w => w.id !== t.dataset.id); storage.save(S.vault); S.open.delete(t.dataset.id); S.modal = null; return render(); }
     if (act === 'reset') { S.modal = { type: 'confirm', title: 'Remove all wallets from this browser?', text: 'Only do this if you have the 24 words or keys of every wallet. Then add them again with a new password.', ok: 'Remove all', act: 'do-reset' }; return render(); }
     if (act === 'do-reset') { storage.clear(); S.vault = null; S.modal = null; return go('welcome'); }
+    if (act === 'load-cands') { S.cands = await node().candidates(); if (!Array.isArray(S.cands)) S.cands = []; return render(); }
+    if (act === 'vote-cand') { const x = S.cands[+t.dataset.i]; return reviewVote('payout vote', 'Payout', candidateBallot(x), `Pay ${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset').join(' + ')} to ${shortAddr(x.recipient)}`); }
+    if (act === 'confirm-vote') {
+      S.busy = true; render();
+      const m = S.modal, hash = await publish(node(), m.prepared);
+      S.busy = false; S.modal = { type: 'voted', hash }; render(); return;
+    }
     if (act === 'confirm-send') {
       S.busy = true; render();
       const m = S.modal, hash = await publish(node(), m.prepared);
@@ -444,6 +496,17 @@ $app.addEventListener('submit', async e => {
         if (!d?.state || d.error) throw new Error('Could not read the balance from the node' + (d?.error ? ': ' + d.error : ''));
         const prepared = prepareSend(S.open.get(a.id), S.data.get(a.id).state, to, amount);
         S.modal = { type: 'confirm-send', to, amount, prepared }; S.error = ''; return render();
+      }
+      case 'vote-alloc': {
+        S.draft.pct = v.pct; const pct = Number(v.pct.trim());
+        return reviewVote('allocation vote', 'Allocation', allocationBallot(pct), `${pct}% of block rewards to the CGP`);
+      }
+      case 'vote-nom': {
+        S.draft.nto = v.to; S.draft.namount = v.amount;
+        const to = v.to.trim(); let ok = false; try { ok = decodeAddress(to).chain === net(); } catch { /* invalid */ }
+        if (!ok) throw new Error('Not a valid address for this network');
+        const amount = parseZP(v.amount.trim()); if (amount <= 0n) throw new Error('Enter an amount');
+        return reviewVote('nomination', 'Nomination', payoutBallot(to, [{ asset: ZP, amount }]), `Pay ${formatZP(amount)} ZP to ${shortAddr(to)}`);
       }
       case 'node': {
         const url = v.url.trim().replace(/\/+$/, '');
