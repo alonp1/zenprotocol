@@ -168,12 +168,13 @@ const ballotsTable = (list, empty) => list.length ?
   : `<div class="note">${empty}</div>`;
 fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
-  const ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
+  let ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
+  if (!ivs.length) ivs = d.intervals.slice(0, 1);   // a chain with no community numbering (testnet): show the current interval
   $('list').innerHTML = ivs.map((i, n) => {
     const pay = i.payouts.length ? i.payouts.map(p => `${amt(p.amount)} ${p.asset === '00' ? 'ZP' : esc(short(p.asset))} → ${esc(p.recipientName || short(p.recipient))}`).join('<br>') : 'none';
     const decided = i.complete ? (i.allocationDecided != null ? i.allocationDecided + '%' : '–') : 'voting open';
     return `<details class="iv" ${n === 0 ? 'open' : ''}><summary>
-      <div><div class="k">Interval</div><div class="v">${i.communityInterval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
+      <div><div class="k">Interval</div><div class="v">${i.communityInterval >= 1 ? i.communityInterval : i.interval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
       <div><div class="k">Split in force</div>${splitBar(i.allocationInForce)}</div>
       <div><div class="k">Split decided for next</div>${i.complete && i.allocationDecided != null ? splitBar(i.allocationDecided) : '<div class="v">' + decided + '</div>'}</div>
       <div><div class="k">Voters · weight</div><div class="v">${i.voters} · ${amt(Math.round(i.weightVoted))} ZP</div></div>
