@@ -44,6 +44,9 @@ let run () : bool =
                Providers.numberAt j.RootElement "chart.result[0].close[-1]" = 3.5M
                && Providers.csvNumber csv "Close" None = 512.34M && Providers.csvNumber csv "6" None = 512.34M
                && (try Providers.csvNumber "Symbol,Close\nX,N/D\n" "Close" None |> ignore; false with _ -> true))
+          check "a key in a URL comes from the environment ({env:NAME}), an unset one is empty"
+              (Environment.SetEnvironmentVariable("ZO_TEST_KEY", "abc")
+               Providers.expandEnv "https://x/p?k={env:ZO_TEST_KEY}&z={env:ZO_NOT_SET}" = "https://x/p?k=abc&z=")
           check "quorum keeps its evidence: what each source said and who was dropped"
               (let fake name v = { new Providers.Provider with
                                      member _.Name = name

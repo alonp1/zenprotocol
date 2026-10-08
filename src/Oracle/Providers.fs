@@ -49,6 +49,11 @@ let csvNumber (body: string) (column: string) (row: int option) : decimal =
     let cells = line.Split(',')
     Decimal.Parse(cells.[col].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture)
 
+/// {env:NAME} in a URL is replaced by the environment variable (keys stay out of the sources file; an unset one gives an empty string).
+let expandEnv (url: string) : string =
+    System.Text.RegularExpressions.Regex.Replace(url, @"\{env:([A-Za-z0-9_]+)\}", fun m ->
+        match Environment.GetEnvironmentVariable m.Groups.[1].Value with | null -> "" | v -> v)
+
 type Provider =
     abstract Name: string
     abstract Fetch: ticker: string -> time: DateTimeOffset -> decimal
@@ -110,7 +115,7 @@ type Generic(http: HttpClient, name: string, url: string, path: string, headers:
         member _.Fetch ticker _ =
             let symbol = match symbols.TryFind ticker with Some v -> v | None -> ticker
             let u = url.Replace("{symbol}", symbol).Replace("{symbol_lower}", symbol.ToLowerInvariant()).Replace("{ticker}", ticker).Replace("{TICKER}", ticker.ToUpperInvariant()).Replace("{ticker_lower}", ticker.ToLowerInvariant())
-                       .Replace("{quote}", quote).Replace("{quote_lower}", quote.ToLowerInvariant())
+                       .Replace("{quote}", quote).Replace("{quote_lower}", quote.ToLowerInvariant()) |> expandEnv
             let req = new HttpRequestMessage(HttpMethod.Get, u)
             for (k, v) in headers do
                 let value = if v.StartsWith "env:" then (Environment.GetEnvironmentVariable(v.Substring 4) |> Option.ofObj |> Option.defaultValue "") else v

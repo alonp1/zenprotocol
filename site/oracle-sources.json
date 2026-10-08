@@ -8,8 +8,7 @@
     "SPY",
     "AAPL",
     "MSFT",
-    "XAU",
-    "WTI"
+    "XAU"
   ],
   "sources": {
     "binance": {
@@ -24,18 +23,6 @@
       "url": "https://open.er-api.com/v6/latest/{TICKER}",
       "path": "rates.USD"
     },
-    "stooq": {
-      "url": "https://stooq.com/q/l/?s={symbol_lower}&f=sd2t2ohlcv&h&e=csv",
-      "format": "csv",
-      "path": "Close",
-      "symbols": {
-        "SPY": "spy.us",
-        "AAPL": "aapl.us",
-        "MSFT": "msft.us",
-        "XAU": "xauusd",
-        "WTI": "cl.f"
-      }
-    },
     "yahoo": {
       "url": "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1d",
       "path": "chart.result[0].meta.regularMarketPrice",
@@ -45,6 +32,13 @@
       "symbols": {
         "XAU": "GC=F",
         "WTI": "CL=F"
+      }
+    },
+    "twelvedata": {
+      "url": "https://api.twelvedata.com/price?symbol={symbol}&apikey={env:TWELVEDATA_KEY}",
+      "path": "price",
+      "symbols": {
+        "XAU": "XAU/USD"
       }
     }
   },
@@ -76,23 +70,19 @@
       "openrates"
     ],
     "SPY": [
-      "stooq",
+      "twelvedata",
       "yahoo"
     ],
     "AAPL": [
-      "stooq",
+      "twelvedata",
       "yahoo"
     ],
     "MSFT": [
-      "stooq",
+      "twelvedata",
       "yahoo"
     ],
     "XAU": [
       "openrates",
-      "yahoo"
-    ],
-    "WTI": [
-      "stooq",
       "yahoo"
     ]
   }
