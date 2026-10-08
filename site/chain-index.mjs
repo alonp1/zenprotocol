@@ -415,7 +415,7 @@ let blockSeconds = null;
 // ---- community-votes.json: votes on protocol upgrades (Repo contract), by semester and phase -----------------------------------
 // Each semester has a Contestants phase and a Candidates phase. A phase is a window of 1,000 blocks: its Snapshot block is where the
 // weights are measured, its Tally block closes it. Windows as shown by the official explorer.
-const PHASE = 1000, SEMESTERS = [{ sem: 1, cont: 117000, cand: 129000 }, { sem: 2, cont: 223000, cand: 234000 }];   // 1st semester Contestants inferred from a vote at block 117,758
+const PHASE = 1000, SEMESTERS = [{ sem: 1, cand: 129000 }, { sem: 2, cont: 223000, cand: 234000 }];   // the official explorer lists no Contestants phase for the 1st semester
 const issuanceZP = n => 20000000 + 50 * (n - 1);                     // ZP in existence at block n (first 800,000 blocks: 50 ZP per block, Chain.fs getCurrentZPIssuance)
 if (REPO_CONTRACT) {
   const txs = new Map();
