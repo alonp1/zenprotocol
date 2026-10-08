@@ -96,8 +96,9 @@
   details.iv .in { padding: 12px 16px 16px; }
   @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } }
   h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; border: 1px solid var(--line); border-radius: 8px; background: var(--line); overflow: hidden; margin: 6px 0 4px; }
+  .kv { background: var(--card); padding: 10px 14px; } .kv .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; } .kv .v { font-weight: 600; font-size: 16px; font-variant-numeric: tabular-nums; margin-top: 2px; }
 </style>
-<link rel="stylesheet" href="/shell/shell.css">
 <link rel="stylesheet" href="/shell/shell.css">
 <style> td.cid { white-space: normal; word-break: break-all; font-size: 12.5px; } .winner { border-color: var(--accent); } </style>
 </head>
@@ -108,7 +109,8 @@
   <section>
     <div class="note" style="margin-top:0">Protocol upgrades are decided by a vote of coin holders. Each vote names a <b>commit id</b>: the exact version of the code in the
     <a href="https://github.com/zenprotocol/zenprotocol" rel="noopener">source repository</a>. A holder votes by sending a transaction to the Repo voting contract with that commit id as its command.
-    The contract keeps no tally on the chain, so this page computes one with the CGP's rules: intervals of 10,000 blocks, the vote weight is the balance of the voting wallet at the block of its vote, and only the first vote of a wallet in an interval is counted. The Repo contract has been inactive since block 233,874.</div>
+    Every semester has two phases of 1,000 blocks each: first the <b>Contestants</b> phase, where a commit must gather more than the <b>threshold</b> (3% of all ZP at the Snapshot block) to become a contestant, then the <b>Candidates</b> phase, which picks the winner.
+    The weight of a vote is the ZP balance of the voting wallet at the phase's Snapshot block, and only the first vote of a wallet in a phase is counted. The Repo contract has been inactive since block 233,874.</div>
   </section>
   <div id="list"></div>
   <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
@@ -123,26 +125,36 @@ const $ = id => document.getElementById(id);
 const REPO = 'https://github.com/zenprotocol/zenprotocol/commit/';
 document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
 const commitLink = c => `<a href="${REPO}${encodeURIComponent(c)}" rel="noopener" title="Open this commit on GitHub">${esc(c.slice(0, 10))}</a>`;
+const kv = (k, v) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`;
+const cap = k => k === 'contestants' ? 'Contestants phase' : 'Candidates phase';
+function phase(P, open) {
+  const label = `${P.semester === 1 ? '1st' : P.semester === 2 ? '2nd' : P.semester + 'th'} semester, ${cap(P.kind).replace(' phase', '')} · blocks ${fmt(P.snapshot)}–${fmt(P.tally)}`;
+  const cards = kv('Snapshot block', fmt(P.snapshot)) + kv('Tally block', fmt(P.tally)) + (P.threshold != null ? kv('Threshold', fmt(P.threshold) + ' ZP') : '');
+  const sum = P.kind === 'contestants'
+    ? kv('Threshold', fmt(P.threshold) + ' ZP') + kv('Total ZP voted', amt(P.totalVoted)) + kv('Total contestants', P.contestants)
+    : kv('Total ZP voted', amt(P.totalVoted)) + kv('ZP voted for winner', amt(P.winnerWeight)) + kv('Winner commit', P.winner ? commitLink(P.winner) : '–');
+  const total = P.commits.reduce((s, c) => s + c.weight, 0);
+  return `<details class="iv" ${open ? 'open' : ''}><summary>
+      <div><div class="k">${esc(cap(P.kind))}</div><div class="v">${P.semester === 1 ? '1st' : P.semester === 2 ? '2nd' : P.semester + 'th'} semester</div><div class="k">blocks ${fmt(P.snapshot)}–${fmt(P.tally)}</div></div>
+      <div><div class="k">${P.kind === 'contestants' ? 'Leading commit' : 'Winner'}</div><div class="v">${P.winner ? commitLink(P.winner) : '–'}</div></div>
+      <div><div class="k">Votes</div><div class="v">${P.ballots}</div></div>
+      <div><div class="k">Voters</div><div class="v">${P.voters}</div></div>
+      <div><div class="k">Total ZP voted</div><div class="v">${amt(Math.round(P.totalVoted))} ZP</div></div></summary>
+      <div class="in" title="${esc(label)}">
+        <div class="cards">${cards}</div>
+        <h3>${esc(cap(P.kind))} summary</h3><div class="cards sum">${sum}</div>
+        <h3>Results (${P.commits.length} commit ids)</h3>
+        <div class="scroll"><table><tr><th>Commit id</th><th class="r">Voters</th><th class="r">Votes (ZP)</th><th>Share</th></tr>${P.commits.map(c => { const sh = total ? c.weight / total * 100 : 0;
+          return `<tr><td class="mono cid"><a href="${REPO}${encodeURIComponent(c.commit)}" rel="noopener">${esc(c.commit)}</a></td><td class="r">${c.voters}</td><td class="r">${amt(c.weight)}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('')}</table></div>
+        <h3>Votes (${P.ballots})</h3>
+        <div class="scroll"><table><tr><th>Wallet (voter)</th><th>Commit</th><th class="r">Votes (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>${P.votes.map(v =>
+          `<tr><td class="mono addr">${(v.voters || []).map(a => `<a href="/explorer.html?address=${encodeURIComponent(a)}">${esc(a)}</a>`).join('<br>')}</td><td class="mono">${commitLink(v.commit)}</td><td class="r" title="${v.weightAll == null ? 'weight still being fetched' : ''}">${v.weightAll != null ? amt(v.weightAll) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
+          <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="a repeated vote of these wallets in the phase">not counted</span>'}</td></tr>`).join('')}</table></div>
+      </div></details>`;
+}
 fetch('/community-votes.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw 0; return r.json(); }).then(d => {
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
-  $('list').innerHTML = d.intervals.map((i, n) => {
-    const top = i.commits[0], total = i.commits.reduce((s, c) => s + c.weight, 0);
-    return `<details class="iv" ${n === 0 ? 'open' : ''}><summary>
-      <div><div class="k">Interval</div><div class="v">${i.interval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
-      <div><div class="k">Leading commit</div><div class="v">${top ? commitLink(top.commit) : '–'}</div></div>
-      <div><div class="k">Commits voted for</div><div class="v">${i.commits.length}</div></div>
-      <div><div class="k">Voters</div><div class="v">${i.voters}</div></div>
-      <div><div class="k">Weight voted</div><div class="v">${amt(Math.round(i.weightVoted))} ZP</div></div></summary>
-      <div class="in">
-        <h3>Weight behind each commit</h3>
-        <div class="scroll"><table><tr><th>Commit id</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share</th></tr>${i.commits.map(c => { const sh = total ? c.weight / total * 100 : 0;
-          return `<tr><td class="mono cid"><a href="${REPO}${encodeURIComponent(c.commit)}" rel="noopener">${esc(c.commit)}</a></td><td class="r">${c.voters}</td><td class="r">${amt(Math.round(c.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('')}</table></div>
-        <h3>Votes (${i.commits.reduce((s, c) => s + c.ballots, 0)})</h3>
-        <div class="scroll"><table><tr><th>Wallet (voter)</th><th>Commit</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>${i.commits.flatMap(c => c.votes).sort((a, b) => b.block - a.block).map(v =>
-          `<tr><td class="mono addr">${(v.voters || []).map(a => `<a href="/explorer.html?address=${encodeURIComponent(a)}">${esc(a)}</a>`).join('<br>')}</td><td class="mono">${commitLink(v.commit)}</td><td class="r" title="${v.weight == null ? 'weight still being fetched' : ''}">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
-          <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="a repeated vote of these wallets in the interval">not counted</span>'}</td></tr>`).join('')}</table></div>
-      </div></details>`;
-  }).join('') || '<section>No community votes indexed yet.</section>';
+  $('list').innerHTML = d.phases.map((P, n) => phase(P, n === 0)).join('') || '<section>No community votes indexed yet.</section>';
 }).catch(() => { $('updated').textContent = 'Not available yet: the index is being built.'; });
 </script>
 <script src="/shell/shell.js" defer></script>

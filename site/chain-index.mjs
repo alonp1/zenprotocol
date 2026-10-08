@@ -412,43 +412,62 @@ let blockSeconds = null;
 { const a = db.prepare('SELECT number, time FROM blocks ORDER BY number DESC LIMIT 1').get();
   const b = a && db.prepare('SELECT number, time FROM blocks WHERE number <= ? ORDER BY number DESC LIMIT 1').get(Math.max(1, a.number - 500));
   if (a && b && a.number > b.number && a.time > b.time) blockSeconds = Math.round((a.time - b.time) / 1000 / (a.number - b.number)); }
-// ---- community-votes.json: votes on protocol upgrades (Repo contract), grouped by interval and commit id ----------------------
+// ---- community-votes.json: votes on protocol upgrades (Repo contract), by semester and phase -----------------------------------
+// Each semester has a Contestants phase and a Candidates phase. A phase is a window of 1,000 blocks: its Snapshot block is where the
+// weights are measured, its Tally block closes it. Semester n starts 105,000 blocks after semester n-1 (values read off the official explorer).
+const SEM = 105000, PHASE = 1000, CONT0 = 118000, CAND0 = 129000;
+const issuanceZP = n => 20000000 + 50 * (n - 1);                     // ZP in existence at block n (first 800,000 blocks: 50 ZP per block, Chain.fs getCurrentZPIssuance)
 if (REPO_CONTRACT) {
-  const byIv = new Map(), txs = new Map();
+  const txs = new Map();
   for (const v of db.prepare('SELECT tx, block, time, commit_id, pk FROM commitvotes ORDER BY block, tx').all()) {
     const t = txs.get(v.tx) || { tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, pks: [] }; txs.set(v.tx, t); t.pks.push(v.pk);
   }
+  const phases = new Map(), stray = [];
+  const phaseOf = b => { const k = Math.floor((b - CONT0) / SEM) + 1;
+    for (const sem of [k, k + 1]) for (const [kind, base] of [['contestants', CONT0], ['candidates', CAND0]]) {
+      const snap = base + (sem - 1) * SEM; if (sem >= 1 && b >= snap && b < snap + PHASE) return { sem, kind, snap }; }
+    return null; };
   for (const t of txs.values()) {
-    const iv = Math.floor((t.block - 1) / INTERVAL) + 1, it = byIv.get(iv) || { seen: new Set(), votes: [] }; byIv.set(iv, it);
-    const fresh = t.pks.filter(pk => !it.seen.has(pk)); fresh.forEach(pk => it.seen.add(pk));      // the first vote of a key in an interval counts
-    it.votes.push({ tx: t.tx, block: t.block, time: t.time, commit: t.commit, voters: t.pks.map(pkAddress), counted: fresh.length > 0, weight: null, _fresh: fresh });
+    const ph = phaseOf(t.block); if (!ph) { stray.push(t.block); continue; }
+    const key = ph.sem + ph.kind, P = phases.get(key) || { ...ph, seen: new Set(), votes: [] }; phases.set(key, P);
+    const fresh = t.pks.filter(pk => !P.seen.has(pk)); fresh.forEach(pk => P.seen.add(pk));       // the first vote of a key in a phase counts
+    P.votes.push({ tx: t.tx, block: t.block, time: t.time, commit: t.commit, voters: t.pks.map(pkAddress), counted: fresh.length > 0, weight: null, _fresh: fresh, _all: t.pks });
   }
-  // weight of a vote = ZP balance of its voting keys at the block of the vote; cached, and filled in over several runs when the node is slow
+  if (stray.length) console.log(`chain-index: ${stray.length} community votes outside the known phases (blocks ${[...new Set(stray)].slice(0, 8).join(', ')})`);
+  // weight of a key = its ZP balance at the Snapshot block of the phase; cached, and filled in over several runs when the node is slow
   const vwGet = db.prepare('SELECT zp FROM vweights WHERE block=? AND pk=?'), vwPut = db.prepare('INSERT OR REPLACE INTO vweights VALUES (?,?,?)');
   let missing = 0;
-  if (complete) for (const it of byIv.values()) for (const v of it.votes) if (v.counted) {
-    let sum = 0n, ok = true;
-    for (const pk of v._fresh) {
-      let zp = vwGet.get(v.block, pk)?.zp ?? null;
-      if (zp === null && Date.now() - T0 < BUDGET * 0.85) {
-        try {
-          const bal = await api('/addressdb/balance', { addresses: [pkAddress(pk)], blockNumber: String(v.block) }, 60000, 2);
-          zp = String(bal.filter(x => x.asset === '00').reduce((t, x) => t + BigInt(x.balance), 0n)); vwPut.run(v.block, pk, zp);
-        } catch { zp = null; }
-      }
-      if (zp === null) ok = false; else sum += BigInt(zp);
+  const keyZp = async (snap, pk) => {
+    let zp = vwGet.get(snap, pk)?.zp ?? null;
+    if (zp === null && Date.now() - T0 < BUDGET * 0.85) {
+      try {
+        const bal = await api('/addressdb/balance', { addresses: [pkAddress(pk)], blockNumber: String(snap) }, 60000, 2);
+        zp = String(bal.filter(x => x.asset === '00').reduce((t, x) => t + BigInt(x.balance), 0n)); vwPut.run(snap, pk, zp);
+      } catch { zp = null; }
     }
-    v.weight = ok ? Number(sum) / 1e8 : null; if (!ok) missing++;
+    return zp === null ? null : BigInt(zp);
+  };
+  if (complete) for (const P of phases.values()) for (const v of P.votes) {
+    let all = 0n, cnt = 0n, ok = true;
+    for (const pk of v._all) { const z = await keyZp(P.snap, pk); if (z === null) { ok = false; continue; } all += z; if (v._fresh.includes(pk)) cnt += z; }
+    v.weightAll = ok ? Number(all) / 1e8 : null; v.weight = ok ? Number(cnt) / 1e8 : null; if (!ok) missing++;
   }
   if (missing) console.log(`chain-index: ${missing} community vote weights still to fetch (next run continues)`);
-  const cvOut = [...byIv.entries()].sort((a, b) => b[0] - a[0]).map(([iv, it]) => {
+  const r8 = x => Math.round(x * 1e8) / 1e8;
+  const phOut = [...phases.values()].map(P => {
     const commits = new Map();
-    for (const { _fresh, ...v } of it.votes) { const c = commits.get(v.commit) || { commit: v.commit, voters: 0, weight: 0, ballots: 0, votes: [] }; commits.set(v.commit, c); c.votes.push(v); c.ballots++; if (v.counted) { c.voters += _fresh.length; c.weight += v.weight || 0; } }
-    const list = [...commits.values()].map(c => ({ ...c, weight: Math.round(c.weight * 1e8) / 1e8 })).sort((a, b) => b.weight - a.weight || b.voters - a.voters);
-    return { interval: iv, start: (iv - 1) * INTERVAL + 1, snapshot: (iv - 1) * INTERVAL + SNAPSHOT, end: iv * INTERVAL, complete: tip > iv * INTERVAL,
-             voters: it.seen.size, weightVoted: Math.round(list.reduce((s, c) => s + c.weight, 0) * 1e8) / 1e8, commits: list };
-  });
-  writeJson('community-votes.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, contract: REPO_CONTRACT, intervals: cvOut });
+    for (const { _fresh, _all, ...v } of P.votes) {
+      const c = commits.get(v.commit) || { commit: v.commit, voters: 0, weight: 0, weightAll: 0, ballots: 0 }; commits.set(v.commit, c); c.ballots++;
+      c.weightAll += v.weightAll || 0; if (v.counted) { c.voters += _fresh.length; c.weight += v.weight || 0; } }
+    const list = [...commits.values()].map(c => ({ ...c, weight: r8(c.weight), weightAll: r8(c.weightAll) })).sort((a, b) => b.weight - a.weight || b.voters - a.voters);
+    const votes = P.votes.map(({ _fresh, _all, ...v }) => v).sort((a, b) => b.block - a.block);
+    const threshold = P.kind === 'contestants' ? Math.floor(issuanceZP(P.snap) * 3 / 100) : null;
+    return { semester: P.sem, kind: P.kind, snapshot: P.snap, tally: P.snap + PHASE, complete: tip >= P.snap + PHASE, threshold,
+             totalVoted: r8(list.reduce((s, c) => s + c.weight, 0)), totalVotedAllBallots: r8(list.reduce((s, c) => s + c.weightAll, 0)),
+             voters: P.seen.size, ballots: votes.length, winner: list[0]?.commit ?? null, winnerWeight: list[0]?.weight ?? 0,
+             contestants: threshold == null ? null : list.filter(c => c.weight >= threshold).length, commits: list, votes };
+  }).sort((a, b) => b.snapshot - a.snapshot);
+  writeJson('community-votes.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, contract: REPO_CONTRACT, phases: phOut });
 }
 writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, intervals: out });
 

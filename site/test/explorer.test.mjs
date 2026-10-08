@@ -68,7 +68,7 @@ test('the Repo vote backfill runs, and community-votes.json is written', async (
   assert.match(await run([]), /repo votes backfilled/);
   const j = JSON.parse(fs.readFileSync(path.join(dir, 'community-votes.json'), 'utf8'));
   assert.equal(j.contract, REPO);
-  assert.deepEqual(j.intervals, []);      // the sample blocks hold no vote on that contract
+  assert.deepEqual(j.phases, []);      // the sample blocks hold no vote on that contract
   const d = new DatabaseSync(DB); d.exec(`DELETE FROM txs WHERE hash = '${'ab'.repeat(32)}'`); d.close();
 });
 
