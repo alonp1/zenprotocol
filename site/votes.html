@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Community Votes</title>
+<meta name="description" content="Community votes on protocol upgrades: every interval, the commit ids voted for, voters and vote weight.">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --faint: #9a9890;
+    --line: #e3e1da; --grid: #eeece6; --accent: #1f6f5c; --series: #00866c;
+    --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890; --faint: #6b6a64;
+            --line: #2c2d2a; --grid: #252623; --accent: #5cc3a6; --series: #22a985;
+            --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  nav { font-size: 14px; margin-bottom: 18px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+       margin: 0 0 14px; font-weight: 600; }
+  p.lead { margin: 0 0 24px; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 20px; margin-bottom: 18px; min-width: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid.four { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 760px) { .grid, .grid.four { grid-template-columns: repeat(2, 1fr); } .stat .v { font-size: 20px; } }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
+  .two > section { margin-bottom: 0; }
+  .two + .two, .two + details { margin-top: 18px; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 13px; color: var(--muted); }
+  a { color: var(--accent); }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+         white-space: nowrap; display: none; z-index: 2; }
+  .tip b { font-variant-numeric: tabular-nums; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase;
+       letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  td.warn { color: var(--warn); font-weight: 600; } td.bad { color: var(--bad); font-weight: 600; }
+  .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
+  .supply { height: 12px; border-radius: 6px; background: var(--grid); overflow: hidden; margin: 4px 0 6px; }
+  .supply div { height: 100%; background: var(--series); border-radius: 6px 0 0 6px; }
+  .supply-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .phase { display: flex; gap: 2px; margin: 14px 0 6px; height: 10px; }
+  .phase div { background: var(--grid); border-radius: 2px; position: relative; }
+  .phase div.done { background: var(--series); }
+  .phase div.now { background: linear-gradient(90deg, var(--series) var(--p), var(--grid) var(--p)); }
+  .phase div.s0.done { background: var(--faint); } .phase div.s1.done { background: var(--warn); }
+  .phase div.s0.now { background: linear-gradient(90deg, var(--faint) var(--p), var(--grid) var(--p)); }
+  .phase div.s1.now { background: linear-gradient(90deg, var(--warn) var(--p), var(--grid) var(--p)); }
+  .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
+  .phase-l span { position: absolute; top: 0; white-space: nowrap; }
+  .stage-l { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+  .stage-l .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--grid); }
+  .stage-l .s0 { background: var(--faint); } .stage-l .s1 { background: var(--warn); } .stage-l .s2 { background: var(--series); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+</style>
+<style>
+  input.q { width: 100%; max-width: 360px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--card); color: var(--ink); font: inherit; margin-bottom: 12px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); } .pill.no { color: var(--faint); }
+  .sub { color: var(--muted); }
+  details.iv { border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin: 0 0 10px; padding: 0; }
+  details.iv > summary { list-style: none; padding: 14px 16px; display: grid; grid-template-columns: 1.1fr 1fr 1fr 1fr 1.3fr; gap: 10px; align-items: center; color: var(--ink); }
+  details.iv > summary::-webkit-details-marker { display: none; }
+  details.iv > summary .k { font-size: 12px; color: var(--muted); }
+  details.iv > summary .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4px; background: var(--line); }
+  .split i { display: block; height: 100%; } .split .m { background: var(--muted); } .split .c { background: var(--accent); }
+  td.addr { white-space: normal; overflow-wrap: anywhere; word-break: break-all; width: 320px; max-width: 320px; font-size: 12.5px; }
+  td.addr a { overflow-wrap: anywhere; word-break: break-all; }
+  .lg { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 6px; }
+  details.iv > summary .v.n { font-weight: 500; }
+  details.iv[open] > summary { border-bottom: 1px solid var(--line); }
+  details.iv .in { padding: 12px 16px 16px; }
+  @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+</style>
+<link rel="stylesheet" href="/shell/shell.css">
+<link rel="stylesheet" href="/shell/shell.css">
+<style> td.cid { white-space: normal; word-break: break-all; font-size: 12.5px; } .winner { border-color: var(--accent); } </style>
+</head>
+<body>
+<main>
+  <h1>Community votes</h1>
+  <p class="lead" id="updated">Loading…</p>
+  <section>
+    <div class="note" style="margin-top:0">Protocol upgrades are decided by a vote of coin holders. Each vote names a <b>commit id</b>: the exact version of the code in the
+    <a href="https://github.com/zenprotocol/zenprotocol" rel="noopener">source repository</a>. A holder votes by sending a transaction to the Repo voting contract with that commit id as its command.
+    The contract keeps no tally on the chain, so this page computes one with the CGP's rules: intervals of 10,000 blocks, the balance at the interval's snapshot block as the vote weight, and only the first vote of a wallet in an interval counted. The Repo contract has been inactive since block 233,874.</div>
+  </section>
+  <div id="list"></div>
+  <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
+</main>
+<script>
+const fmt = n => n == null ? '–' : Number(n).toLocaleString('en-US');
+const amt = v => v == null ? '–' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = a => a ? a.slice(0, 10) + '…' + a.slice(-6) : '–';
+const day = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '–';
+const $ = id => document.getElementById(id);
+const REPO = 'https://github.com/zenprotocol/zenprotocol/commit/';
+document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
+const commitLink = c => `<a href="${REPO}${encodeURIComponent(c)}" rel="noopener" title="Open this commit on GitHub">${esc(c.slice(0, 10))}</a>`;
+fetch('/community-votes.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw 0; return r.json(); }).then(d => {
+  $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
+  $('list').innerHTML = d.intervals.map((i, n) => {
+    const top = i.commits[0], total = i.commits.reduce((s, c) => s + c.weight, 0);
+    return `<details class="iv" ${n === 0 ? 'open' : ''}><summary>
+      <div><div class="k">Interval</div><div class="v">${i.interval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
+      <div><div class="k">Leading commit</div><div class="v">${top ? commitLink(top.commit) : '–'}</div></div>
+      <div><div class="k">Commits voted for</div><div class="v">${i.commits.length}</div></div>
+      <div><div class="k">Voters</div><div class="v">${i.voters}</div></div>
+      <div><div class="k">Weight voted</div><div class="v">${amt(Math.round(i.weightVoted))} ZP</div></div></summary>
+      <div class="in">
+        <h3>Weight behind each commit</h3>
+        <div class="scroll"><table><tr><th>Commit id</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share</th></tr>${i.commits.map(c => { const sh = total ? c.weight / total * 100 : 0;
+          return `<tr><td class="mono cid"><a href="${REPO}${encodeURIComponent(c.commit)}" rel="noopener">${esc(c.commit)}</a></td><td class="r">${c.voters}</td><td class="r">${amt(Math.round(c.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('')}</table></div>
+        <h3>Votes (${i.commits.reduce((s, c) => s + c.ballots, 0)})</h3>
+        <div class="scroll"><table><tr><th>Wallet (voter)</th><th>Commit</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>${i.commits.flatMap(c => c.votes).sort((a, b) => b.block - a.block).map(v =>
+          `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}">${esc(v.voter)}</a></td><td class="mono">${commitLink(v.commit)}</td><td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
+          <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="a repeated vote of this wallet in the interval">not counted</span>'}</td></tr>`).join('')}</table></div>
+      </div></details>`;
+  }).join('') || '<section>No community votes indexed yet.</section>';
+}).catch(() => { $('updated').textContent = 'Not available yet: the index is being built.'; });
+</script>
+<script src="/shell/shell.js" defer></script>
+</body>
+</html>

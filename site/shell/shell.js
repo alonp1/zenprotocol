@@ -15,7 +15,7 @@
 
   const MAIN = [
     ['Home', '/'],
-    ['Network', [['Stats', '/stats.html', 'Block height, hashrate, supply'], ['Explorer', '/explorer.html', 'Blocks, transactions, addresses'], ['Assets', '/assets.html', 'Tokens issued on the chain'], ['CGP voting', '/cgp.html', 'Votes and payouts of the community fund'], ['Run a node', '/node.html', 'Install, snapshots, mining']]],
+    ['Network', [['Stats', '/stats.html', 'Block height, hashrate, supply'], ['Explorer', '/explorer.html', 'Blocks, transactions, addresses'], ['Assets', '/assets.html', 'Tokens issued on the chain'], ['CGP voting', '/cgp.html', 'Votes and payouts of the community fund'], ['Community votes', '/votes.html', 'Protocol upgrade votes, by commit'], ['Run a node', '/node.html', 'Install, snapshots, mining']]],
     ['Wallet', '/wallet/'],
     ['Learn', [['About', '/about.html', 'What this network is'], ['How it works', '/how-it-works.html', 'Blocks, contracts, the CGP'], ['Community', '/community.html', 'How to take part']]],
     ['Developers', '/developers.html']
@@ -75,7 +75,7 @@
     const col = (title, links) => el('div', {}, [el('h3', { text: title }), ...links.map(([l, h]) => el('a', { href: h, text: l }))]);
     const foot = el('footer', { class: 'zs-foot' }, el('div', { class: 'zs-foot-in' }, [
       el('div', {}, [el('p', { text: name }), el('p', { text: 'A community-run network built on the Zen Protocol code. Open source, no company behind it.' })]),
-      col('Network', [['Explorer', '/explorer.html'], ['Assets', '/assets.html'], ['CGP voting', '/cgp.html'], ['Wallet', '/wallet/']]),
+      col('Network', [['Explorer', '/explorer.html'], ['Assets', '/assets.html'], ['CGP voting', '/cgp.html'], ...(kind === 'main' ? [['Community votes', '/votes.html']] : []), ['Wallet', '/wallet/']]),
       col(kind === 'test' ? 'Trade (testnet)' : 'Learn', kind === 'test' ? [['Dex', '/dex.html'], ['Oracle', '/oracle.html'], ['Bridge', '/bridge.html'], ['Guide', '/guide.html']] : [['About', '/about.html'], ['How it works', '/how-it-works.html'], ['Run a node', '/node.html'], ['Community', '/community.html']]),
       col('Project', [['Developers', '/developers.html'], ['Source code', github], ...(other ? [[kind === 'test' ? 'Mainnet' : 'Testnet', other]] : [])]),
       el('div', { class: 'zs-legal', text: 'Community-run. Not affiliated with or endorsed by Zen Protocol Ltd. Nothing here is financial advice. ' + (kind === 'test' ? 'Testnet coins have no value.' : '') })]));

@@ -21,6 +21,8 @@ import { encodeAddress, pkHash } from '../wallet/src/keys.js';
 
 const CGP_CONTRACT = '00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1';     // Chain.fs cgpContractId
 const VOTING_CONTRACT = '000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12';  // Chain.fs votingContractId
+// Repo voting contract: the community vote on protocol upgrades. Its command is the git commit id (40 hex) being voted for.
+const REPO_CONTRACT_MAIN = '00000000e3113f8bf9cf8b764d945d6f99c642bdb069d137bdd5f7e44f1e75947f58a044';
 const INTERVAL = 10000, SNAPSHOT = 9000, NOMINATION = 500;
 const COMMUNITY_INTERVAL_OFFSET = 24;      // wallets and the explorer count intervals from the CGP launch
 const CONFIRM = 10, TAKE = 2000;
@@ -28,6 +30,7 @@ const CONFIRM = 10, TAKE = 2000;
 const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : def; };
 const NET = arg('net', process.env.ZEN_NET || 'main');   // 'main' or 'test': address prefix of the chain being indexed (zen / tzn)
 const DEX_CONTRACT = arg('dex', process.env.ZEN_DEX || '');   // ZenDex contract id to index (testnet or mainnet); empty = off
+const REPO_CONTRACT = arg('repo', process.env.ZEN_REPO ?? (NET === 'main' ? REPO_CONTRACT_MAIN : ''));   // empty = off
 const API = arg('api', 'http://127.0.0.1:11567'), WEB = arg('web', '/var/www/zen');
 const DB = arg('db', '/var/lib/zen-stats/chain-index.sqlite'), BUDGET = Number(arg('budget', 270)) * 1000;
 const SPARSE = process.argv.includes('--test-sparse');     // tests: accept non-contiguous sample blocks
@@ -96,6 +99,7 @@ CREATE INDEX IF NOT EXISTS utxo_asset ON utxo(asset);
 CREATE TABLE IF NOT EXISTS assets (asset TEXT PRIMARY KEY, contract TEXT, minted TEXT DEFAULT '0', destroyed TEXT DEFAULT '0',
                                    txs INTEGER DEFAULT 0, first_block INTEGER);
 CREATE TABLE IF NOT EXISTS votes (tx TEXT, block INTEGER, time INTEGER, command TEXT, pk TEXT, ballot TEXT, PRIMARY KEY (tx, pk, command));
+CREATE TABLE IF NOT EXISTS commitvotes (tx TEXT, block INTEGER, time INTEGER, commit_id TEXT, pk TEXT, PRIMARY KEY (tx, pk));
 CREATE TABLE IF NOT EXISTS payouts (tx TEXT, block INTEGER, time INTEGER, recipient TEXT, asset TEXT, amount TEXT);
 CREATE TABLE IF NOT EXISTS dex (tx TEXT, block INTEGER, time INTEGER, command TEXT, under_asset TEXT, under_amount TEXT, pair_asset TEXT,
                                 pair_total TEXT, maker TEXT, order_asset TEXT, payout TEXT, provided TEXT, PRIMARY KEY (tx, command));
@@ -128,6 +132,7 @@ const q = {
   assetTx: db.prepare('UPDATE assets SET txs = txs + 1 WHERE asset=?'),
   vote: db.prepare('INSERT OR IGNORE INTO votes VALUES (?,?,?,?,?,?)'),
   dexPut: db.prepare('INSERT OR REPLACE INTO dex VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'),
+  cvote: db.prepare('INSERT OR IGNORE INTO commitvotes VALUES (?,?,?,?,?)'),
   payout: db.prepare('INSERT INTO payouts VALUES (?,?,?,?,?,?)'),
   allocHas: db.prepare('SELECT 1 FROM allocation WHERE interval=?'), allocPut: db.prepare('INSERT INTO allocation VALUES (?,?,?)'),
 };
@@ -151,6 +156,14 @@ function txFigures(ins, outs) {
   }
   for (const [a, asset, amount] of ins) if (isAddr(a)) get(a).sent += asset === '00' ? Number(amount) : 0;
   return { zp, by };
+}
+
+// a vote on the Repo contract: who signed (the Signature entries of the message, else the keys that signed the transaction)
+function repoVote(tx, th, n, ts, w) {
+  if (!REPO_CONTRACT || cidStr(w.contractId) !== REPO_CONTRACT || !/^[0-9a-f]{40}$/.test(w.command || '')) return;
+  const sigs = w.messageBody?.t === 'Dict' ? (w.messageBody.v.find(([k, d]) => k === 'Signature' && d.t === 'Dict')?.[1].v || []).map(e => e[0]) : [];
+  const pks = sigs.length ? sigs : tx.witnesses.filter(x => x.type === 'PK' && x.publicKey).map(x => hex(x.publicKey));
+  for (const pk of pks) q.cvote.run(th, n, ts, w.command, pk);
 }
 
 function indexBlock(n, raw) {
@@ -212,6 +225,7 @@ function indexBlock(n, raw) {
         const sigs = entries.find(([k, d]) => k === 'Signature' && d.t === 'Dict')?.[1].v || [];
         for (const [pk] of sigs) q.vote.run(th, n, ts, w.command, pk, b);
       }
+      repoVote(tx, th, n, ts, w);
       if (DEX_CONTRACT && cid === DEX_CONTRACT && ['Make', 'Take', 'Cancel'].includes(w.command) && w.messageBody?.t === 'Dict') {
         // the order is in the message body; the order asset is the 1-unit asset of the contract that the transaction locks to it
         const f = Object.fromEntries(w.messageBody.v.map(([k, d]) => [k, d.v]));
@@ -261,6 +275,23 @@ if (!migrated) {
   migrated = sel.all(cur).length === 0;
   if (migrated) { q.setMeta.run('addrmig', 'done'); console.log('chain-index: address index and amounts backfilled'); }
   else console.log(`chain-index: backfilling the address index (row ${cur}), indexing continues when done`);
+}
+
+// ---- one-time backfill of the Repo votes of blocks indexed before they were collected (about a hundred blocks, one request each) --
+if (REPO_CONTRACT && meta('repomig', '') !== 'done') {
+  const blocksWith = db.prepare("SELECT DISTINCT block FROM txs WHERE contract=? AND length(command)=40 ORDER BY block").all(REPO_CONTRACT).map(r => r.block);
+  let ok = true;
+  for (const n of blocksWith) {
+    if (Date.now() - start0 > BUDGET * 0.8) { ok = false; break; }
+    try {
+      const [b] = (await api(`/blockchain/blocks?blockNumber=${n}&take=1`)).filter(x => x.blockNumber === n);
+      const blk = deserializeBlock(unhex(b.rawBlock), { lenient: true }), ts = Number(new DataView(blk.header.buffer, blk.header.byteOffset).getBigUint64(72));
+      db.exec('BEGIN');
+      for (const { tx } of blk.txs) for (const w of tx.witnesses.filter(x => x.type === 'Contract')) repoVote(tx, hex(txHash(tx)), n, ts, w);
+      db.exec('COMMIT');
+    } catch (e) { try { db.exec('ROLLBACK'); } catch { /* none open */ } console.log(`chain-index: repo votes of block ${n}: ${e.message} (next run retries)`); ok = false; break; }
+  }
+  if (ok) { q.setMeta.run('repomig', 'done'); console.log(`chain-index: repo votes backfilled from ${blocksWith.length} blocks`); }
 }
 
 // ---- index new blocks ------------------------------------------------------------------------
@@ -366,6 +397,24 @@ let blockSeconds = null;
 { const a = db.prepare('SELECT number, time FROM blocks ORDER BY number DESC LIMIT 1').get();
   const b = a && db.prepare('SELECT number, time FROM blocks WHERE number <= ? ORDER BY number DESC LIMIT 1').get(Math.max(1, a.number - 500));
   if (a && b && a.number > b.number && a.time > b.time) blockSeconds = Math.round((a.time - b.time) / 1000 / (a.number - b.number)); }
+// ---- community-votes.json: votes on protocol upgrades (Repo contract), grouped by interval and commit id ----------------------
+if (REPO_CONTRACT) {
+  const byIv = new Map();
+  for (const v of db.prepare('SELECT tx, block, time, commit_id, pk FROM commitvotes ORDER BY block, tx').all()) {
+    const iv = Math.floor((v.block - 1) / INTERVAL) + 1, it = byIv.get(iv) || { seen: new Set(), votes: [] }; byIv.set(iv, it);
+    const counted = !it.seen.has(v.pk); if (counted) it.seen.add(v.pk);        // the first vote of a key in an interval counts, as in the CGP tally
+    it.votes.push({ tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, voter: pkAddress(v.pk), counted, weight: null, _pk: v.pk, _iv: iv });
+  }
+  if (complete) for (const it of byIv.values()) for (const v of it.votes) if (v.counted) { const w = await weight(v._iv, v._pk); v.weight = w === null ? null : Number(w) / 1e8; }
+  const cvOut = [...byIv.entries()].sort((a, b) => b[0] - a[0]).map(([iv, it]) => {
+    const commits = new Map();
+    for (const { _pk, _iv, ...v } of it.votes) { const c = commits.get(v.commit) || { commit: v.commit, voters: 0, weight: 0, ballots: 0, votes: [] }; commits.set(v.commit, c); c.votes.push(v); c.ballots++; if (v.counted) { c.voters++; c.weight += v.weight || 0; } }
+    const list = [...commits.values()].map(c => ({ ...c, weight: Math.round(c.weight * 1e8) / 1e8 })).sort((a, b) => b.weight - a.weight || b.voters - a.voters);
+    return { interval: iv, start: (iv - 1) * INTERVAL + 1, snapshot: (iv - 1) * INTERVAL + SNAPSHOT, end: iv * INTERVAL, complete: tip > iv * INTERVAL,
+             voters: it.seen.size, weightVoted: Math.round(list.reduce((s, c) => s + c.weight, 0) * 1e8) / 1e8, commits: list };
+  });
+  writeJson('community-votes.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, contract: REPO_CONTRACT, intervals: cvOut });
+}
 writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, intervals: out });
 
 // ---- assets.json ------------------------------------------------------------------------------

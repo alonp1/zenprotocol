@@ -7,7 +7,7 @@
 .zs-brand svg { color: var(--s-accent); flex: none; }
 .zs-net { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--s-line); color: var(--s-muted); }
 .zs-net.test { background: var(--s-test-bg); color: var(--s-test); }
-.zs-nav { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.zs-nav { display: flex; align-items: center; gap: 2px; margin: 0 0 0 auto; }
 .zs-nav > a, .zs-nav > .zs-grp > button { font: inherit; color: var(--s-ink); background: none; border: 0; padding: 8px 11px; border-radius: 7px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
 .zs-nav > a:hover, .zs-nav > .zs-grp > button:hover { background: var(--s-bg); }
 .zs-nav [aria-current="page"], .zs-nav .zs-grp.here > button { color: var(--s-accent); font-weight: 600; }
@@ -72,3 +72,4 @@ body.zp { margin: 0; background: var(--s-bg); color: var(--s-ink); font: 16px/1.
 @media (max-width: 860px) { .zs-foot-in { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 480px) { .zs-foot-in { grid-template-columns: 1fr; } }
 .zs-tw { overflow-x: auto; max-width: 100%; }
+.zs-head { margin: 0; padding: 0; } .zs-head .zs-nav { margin-bottom: 0; font-size: inherit; }

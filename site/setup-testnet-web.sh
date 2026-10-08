@@ -15,9 +15,9 @@ mkdir -p "$WEB"
 # the indexer writes its json files inside the docker volume (/var/lib/docker is closed to nginx): copy them out every minute
 if [ -n "$VOL" ]; then
   cat > /etc/cron.d/zen-testnet-json <<CRON
-* * * * * root for f in stats assets cgp-history; do [ -f "$VOL/web/\$f.json" ] && cp -f "$VOL/web/\$f.json" "$WEB/\$f.json"; done
+* * * * * root for f in stats assets cgp-history community-votes; do [ -f "$VOL/web/\$f.json" ] && cp -f "$VOL/web/\$f.json" "$WEB/\$f.json"; done
 CRON
-  for f in stats assets cgp-history; do [ -f "$VOL/web/$f.json" ] && cp -f "$VOL/web/$f.json" "$WEB/$f.json"; done
+  for f in stats assets cgp-history community-votes; do [ -f "$VOL/web/$f.json" ] && cp -f "$VOL/web/$f.json" "$WEB/$f.json"; done
 fi
 for f in dex oracle explorer assets stats cgp bridge guide instruments developers; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
 cp "$REPO/site/testnet-home.html" "$WEB/index.html"
@@ -64,7 +64,7 @@ server {
     location = /bridge/status { limit_except GET { deny all; } proxy_pass http://127.0.0.1:$BRIDGE/status; add_header Cache-Control "no-cache"; }
 
     # files the indexer writes (assets, ...)
-    location ~ ^/(stats|assets|cgp-history)\.json\$ { root $WEB; add_header Cache-Control "no-cache"; }
+    location ~ ^/(stats|assets|cgp-history|community-votes)\.json\$ { root $WEB; add_header Cache-Control "no-cache"; }
     location / { try_files \$uri \$uri/ =404; }
 }
 CONF
