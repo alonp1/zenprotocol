@@ -159,11 +159,13 @@ function txFigures(ins, outs) {
   return { zp, by };
 }
 
-// a vote on the Repo contract: who signed (the Signature entries of the message, else the keys that signed the transaction)
+// a vote on the Repo contract. Message body: [commit id (String), Dict {public key hex -> Signature}]; the voters are those keys
+// (the key that pays the transaction is not the voter)
 function repoVote(tx, th, n, ts, w) {
   if (!REPO_CONTRACT || cidStr(w.contractId) !== REPO_CONTRACT || !/^[0-9a-f]{40}$/.test(w.command || '')) return;
-  const sigs = w.messageBody?.t === 'Dict' ? (w.messageBody.v.find(([k, d]) => k === 'Signature' && d.t === 'Dict')?.[1].v || []).map(e => e[0]) : [];
-  const pks = sigs.length ? sigs : tx.witnesses.filter(x => x.type === 'PK' && x.publicKey).map(x => hex(x.publicKey));
+  const body = w.messageBody, items = body?.t === 'List' ? body.v : body ? [body] : [];
+  const pks = [];
+  for (const d of items) if (d?.t === 'Dict') for (const [k, sig] of d.v) if (typeof k === 'string' && /^0[23][0-9a-f]{64}$/.test(k) && sig?.t === 'Signature') pks.push(k);
   for (const pk of pks) q.cvote.run(th, n, ts, w.command, pk);
 }
 
@@ -279,7 +281,8 @@ if (!migrated) {
 }
 
 // ---- one-time backfill of the Repo votes of blocks indexed before they were collected (about a hundred blocks, one request each) --
-if (REPO_CONTRACT && meta('repomig', '') !== 'done') {
+if (REPO_CONTRACT && meta('repomig2', '') !== 'done') {
+  if (meta('repomig2_started', '') === '') { db.exec('DELETE FROM commitvotes'); q.setMeta.run('repomig2_started', '1'); q.setMeta.run('repomig_cursor', '0'); }
   // resumable: the node answers slowly, so each run works for a short while from where the last one stopped
   const cursor = Number(meta('repomig_cursor', '0')), allowed = Math.min(BUDGET * 0.3, 100000);
   const todo = db.prepare("SELECT DISTINCT block FROM txs WHERE contract=? AND length(command)=40 AND block > ? ORDER BY block").all(REPO_CONTRACT, cursor).map(r => r.block);
@@ -302,7 +305,7 @@ if (REPO_CONTRACT && meta('repomig', '') !== 'done') {
     } catch (e) { try { db.exec('ROLLBACK'); } catch { /* none open */ } console.log(`chain-index: repo votes of blocks ${from}-${to}: ${e.message} (next run retries)`); ok = false; break; }
     i = j + 1;
   }
-  if (ok) { q.setMeta.run('repomig', 'done'); console.log('chain-index: repo votes backfilled'); }
+  if (ok) { q.setMeta.run('repomig2', 'done'); console.log('chain-index: repo votes backfilled'); }
   else console.log(`chain-index: repo votes backfill continues from block ${meta('repomig_cursor', '0')}`);
 }
 
@@ -411,30 +414,36 @@ let blockSeconds = null;
   if (a && b && a.number > b.number && a.time > b.time) blockSeconds = Math.round((a.time - b.time) / 1000 / (a.number - b.number)); }
 // ---- community-votes.json: votes on protocol upgrades (Repo contract), grouped by interval and commit id ----------------------
 if (REPO_CONTRACT) {
-  const byIv = new Map();
+  const byIv = new Map(), txs = new Map();
   for (const v of db.prepare('SELECT tx, block, time, commit_id, pk FROM commitvotes ORDER BY block, tx').all()) {
-    const iv = Math.floor((v.block - 1) / INTERVAL) + 1, it = byIv.get(iv) || { seen: new Set(), votes: [] }; byIv.set(iv, it);
-    const counted = !it.seen.has(v.pk); if (counted) it.seen.add(v.pk);        // the first vote of a key in an interval counts, as in the CGP tally
-    it.votes.push({ tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, voter: pkAddress(v.pk), counted, weight: null, _pk: v.pk, _iv: iv });
+    const t = txs.get(v.tx) || { tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, pks: [] }; txs.set(v.tx, t); t.pks.push(v.pk);
   }
-  // weight of a vote = ZP balance of the voting key at the block of its vote (as the official Zen explorer shows it); cached, and filled in
-  // over several runs when the node is slow
+  for (const t of txs.values()) {
+    const iv = Math.floor((t.block - 1) / INTERVAL) + 1, it = byIv.get(iv) || { seen: new Set(), votes: [] }; byIv.set(iv, it);
+    const fresh = t.pks.filter(pk => !it.seen.has(pk)); fresh.forEach(pk => it.seen.add(pk));      // the first vote of a key in an interval counts
+    it.votes.push({ tx: t.tx, block: t.block, time: t.time, commit: t.commit, voters: t.pks.map(pkAddress), counted: fresh.length > 0, weight: null, _fresh: fresh });
+  }
+  // weight of a vote = ZP balance of its voting keys at the block of the vote; cached, and filled in over several runs when the node is slow
   const vwGet = db.prepare('SELECT zp FROM vweights WHERE block=? AND pk=?'), vwPut = db.prepare('INSERT OR REPLACE INTO vweights VALUES (?,?,?)');
   let missing = 0;
   if (complete) for (const it of byIv.values()) for (const v of it.votes) if (v.counted) {
-    let zp = vwGet.get(v.block, v._pk)?.zp ?? null;
-    if (zp === null && Date.now() - T0 < BUDGET * 0.85) {
-      try {
-        const bal = await api('/addressdb/balance', { addresses: [pkAddress(v._pk)], blockNumber: String(v.block) }, 60000, 2);
-        zp = String(bal.filter(x => x.asset === '00').reduce((t, x) => t + BigInt(x.balance), 0n)); vwPut.run(v.block, v._pk, zp);
-      } catch { zp = null; }
+    let sum = 0n, ok = true;
+    for (const pk of v._fresh) {
+      let zp = vwGet.get(v.block, pk)?.zp ?? null;
+      if (zp === null && Date.now() - T0 < BUDGET * 0.85) {
+        try {
+          const bal = await api('/addressdb/balance', { addresses: [pkAddress(pk)], blockNumber: String(v.block) }, 60000, 2);
+          zp = String(bal.filter(x => x.asset === '00').reduce((t, x) => t + BigInt(x.balance), 0n)); vwPut.run(v.block, pk, zp);
+        } catch { zp = null; }
+      }
+      if (zp === null) ok = false; else sum += BigInt(zp);
     }
-    v.weight = zp === null ? null : Number(zp) / 1e8; if (zp === null) missing++;
+    v.weight = ok ? Number(sum) / 1e8 : null; if (!ok) missing++;
   }
   if (missing) console.log(`chain-index: ${missing} community vote weights still to fetch (next run continues)`);
   const cvOut = [...byIv.entries()].sort((a, b) => b[0] - a[0]).map(([iv, it]) => {
     const commits = new Map();
-    for (const { _pk, _iv, ...v } of it.votes) { const c = commits.get(v.commit) || { commit: v.commit, voters: 0, weight: 0, ballots: 0, votes: [] }; commits.set(v.commit, c); c.votes.push(v); c.ballots++; if (v.counted) { c.voters++; c.weight += v.weight || 0; } }
+    for (const { _fresh, ...v } of it.votes) { const c = commits.get(v.commit) || { commit: v.commit, voters: 0, weight: 0, ballots: 0, votes: [] }; commits.set(v.commit, c); c.votes.push(v); c.ballots++; if (v.counted) { c.voters += _fresh.length; c.weight += v.weight || 0; } }
     const list = [...commits.values()].map(c => ({ ...c, weight: Math.round(c.weight * 1e8) / 1e8 })).sort((a, b) => b.weight - a.weight || b.voters - a.voters);
     return { interval: iv, start: (iv - 1) * INTERVAL + 1, snapshot: (iv - 1) * INTERVAL + SNAPSHOT, end: iv * INTERVAL, complete: tip > iv * INTERVAL,
              voters: it.seen.size, weightVoted: Math.round(list.reduce((s, c) => s + c.weight, 0) * 1e8) / 1e8, commits: list };
