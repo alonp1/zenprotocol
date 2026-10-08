@@ -37,4 +37,4 @@ Needs Docker and a testnet node with the public test wallet (see [TESTNET.md](TE
 - `MM_SPREAD_BPS` (100 = 1 % each side), `MM_REQUOTE_BPS` (50: cancel and re-make when the price moved this much), `MM_SIZE_ZP` (ZP per order), `MM_INTERVAL` seconds.
 - It needs ZP and zUSDC in the node wallet (mining pays ZP; zUSDC comes from the bridge). Without funds it says so and waits.
 - `MM_DRY=1` only prints what it would do.
-- Orders it has open are read from the explorer API, so partial fills are handled: the remainder is what the Dex shows.
+- Orders it has open are read from the explorer API (partial fills: the remainder is what the Dex shows); how many identical copies exist is read live from the node. If it finds more than one identical copy it cancels the extras, one per cycle.

@@ -51,22 +51,32 @@ async function referencePrice() {
 }
 const balance = async asset => (await node('/wallet/balance')).filter?.(b => b.asset === asset).reduce((s, b) => s + b.balance, 0) ?? 0;
 
-// what we have open now: the explorer's open orders whose maker is our key (amounts there are what is left after partial fills)
+// what we have open now: the explorer's rows whose maker is our key (amounts there are what is left after partial fills), one entry per
+// distinct order, with the number of identical copies the Dex still holds (read live from the node: the index trails it by ~10 blocks)
 async function myOrders(pk) {
   const r = await (await fetch(EXPLORER + '/dex/orders')).json();
-  return (r.orders ?? []).filter(o => (o.maker ?? '').toLowerCase() === pk).map(o => ({ underAsset: o.under_asset, underAmount: o.under_amount, pairAsset: o.pair_asset, pairTotal: o.pair_total, maker: pk }));
+  const held = await node('/addressdb/balance', { addresses: [DEX] });
+  const units = a => (Array.isArray(held) ? held : []).filter(x => x.asset === a).reduce((n, x) => n + Number(x.balance), 0);
+  const seen = new Map();
+  for (const o of (r.orders ?? []).filter(o => (o.maker ?? '').toLowerCase() === pk)) {
+    if (seen.has(o.order_asset)) continue;
+    const n = units(o.order_asset);
+    if (n > 0) seen.set(o.order_asset, { underAsset: o.under_asset, underAmount: o.under_amount, pairAsset: o.pair_asset, pairTotal: o.pair_total, maker: pk, units: n });
+  }
+  return [...seen.values()];
 }
 const impliedPrice = o => o.underAsset === '00'
   ? (Number(o.pairTotal) / 1e6) / (Number(o.underAmount) / 1e8)        // sells ZP: usdc per zp
   : (Number(o.underAmount) / 1e6) / (Number(o.pairTotal) / 1e8);       // sells zUSDC: usdc per zp
 
 const pending = {};          // side -> time of the Make/Cancel not yet seen in the index: do not repeat it while it waits to be mined
-const WAIT = Number(env('MM_WAIT', '1800')) * 1000, waiting = side => Date.now() - (pending[side] ?? 0) < WAIT;
+const WAIT = Number(env('MM_WAIT', '1800')) * 1000, CWAIT = 240000;   // a Make is seen in the index only after ~10 blocks; a Cancel shows in the node's balance within a block or two
+const waiting = side => Date.now() - (pending[side] ?? 0) < (side[0] === 'c' ? CWAIT : WAIT);
 async function cycle(pk) {
   const price = await referencePrice(), ask = price * (1 + SPREAD), bid = price * (1 - SPREAD);
   const open = await myOrders(pk);
   for (const side of ['ask', 'bid']) if (open.some(o => (o.underAsset === '00') === (side === 'ask'))) delete pending[side];   // seen: no longer pending
-  const stale = open.filter(o => Math.abs(impliedPrice(o) / (o.underAsset === '00' ? ask : bid) - 1) > REQUOTE);
+  const stale = open.filter(o => Math.abs(impliedPrice(o) / (o.underAsset === '00' ? ask : bid) - 1) > REQUOTE || o.units > 1);   // off price, or more than one identical copy
   for (const o of stale) { const side = o.underAsset === '00' ? 'ask' : 'bid'; if (waiting('c' + side)) continue; pending['c' + side] = Date.now(); log('cancel', o.underAsset === '00' ? 'ask' : 'bid', 'at', impliedPrice(o).toFixed(5)); log(' tx', await execute('Cancel', o, [])); }
   if (stale.length || waiting('cask') || waiting('cbid')) return;        // let the cancels confirm before making new orders
   const hasAsk = open.some(o => o.underAsset === '00'), hasBid = open.some(o => o.underAsset === USDC);
