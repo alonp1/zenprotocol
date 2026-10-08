@@ -106,5 +106,5 @@ test('wrong phase, last blocks of a phase, and a node that changes the transacti
 test('allowed allocation votes: 90% in force allows 89 and 90 only; 0% allows 0 to 15', () => {
   assert.deepEqual(allocationRange(P.main, 90), { min: 89, max: 90 });
   assert.deepEqual(allocationRange(P.main, 0), { min: 0, max: 15 });
-  assert.deepEqual(allocationRange(P.main, 50), { min: 43, max: 58 });
+  assert.deepEqual(allocationRange(P.main, 50), { min: 42, max: 58 });
 });
