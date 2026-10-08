@@ -71,14 +71,20 @@ type Auto(fiat: Provider, crypto: Provider) =
         member _.Name = "auto"
         member _.Fetch ticker time = (if ids.ContainsKey ticker then crypto else fiat).Fetch ticker time
 
+/// Some sources (CoinGecko) refuse requests without a descriptive User-Agent.
+let private client () =
+    let c = new HttpClient(Timeout = TimeSpan.FromSeconds 20.0)
+    c.DefaultRequestHeaders.UserAgent.ParseAdd "zen-oracle/0.1 (community oracle for the ZP testnet; https://github.com/alonp1/zenprotocol)"
+    c
+
 let create (name: string) (quote: string) : Provider =
     match name.ToLowerInvariant() with
     | "mock" -> Mock(quote) :> Provider
-    | "frankfurter" -> Frankfurter(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), quote) :> Provider
+    | "frankfurter" -> Frankfurter(client (), quote) :> Provider
     | "auto" ->
-        let http = new HttpClient(Timeout = TimeSpan.FromSeconds 20.0)
+        let http = client ()
         let key = Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue ""
         Auto(Frankfurter(http, quote), CoinGecko(http, key, quote)) :> Provider
-    | "coingecko" -> CoinGecko(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
-    | "coinmarketcap" -> CoinMarketCap(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), Environment.GetEnvironmentVariable "ORACLE_CMC_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
+    | "coingecko" -> CoinGecko(client (), Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
+    | "coinmarketcap" -> CoinMarketCap(client (), Environment.GetEnvironmentVariable "ORACLE_CMC_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
     | other -> failwithf "unknown provider '%s' (mock, frankfurter, coingecko, coinmarketcap, auto)" other
