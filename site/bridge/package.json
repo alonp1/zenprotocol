@@ -1,0 +1,3 @@
+{ "name": "zp-bridge", "version": "0.1.0", "private": true, "type": "module",
+  "description": "Prototype USDC bridge: USDC on an EVM chain <-> zUSDC on the ZP testnet (custodial, testnet only)",
+  "dependencies": { "ethers": "^6.13.0" } }

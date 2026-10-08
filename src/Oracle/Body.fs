@@ -1,5 +1,5 @@
 /// `zen-oracle body Name:type=value ...` prints the hex message body (a node data dictionary) for a contract call.
-/// types: s string, u uint64, h hash, k public key, c contract id as a lock, L comma separated list of hashes.
+/// types: s string, u uint64, h hash, k public key, c contract id as a lock, p public key hash as a lock, L comma separated list of hashes.
 module Oracle.Body
 
 open System
@@ -32,6 +32,11 @@ let private field (spec: string) : FStar.String.t * data =
             match ContractId.fromString value with
             | Some id -> Lock (ZFStar.fsToFstLock (Types.Lock.Contract id))
             | None -> failwithf "bad contract id %s" value
+        | "p" ->
+            // the lock of a public key hash (32 bytes hex, what a wallet address stands for)
+            let b = Convert.FromHexString value
+            if b.Length <> 32 then failwithf "bad public key hash %s" value
+            Lock (ZFStar.fsToFstLock (Types.Lock.PK (Hash.Hash b)))
         | "L" ->
             let items = value.Split(',', StringSplitOptions.RemoveEmptyEntries) |> Array.map (fun s -> Hash (hashBytes s)) |> List.ofArray
             Collection (List (ZFStar.fsToFstList items))
