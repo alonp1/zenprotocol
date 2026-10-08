@@ -62,7 +62,7 @@
       <div class="stat"><div class="k">Published</div><div class="v" id="when">–</div></div>
       <div class="stat"><div class="k">Block</div><div class="v" id="block">–</div></div>
       <div class="stat"><div class="k">Network</div><div class="v">Testnet</div></div>
-      <div class="stat"><div class="k">Source</div><div class="v">mock</div></div>
+      <div class="stat"><div class="k">Sources</div><div class="v" id="srcs">mock</div></div>
     </div>
     <p style="margin:16px 0 4px" class="k">Merkle root (what the chain holds)</p>
     <div class="hash" id="root"></div>
@@ -73,7 +73,7 @@
   <section>
     <h2>Values in this round</h2>
     <table>
-      <thead><tr><th>Ticker</th><th class="num">Value (in USD)</th><th class="num">Index</th><th></th></tr></thead>
+      <thead><tr><th>Ticker</th><th class="num">Value (in USD)</th><th>Sources</th><th>Day</th><th class="num">Index</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <p style="margin:14px 0 0;color:var(--muted);font-size:14px">The proof is the leaf plus the audit path. A contract (for example a bet) rebuilds the root from them and compares it with the committed root.</p>
@@ -117,9 +117,9 @@ $('block').textContent = DATA.block == null ? '–' : DATA.block.toLocaleString(
 $('root').textContent = DATA.root;
 $('tx').textContent = DATA.tx;
 $('rows').innerHTML = DATA.rows.map(r =>
-  '<tr><td><strong>' + r.ticker + '</strong></td><td class="num">' + fmt(r.value) + '</td><td class="num">' + r.index +
+  '<tr><td><strong>' + r.ticker + '</strong></td><td class="num">' + fmt(r.value) + '</td><td>' + (r.src || '–') + '</td><td>' + (r.day || '') + '</td><td class="num">' + r.index +
   '</td><td><button data-i="' + r.index + '">Proof</button></td></tr>' +
-  '<tr class="proof" id="p' + r.index + '"><td colspan="4"><div class="hash">leaf ' + r.leaf + '</div>' +
+  '<tr class="proof" id="p' + r.index + '"><td colspan="6"><div class="hash">leaf ' + r.leaf + '</div>' +
   '<pre>GET /oracle/auditpath?ticker=' + r.ticker + '&amp;root=' + DATA.root.slice(0, 12) + '…</pre></td></tr>').join('');
 $('rows').onclick = e => { const i = e.target.dataset && e.target.dataset.i; if (i !== undefined) $('p' + i).classList.toggle('open'); };
 
@@ -137,8 +137,23 @@ $('hist').innerHTML = [0,1,2,3,4,5].map(n => {
 render();
 fetch('/oracle/rounds?take=24').then(r => r.ok ? r.json() : Promise.reject()).then(async rs => {
   if (!rs.length) return;
-  LIVE = rs; const r = rs[0];
-  DATA = { timestamp: r.timestamp, root: r.root, tx: r.tx || '', block: null, rows: r.tickers.map((t, i) => ({ ticker: t, value: r.values[i], index: i, leaf: '' })) };
+  // the service answers with capitalised field names (Timestamp, Root, ...): read either spelling
+  const norm = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), v]));
+  LIVE = rs.map(norm); const r = LIVE[0];
+  let ev = {}; try { ev = JSON.parse(r.evidence || '{}'); } catch {}
+  const day = new Date(r.timestamp).toISOString().slice(0, 10);
+  let multi = 0;
+  const srcText = t => {
+    const e = ev[t]; if (!e) return '';
+    const names = Object.keys(e.sources || {}), dropped = e.dropped || [];
+    if (!names.length) return '<span title="one source">1 source</span>';
+    multi++;
+    const detail = names.map(n => n + ' = ' + e.sources[n]).join('\n') + (dropped.length ? '\ndropped: ' + dropped.join(', ') : '');
+    return '<span title="' + detail + '">' + (names.length - dropped.length) + ' of ' + names.length + ' agree</span>' + (dropped.length ? ' <span style="color:var(--muted)">(dropped ' + dropped.join(', ') + ')</span>' : '');
+  };
+  DATA = { timestamp: r.timestamp, root: r.root, tx: r.tx || '', block: null,
+           rows: r.tickers.map((t, i) => ({ ticker: t, value: r.values[i], index: i, leaf: '', src: srcText(t), day: ev[t] && ev[t].asOf && ev[t].asOf !== day ? 'close ' + ev[t].asOf : (ev[t] && ev[t].asOf ? 'today' : '') })) };
+  $('srcs').textContent = multi ? multi + ' of ' + r.tickers.length + ' multi-source' : '1 source';
   document.querySelector('.banner').style.display = 'none';
   try { const t = await fetch('/explorer/api/tx/' + r.tx).then(x => x.json()); DATA.block = t.block ? t.block.number : null; } catch {}
   render();
