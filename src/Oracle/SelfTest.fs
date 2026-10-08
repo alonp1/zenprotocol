@@ -29,6 +29,10 @@ let run () : bool =
                            | Zen.Types.Data.Hash h -> h = Hash.bytes root
                            | _ -> false))
                | _ -> false)
+          check "data sources: a path finds a number in an answer (nested, indexed, a number written as a string)"
+              (let j = System.Text.Json.JsonDocument.Parse """{"data":{"rates":[{"USD":1.5},{"USD":2.5}]},"price":"82984.01","result":{"XXBTZUSD":{"c":["81000.5","0.1"]}}}"""
+               let r = j.RootElement
+               Providers.numberAt r "data.rates[1].USD" = 2.5M && Providers.numberAt r "price" = 82984.01M && Providers.numberAt r "result.XXBTZUSD.c[0]" = 81000.5M)
           check "body builder: the Commit dictionary equals the hand-built one"
               (Body.build [ "Commit:h=" + Leaf.hex root ] = Leaf.commitMessageBody root)
           check "a body with a public key survives the node's deserializer (it silently drops a body it cannot read)"

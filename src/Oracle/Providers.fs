@@ -3,8 +3,29 @@
 module Oracle.Providers
 
 open System
+open System.Collections.Generic
+open System.Globalization
+open System.IO
 open System.Net.Http
 open System.Text.Json
+
+/// Follows a path like "data.rates[0].USD" or "result.XXBTZUSD.c[0]" into a JSON answer.
+let walk (root: JsonElement) (path: string) : JsonElement =
+    path.Split('.', StringSplitOptions.RemoveEmptyEntries)
+    |> Array.fold (fun (el: JsonElement) seg ->
+        let i = seg.IndexOf '['
+        let name = if i < 0 then seg else seg.Substring(0, i)
+        let idxs = if i < 0 then [||] else seg.Substring(i).Split([| '['; ']' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map int
+        let el1 = if name = "" then el else el.GetProperty name
+        idxs |> Array.fold (fun (e: JsonElement) n -> e.[n]) el1) root
+
+/// The number at a path: a JSON number, or a number written as a string ("82984.01").
+let numberAt (root: JsonElement) (path: string) : decimal =
+    let el = walk root path
+    match el.ValueKind with
+    | JsonValueKind.Number -> el.GetDecimal()
+    | JsonValueKind.String -> Decimal.Parse(el.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture)
+    | k -> failwithf "the value at %s is %A, not a number" path k
 
 /// Reads a number out of an answer; a failure says which ticker and what the source answered (rate limits and errors come back as JSON without the field).
 let private pick (ticker: string) (body: string) (f: JsonElement -> decimal) : decimal =
@@ -65,6 +86,29 @@ type CoinMarketCap(http: HttpClient, key: string, quote: string) =
             let body = http.Send(req).Content.ReadAsStringAsync().Result
             pick ticker body (fun r -> r.GetProperty("data").GetProperty(sym).[0].GetProperty("quote").GetProperty(cur).GetProperty("price").GetDecimal())
 
+/// Any HTTP API that answers JSON, described in the sources file (docs/ORACLE.md, "Data sources"): url with {ticker} {TICKER}
+/// {ticker_lower} {quote} {quote_lower}, the path of the number in the answer, optional headers ("env:NAME" takes the value from the
+/// environment, so keys stay out of files), a factor to multiply by and whether to take 1/x.
+type Generic(http: HttpClient, name: string, url: string, path: string, headers: (string * string) list, multiply: decimal, invert: bool, quote: string) =
+    interface Provider with
+        member _.Name = name
+        member _.Fetch ticker _ =
+            let u = url.Replace("{ticker}", ticker).Replace("{TICKER}", ticker.ToUpperInvariant()).Replace("{ticker_lower}", ticker.ToLowerInvariant())
+                       .Replace("{quote}", quote).Replace("{quote_lower}", quote.ToLowerInvariant())
+            let req = new HttpRequestMessage(HttpMethod.Get, u)
+            for (k, v) in headers do
+                let value = if v.StartsWith "env:" then (Environment.GetEnvironmentVariable(v.Substring 4) |> Option.ofObj |> Option.defaultValue "") else v
+                req.Headers.TryAddWithoutValidation(k, value) |> ignore
+            let body = http.Send(req).Content.ReadAsStringAsync().Result
+            let v = pick ticker body (fun r -> numberAt r path) * multiply
+            if invert then 1M / v else v
+
+/// Each ticker can come from a different source.
+type Routed(routes: Map<string, Provider>, fallback: Provider) =
+    interface Provider with
+        member _.Name = "routed"
+        member _.Fetch ticker time = (match routes.TryFind ticker with | Some p -> p | None -> fallback).Fetch ticker time
+
 /// Currencies from Frankfurter (ECB rates), crypto symbols (BTC, ETH, ...) from CoinGecko: one provider for a mixed ticker list.
 type Auto(fiat: Provider, crypto: Provider) =
     interface Provider with
@@ -77,7 +121,7 @@ let private client () =
     c.DefaultRequestHeaders.UserAgent.ParseAdd "zen-oracle/0.1 (community oracle for the ZP testnet; https://github.com/alonp1/zenprotocol)"
     c
 
-let create (name: string) (quote: string) : Provider =
+let createBuiltin (name: string) (quote: string) : Provider =
     match name.ToLowerInvariant() with
     | "mock" -> Mock(quote) :> Provider
     | "frankfurter" -> Frankfurter(client (), quote) :> Provider
@@ -88,3 +132,33 @@ let create (name: string) (quote: string) : Provider =
     | "coingecko" -> CoinGecko(client (), Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
     | "coinmarketcap" -> CoinMarketCap(client (), Environment.GetEnvironmentVariable "ORACLE_CMC_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
     | other -> failwithf "unknown provider '%s' (mock, frankfurter, coingecko, coinmarketcap, auto)" other
+
+/// The provider for ORACLE_PROVIDER, and, when ORACLE_SOURCES_FILE is set, a routing of single tickers to other sources:
+/// { "sources": { "binance": { "url": "...{TICKER}USDT", "path": "price" } }, "tickers": { "BTC": "binance", "EUR": "frankfurter" } }
+let create (name: string) (quote: string) : Provider =
+    let fallback = createBuiltin name quote
+    match Environment.GetEnvironmentVariable "ORACLE_SOURCES_FILE" with
+    | null | "" -> fallback
+    | file ->
+        use doc = JsonDocument.Parse(File.ReadAllText file)
+        let root = doc.RootElement
+        let http = client ()
+        let custom = Dictionary<string, Provider>()
+        match root.TryGetProperty("sources") with
+        | true, sources ->
+            for p in sources.EnumerateObject() do
+                let v = p.Value
+                let str (n: string) (d: string) = match v.TryGetProperty n with | true, x -> x.GetString() | _ -> d
+                let headers = match v.TryGetProperty("headers") with
+                              | true, h -> [ for kv in h.EnumerateObject() -> kv.Name, kv.Value.GetString() ]
+                              | _ -> []
+                let multiply = match v.TryGetProperty("multiply") with | true, x -> x.GetDecimal() | _ -> 1M
+                let invert = match v.TryGetProperty("invert") with | true, x -> x.GetBoolean() | _ -> false
+                custom.[p.Name] <- Generic(http, p.Name, str "url" "", str "path" "", headers, multiply, invert, str "quote" quote) :> Provider
+        | _ -> ()
+        let resolve n = match custom.TryGetValue n with | true, p -> p | _ -> createBuiltin n quote
+        let routes =
+            match root.TryGetProperty("tickers") with
+            | true, t -> [ for kv in t.EnumerateObject() -> kv.Name, resolve (kv.Value.GetString()) ] |> Map.ofList
+            | _ -> Map.empty
+        Routed(routes, fallback) :> Provider

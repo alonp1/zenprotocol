@@ -61,3 +61,26 @@ Planned layout and behavior:
 4. Watch `/rounds/latest`; each round shows a transaction hash that appears in the explorer.
 
 Never use real money with this until the contract and the service have had an independent review.
+
+
+## Data sources
+
+The oracle takes its prices from one provider (`ORACLE_PROVIDER`: `mock`, `frankfurter` for ECB currency rates, `coingecko` for crypto, `coinmarketcap` with a key, or `auto` = currencies from Frankfurter and crypto symbols from CoinGecko). Any other source that answers JSON over HTTP is added without code, and each ticker can come from a different source, through a file named in `ORACLE_SOURCES_FILE`:
+
+```json
+{
+  "sources": {
+    "binance": { "url": "https://api.binance.com/api/v3/ticker/price?symbol={TICKER}USDT", "path": "price" },
+    "kraken":  { "url": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD", "path": "result.XXBTZUSD.c[0]" },
+    "mykeyed": { "url": "https://api.example.com/v1/price/{ticker_lower}?currency={quote_lower}",
+                 "path": "data.price", "headers": { "X-API-KEY": "env:EXAMPLE_KEY" }, "multiply": 1, "invert": false }
+  },
+  "tickers": { "BTC": "binance", "EUR": "frankfurter", "GBP": "frankfurter" }
+}
+```
+
+- `url` may use `{ticker}`, `{TICKER}`, `{ticker_lower}`, `{quote}`, `{quote_lower}`.
+- `path` is where the number is in the answer: dots for objects, `[n]` for lists; a number written as a string (`"82984.01"`) is accepted.
+- `headers` values written `env:NAME` are read from the environment, so keys stay out of the file. `multiply` scales the value (cents to dollars), `invert` takes 1/x (a source that quotes the other way round).
+- A ticker not listed in `tickers` comes from `ORACLE_PROVIDER`. A ticker the source cannot give is left out of that round and the log says which and what the source answered; the other tickers are still published.
+- The paths above are examples: check them against the real answer of the source (`curl` it once) before relying on them. Sources have rate limits and terms of use; for anything that matters, use a paid source with a key.

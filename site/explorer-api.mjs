@@ -199,7 +199,7 @@ async function handle(p, query) {
   if (p === '/dex/orders' || p === '/dex/trades') {
     if (!open()) throw Object.assign(new Error('index not ready'), { status: 503 });
     if (!DEX) return { dex: null, orders: [], trades: [] };
-    if (p === '/dex/trades') return { tip: t, trades: db.prepare("SELECT tx, block, time, command, under_asset, under_amount, pair_asset, pair_total, maker FROM dex ORDER BY block DESC, tx LIMIT 100").all() };
+    if (p === '/dex/trades') return { tip: t, trades: db.prepare("SELECT tx, block, time, command, under_asset, under_amount, pair_asset, pair_total, maker, payout, provided FROM dex ORDER BY block DESC, tx LIMIT 100").all() };
     // an order is open while its 1-unit order asset is still held by the contract
     const held = new Set((await nodePost('/addressdb/balance', { addresses: [dexAddress()] })).map(x => x.asset));
     const rows = db.prepare("SELECT * FROM dex WHERE order_asset IS NOT NULL ORDER BY block DESC").all();

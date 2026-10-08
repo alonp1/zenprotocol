@@ -9,8 +9,13 @@ API=${1:-http://127.0.0.1:31567}; PW=${2:-testnet}; ORACLE=${ORACLE_URL:-http://
 . /tmp/token.env; . /tmp/oracle.env     # TOKEN_ID TOKEN_ADDR ORACLE_ID ORACLE_ADDR
 ZO="dotnet src/Oracle/bin/Release/zen-oracle.dll"
 post() { curl -s -X POST -H "Content-Type: application/json" -d "$2" "$API$1"; }
-exec_contract() {   # address command bodyhex spends-json
-  local B; B=$(ADDR="$1" CMD="$2" BODY="$3" SP="$4" PW="$PW" python3 -c "import json,os;print(json.dumps({'address':os.environ['ADDR'],'command':os.environ['CMD'],'messageBody':os.environ['BODY'],'options':{'returnAddress':True,'sign':\"m/44'/258'/0'/3/0\"},'spends':json.loads(os.environ['SP']),'password':os.environ['PW']}))")
+# Calls are signed with the wallet's own first address key (m/44'/258'/0'/0/0): FixedPayout locks the positions to the
+# sender's public key, and the wallet only sees outputs of its own addresses. A 5th argument "" sends the call unsigned.
+SIGN_OWN="m/44'/258'/0'/0/0"
+exec_contract() {   # address command bodyhex spends-json [sign path, "" = none]
+  local B; B=$(ADDR="$1" CMD="$2" BODY="$3" SP="$4" SG="${5-$SIGN_OWN}" PW="$PW" python3 -c "import json,os;o={'returnAddress':True}
+if os.environ['SG']: o['sign']=os.environ['SG']
+print(json.dumps({'address':os.environ['ADDR'],'command':os.environ['CMD'],'messageBody':os.environ['BODY'],'options':o,'spends':json.loads(os.environ['SP']),'password':os.environ['PW']}))")
   local R; R=$(post /wallet/contract/execute "$B"); echo "  $2 -> $(echo "$R" | cut -c1-160)" >&2
   echo "$R" | grep -Eq '^"[0-9a-f]{64}"$' || { echo "FAILED: $2"; exit 1; }
   LASTTX=$(echo "$R" | tr -d '"')
@@ -53,7 +58,7 @@ fi
 Z1=$(bal "$TOKEN_ID"); echo "zUSD after issue: $Z1 (was $Z0)"
 
 echo "== 5. Attest: the oracle contract gives the attestation token to FixedPayout"
-exec_contract "$ORACLE_ADDR" Attest "$($ZO body Commit:h=$COMMIT OraclePubKey:k=$PK Recipient:c=$FP_ID)" '[]'
+exec_contract "$ORACLE_ADDR" Attest "$($ZO body Commit:h=$COMMIT OraclePubKey:k=$PK Recipient:c=$FP_ID)" '[]' ""
 blocks 2
 
 echo "== 6. Redeem the winning position (Bull), 1000 tokens"

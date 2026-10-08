@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS assets (asset TEXT PRIMARY KEY, contract TEXT, minted
 CREATE TABLE IF NOT EXISTS votes (tx TEXT, block INTEGER, time INTEGER, command TEXT, pk TEXT, ballot TEXT, PRIMARY KEY (tx, pk, command));
 CREATE TABLE IF NOT EXISTS payouts (tx TEXT, block INTEGER, time INTEGER, recipient TEXT, asset TEXT, amount TEXT);
 CREATE TABLE IF NOT EXISTS dex (tx TEXT, block INTEGER, time INTEGER, command TEXT, under_asset TEXT, under_amount TEXT, pair_asset TEXT,
-                                pair_total TEXT, maker TEXT, order_asset TEXT, PRIMARY KEY (tx, command));
+                                pair_total TEXT, maker TEXT, order_asset TEXT, payout TEXT, provided TEXT, PRIMARY KEY (tx, command));
 CREATE TABLE IF NOT EXISTS allocation (interval INTEGER PRIMARY KEY, pct INTEGER, block INTEGER);
 CREATE TABLE IF NOT EXISTS weights (interval INTEGER, pk TEXT, zp TEXT, PRIMARY KEY (interval, pk));
 CREATE TABLE IF NOT EXISTS blocks (number INTEGER PRIMARY KEY, hash TEXT, parent TEXT, time INTEGER, difficulty INTEGER,
@@ -127,7 +127,7 @@ const q = {
   assetMint: db.prepare('UPDATE assets SET minted=? WHERE asset=?'), assetBurn: db.prepare('UPDATE assets SET destroyed=? WHERE asset=?'),
   assetTx: db.prepare('UPDATE assets SET txs = txs + 1 WHERE asset=?'),
   vote: db.prepare('INSERT OR IGNORE INTO votes VALUES (?,?,?,?,?,?)'),
-  dexPut: db.prepare('INSERT OR REPLACE INTO dex VALUES (?,?,?,?,?,?,?,?,?,?)'),
+  dexPut: db.prepare('INSERT OR REPLACE INTO dex VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'),
   payout: db.prepare('INSERT INTO payouts VALUES (?,?,?,?,?,?)'),
   allocHas: db.prepare('SELECT 1 FROM allocation WHERE interval=?'), allocPut: db.prepare('INSERT INTO allocation VALUES (?,?,?)'),
 };
@@ -216,8 +216,12 @@ function indexBlock(n, raw) {
         // the order is in the message body; the order asset is the 1-unit asset of the contract that the transaction locks to it
         const f = Object.fromEntries(w.messageBody.v.map(([k, d]) => [k, d.v]));
         const oa = outs.find(o => o[0] === contractAddress(DEX_CONTRACT) && o[2] === '1' && o[1].startsWith(DEX_CONTRACT))?.[1] ?? null;
-        const str = x => x == null ? null : typeof x === 'object' ? JSON.stringify(x, (_, v) => typeof v === 'bigint' ? String(v) : v) : String(x);
-        q.dexPut.run(th, n, ts, w.command, str(f.UnderlyingAsset), str(f.UnderlyingAmount), str(f.PairAsset), str(f.OrderTotal), str(f.MakerPubKey), oa);
+        const str = x => x == null ? null : x instanceof Uint8Array ? hex(x) : typeof x === 'object' ? JSON.stringify(x, (_, v) => typeof v === 'bigint' ? String(v) : v) : String(x);
+        // a partial Take leaves the rest of the order open: what is left of it is the order's amounts minus what was paid and taken
+        let under = f.UnderlyingAmount, total = f.OrderTotal;
+        const payout = f.RequestedPayout, provided = f.ProvidedAmount;
+        if (w.command === 'Take' && payout != null && provided != null) { under = BigInt(under) - BigInt(payout); total = BigInt(total) - BigInt(provided); }
+        q.dexPut.run(th, n, ts, w.command, str(f.UnderlyingAsset), str(under), str(f.PairAsset), str(total), str(f.MakerPubKey), oa, str(payout), str(provided));
       }
       if (cid === CGP_CONTRACT && w.command === 'Payout') {
         for (const o of tx.outputs) {
