@@ -11,6 +11,7 @@ import { ZP, formatZP, parseZP } from '../src/tx.js';
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i < 0 ? d : (process.argv[i + 1]?.startsWith('--') || i + 1 >= process.argv.length ? true : process.argv[i + 1]); };
 const NET = arg('net', 'test'), SEND = process.argv.includes('--send'), ONCE = process.argv.includes('--once');
+const STOP_AFTER_VOTE = process.argv.includes('--stop-after-vote');   // exit when this interval's ballots are all sent, or the voting phase is over
 const node = new NodeClient(arg('node', 'http://127.0.0.1:31567'));
 const phrase = process.env.TESTNET_MNEMONIC;
 if (!phrase) { console.error('Set TESTNET_MNEMONIC to the 24 words of the wallet that votes'); process.exit(2); }
@@ -20,7 +21,8 @@ const say = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const w = openWallet({ id: 'cli', name: 'cli', network: NET, kind: 'mnemonic' }, phrase);
 await discover(w, node);
 const keys = () => [...w.keys.values()];
-let nominatedIn = 0, votedIn = 0;
+const used = [];   // funding outputs of ballots sent but not yet in a block: the next ballot must not reuse them
+let nominatedIn = 0, allocIn = 0, payoutIn = 0, lastVotePhase = 0;
 say('wallet', receiveAddress(w), `(${keys().length} addresses)`);
 
 async function step() {
@@ -28,29 +30,38 @@ async function step() {
   const h = state.tip + 1, ph = phaseAt(params, h);
   say(`block ${state.tip}, interval ${ph.interval}, phase ${ph.phase}${ph.phase === 'before' ? ` (opens at ${ph.opens})` : ` (closes at ${ph.closes})`}, balance ${formatZP(state.assets.find(a => a.asset === '00')?.spendable ?? 0n)} ZP`);
   const send = async (command, ballotHex, what) => {
-    const p = await prepareVote({ w, state, node, votingContractId: contract, command, ballotHex, voterKeys: keys() });
+    const p = await prepareVote({ w, state, node, votingContractId: contract, command, ballotHex, voterKeys: keys(), exclude: used });
     say(`${what}: transaction ${p.hash} built and checked${SEND ? '' : ' (dry run, not sent)'}`);
-    if (SEND) say(`${what}: published`, await publish(node, p));
+    if (SEND) { say(`${what}: published`, await publish(node, p)); used.push(p.spent); }
   };
   if (ph.phase === 'Nomination' && nominatedIn !== ph.interval) {
-    nominatedIn = ph.interval;
     // pay 1 ZP from the CGP fund to a second address of this wallet
     await send('Nomination', payoutBallot(receiveAddress(w), [{ asset: ZP, amount: parseZP('1') }]), 'nomination');
+    nominatedIn = ph.interval;
   }
-  if (ph.phase === 'Vote' && votedIn !== ph.interval) {
-    votedIn = ph.interval;
-    const cgp = await node.cgp().catch(() => null);
-    const last = Number.isInteger(cgp?.allocation) ? cgp.allocation : 90;
-    await send('Allocation', allocationBallot(last), `allocation vote (${last}%, the same as now)`);
-    const cands = await node.candidates().catch(() => []);
-    say(`${cands.length} candidate(s)`, JSON.stringify(cands).slice(0, 300));
-    const mine = cands.find(c => c.recipient === receiveAddress(w)) || cands[0];
-    if (mine) await send('Payout', candidateBallot(mine), 'payout vote');
-    else say('no candidate to vote for (a nomination needs 3% of all ZP at the snapshot)');
+  if (ph.phase === 'Vote') {
+    lastVotePhase = ph.interval;
+    if (allocIn !== ph.interval) {
+      const cgp = await node.cgp().catch(() => null);
+      const last = Number.isInteger(cgp?.allocation) ? cgp.allocation : 90;
+      await send('Allocation', allocationBallot(last), `allocation vote (${last}%, the same as now)`);
+      allocIn = ph.interval;
+    }
+    if (payoutIn !== ph.interval) {
+      const cands = await node.candidates().catch(() => []);
+      say(`${cands.length} candidate(s)`, JSON.stringify(cands).slice(0, 300));
+      const mine = cands.find(c => c.recipient === receiveAddress(w)) || cands[0];
+      if (mine) { await send('Payout', candidateBallot(mine), 'payout vote'); payoutIn = ph.interval; }
+      else say('no candidate to vote for (a nomination needs 3% of all ZP at the snapshot)');
+    }
   }
+  // done: both votes sent, or the voting phase has ended
+  return allocIn === ph.interval && payoutIn === ph.interval || (lastVotePhase && ph.interval > lastVotePhase);
 }
 for (;;) {
-  try { await step(); } catch (e) { say('ERROR', e.message); }
+  let done = false;
+  try { done = await step(); } catch (e) { say('ERROR', e.message); }
   if (ONCE) break;
+  if (STOP_AFTER_VOTE && done) { say('done'); break; }
   await new Promise(r => setTimeout(r, 15000));
 }

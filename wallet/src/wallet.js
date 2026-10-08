@@ -167,7 +167,7 @@ const skeletonHex = (inputs, outputs) => {            // TxSkeleton (4.11): Poin
 
 // voterWallets: unlocked wallets whose keys sign the ballot. The funding wallet `w` pays the 1 kalapa fee.
 // Returns { hash, hex, phase } without publishing.
-export async function prepareVote({ w, state, node, votingContractId, command, ballotHex, voterKeys }) {
+export async function prepareVote({ w, state, node, votingContractId, command, ballotHex, voterKeys, exclude = [] }) {
   if (!canSpend(w)) throw new Error('This is a watch-only wallet');
   const params = CGP_PARAMS[w.network];
   const h = state.tip + 1;
@@ -183,7 +183,8 @@ export async function prepareVote({ w, state, node, votingContractId, command, b
   const body = voteBody(params, h, command, ballotHex, voterKeys);
   const keyFor = u => w.keys.get(hex(u.lock.type === 'PK' ? u.lock.hash : u.lock.pkHash));
   const fee = 1n;
-  const fund = state.utxos.filter(u => u.spend.asset === '00' && u.lock.type === 'PK' && keyFor(u) && u.spend.amount >= fee)
+  const skip = new Set(exclude);   // outputs already used by a vote that is not in a block yet
+  const fund = state.utxos.filter(u => u.spend.asset === '00' && u.lock.type === 'PK' && keyFor(u) && u.spend.amount >= fee && !skip.has(hex(u.outpoint.txHash) + ':' + u.outpoint.index))
     .sort((a, b) => (b.spend.amount > a.spend.amount ? 1 : -1))[0];
   if (!fund) throw new Error('You need a little ZP in a spendable output to pay the 1 kalapa fee');
   const spend = amount => ({ asset: ZEN_ASSET, amount });
@@ -221,5 +222,5 @@ export async function prepareVote({ w, state, node, votingContractId, command, b
   const pkw = { type: 'PK', sigHash: 'FollowingWitnesses', publicKey: key.publicKey, signature: signDigest(key.privateKey, msg) };
   if (!verifyDigest(pkw.signature, msg, key.publicKey)) throw new Error('Signing failed');
   const signed = { ...tx, witnesses: [pkw, ...cw] };
-  return { hash: hex(digest), hex: hex(serializeTx(signed)), phase: ph, signers: body.signers };
+  return { hash: hex(digest), hex: hex(serializeTx(signed)), phase: ph, signers: body.signers, spent: hex(fund.outpoint.txHash) + ':' + fund.outpoint.index };
 }
