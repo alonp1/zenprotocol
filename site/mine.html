@@ -23,7 +23,7 @@
 
 <h2>The network today</h2>
 <p class="live" id="live">Loading…</p>
-<p>The more independent miners, the harder it is for any one of them to rewrite the chain or block transactions. A single reward address mining every block is the main weakness of the network today.</p>
+<p class="note" id="liveNote"></p>
 
 <h2>What you need</h2>
 <ul>
@@ -85,6 +85,9 @@ function calc() {
 fetch('/stats.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw 0; return r.json(); }).then(d => {
   S = d; const n = (d.miners24h || []).length;
   document.getElementById('live').textContent = `Last 24 hours: ${fmt(d.blocks24h)} blocks, ${hr(d.hashrate24h)}, ${n} reward ${n === 1 ? 'address' : 'addresses'}.`;
+  document.getElementById('liveNote').textContent = n === 1
+    ? 'One reward address mined every block in the last 24 hours. The more independent miners there are, the harder it is for any one of them to rewrite the chain or block transactions.'
+    : n > 1 ? 'The more independent miners there are, the harder it is for any one of them to rewrite the chain or block transactions.' : '';
   calc();
 }).catch(() => { document.getElementById('live').textContent = 'Network figures are not available yet.'; });
 document.getElementById('mh').addEventListener('input', calc);
