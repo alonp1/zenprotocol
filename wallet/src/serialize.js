@@ -246,6 +246,9 @@ export const Output = {
   read(r) { return { lock: Lock.read(r), spend: Spend.read(r) }; },
 };
 
+// Dict keys are byte arrays; F# compares them length first, then byte by byte (block 248357 has "Signature" before "Allocation")
+const keyOrder = (a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+
 // --- contract data (Zen.Types.Data) ---------------------------------------------------------
 export const Data = {
   write(w, d) {
@@ -263,7 +266,7 @@ export const Data = {
       case 'Array': w.u8(11); List.write(w, Data.write, d.v); break;
       case 'Dict': {
         w.u8(12);
-        const entries = [...d.v].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+        const entries = [...d.v].sort((a, b) => keyOrder(a[0], b[0]));
         List.write(w, (w, [k, v]) => { Str.write(w, k); Data.write(w, v); }, entries);
         break;
       }
@@ -287,8 +290,8 @@ export const Data = {
       case 11: return { t: 'Array', v: List.read(r, Data.read) };
       case 12: {
         const entries = List.read(r, r => [Str.read(r), Data.read(r)]);
-        if (!r.lenient)   // lenient (indexer): block 248357 holds a dict with keys ["Signature","Allocation"], which the node accepted
-          for (let i = 1; i < entries.length; i++) if (!(entries[i - 1][0] <= entries[i][0])) fail('dict not sorted');
+        if (!r.lenient)   // lenient (indexer): reads dicts in any order
+          for (let i = 1; i < entries.length; i++) if (keyOrder(entries[i - 1][0], entries[i][0]) > 0) fail('dict not sorted');
         return { t: 'Dict', v: entries };
       }
       case 13: return { t: 'List', v: List.read(r, Data.read) };

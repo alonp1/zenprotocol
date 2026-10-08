@@ -68,12 +68,16 @@ test('a witness whose declared length is off: strict refuses, lenient (indexer) 
   assert.deepEqual(r.irregular, [{ id: 1, count: 99, size: 98 }]);
 });
 
-test('a dict whose keys are not in code-unit order (block 248357): strict refuses, lenient (indexer) reads it', () => {
+test('dict keys are ordered length first (block 248357 holds Signature before Allocation): strict accepts that order and refuses the other, lenient reads any', () => {
   const w = new Writer();
   w.u8(12); VarInt.write(w, 2);                                   // Dict with 2 entries: "Signature", then "Allocation"
   for (const k of ['Signature', 'Allocation']) { const b = new TextEncoder().encode(k); VarInt.write(w, b.length); w.bytes(b); w.u8(2); w.u8(1); }
   const bytes = w.out();
-  assert.throws(() => Data.read(new Reader(bytes)), /dict not sorted/);
-  const r = new Reader(bytes); r.lenient = true;
-  assert.deepEqual(Data.read(r).v.map(e => e[0]), ['Signature', 'Allocation']);
+  assert.deepEqual(Data.read(new Reader(bytes)).v.map(e => e[0]), ['Signature', 'Allocation']);
+  const w2 = new Writer();
+  w2.u8(12); VarInt.write(w2, 2);
+  for (const k of ['Allocation', 'Signature']) { const b = new TextEncoder().encode(k); VarInt.write(w2, b.length); w2.bytes(b); w2.u8(2); w2.u8(1); }
+  assert.throws(() => Data.read(new Reader(w2.out())), /dict not sorted/);
+  const r = new Reader(w2.out()); r.lenient = true;
+  assert.deepEqual(Data.read(r).v.map(e => e[0]), ['Allocation', 'Signature']);
 });
