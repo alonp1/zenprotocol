@@ -12,6 +12,13 @@ VOL=$(docker volume inspect "$(basename "$REPO")_stack-data" --format '{{.Mountp
 
 command -v nginx >/dev/null || { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx; }
 mkdir -p "$WEB"
+# the indexer writes its json files inside the docker volume (/var/lib/docker is closed to nginx): copy them out every minute
+if [ -n "$VOL" ]; then
+  cat > /etc/cron.d/zen-testnet-json <<CRON
+* * * * * root for f in stats assets cgp-history; do [ -f "$VOL/web/\$f.json" ] && cp -f "$VOL/web/\$f.json" "$WEB/\$f.json"; done
+CRON
+  for f in stats assets cgp-history; do [ -f "$VOL/web/$f.json" ] && cp -f "$VOL/web/$f.json" "$WEB/$f.json"; done
+fi
 cp "$REPO"/site/{index,dex,oracle,explorer,assets,stats,cgp}.html "$WEB/"
 cat > "$WEB/index.html" <<HTML
 <!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZP testnet</title>
@@ -50,7 +57,7 @@ server {
     location = /bridge/status { limit_except GET { deny all; } proxy_pass http://127.0.0.1:$BRIDGE/status; add_header Cache-Control "no-cache"; }
 
     # files the indexer writes (assets, ...)
-    location ~ ^/(stats|assets|cgp-history)\.json\$ { root ${VOL:-$WEB}/web; add_header Cache-Control "no-cache"; }
+    location ~ ^/(stats|assets|cgp-history)\.json\$ { root $WEB; add_header Cache-Control "no-cache"; }
     location / { try_files \$uri \$uri/ =404; }
 }
 CONF
