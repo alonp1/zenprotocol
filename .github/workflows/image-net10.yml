@@ -1,0 +1,36 @@
+name: image-net10
+# Ready-made .NET 10 node image (Docker/Dockerfile.net10): ghcr.io/<owner>/zen-node:net10, so switching a server needs no build on it.
+on:
+  workflow_dispatch:
+  push:
+    branches: [node-upgrade-script]
+    paths: [Docker/Dockerfile.net10, .github/workflows/image-net10.yml]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' }
+      - name: Lower-case owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Docker/Dockerfile.net10
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/zen-node:net10
+      - name: Smoke test (starts on .NET 10, API answers on the main chain)
+        run: |
+          docker run -d --name zn -e NETWORK_URL=off ghcr.io/${OWNER}/zen-node:net10
+          for i in $(seq 1 40); do docker exec zn curl -fs http://127.0.0.1:11567/blockchain/info >/dev/null 2>&1 && break; sleep 4; done
+          INFO=$(docker exec zn curl -fs http://127.0.0.1:11567/blockchain/info | head -c 300 || echo "API did not answer")
+          echo "::notice title=info::$INFO"
+          echo "$INFO" | grep -q '"chain":"main"'
+          docker exec zn sh -c 'ps aux | grep -c "[z]en-node.dll"' | grep -q '^[1-9]'
