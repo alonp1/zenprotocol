@@ -11,6 +11,7 @@
 //   MM_ORACLE   oracle service url + ticker, e.g. http://127.0.0.1:8085/ZPUSD : takes the price from the latest round instead (falls back to MM_PRICE)
 //   MM_SPREAD_BPS (100 = 1% each side)  MM_REQUOTE_BPS (50)  MM_SIZE_ZP (ZP per order, 100)  MM_INTERVAL (30 s)
 //   MM_EXPLORER (http://127.0.0.1:11581/explorer/api)   MM_ZO (command that runs zen-oracle, for building message bodies)
+//   MM_WAIT (1800 s)  how long a Make/Cancel is assumed to be on its way: the index trails the node by about 10 blocks, so a new order shows up in it only after that
 //   MM_DRY=1    only print what it would do
 import { execFileSync } from 'node:child_process';
 
@@ -60,7 +61,7 @@ const impliedPrice = o => o.underAsset === '00'
   : (Number(o.underAmount) / 1e6) / (Number(o.pairTotal) / 1e8);       // sells zUSDC: usdc per zp
 
 const pending = {};          // side -> time of the Make/Cancel not yet seen in the index: do not repeat it while it waits to be mined
-const WAIT = Number(env('MM_WAIT', '300')) * 1000, waiting = side => Date.now() - (pending[side] ?? 0) < WAIT;
+const WAIT = Number(env('MM_WAIT', '1800')) * 1000, waiting = side => Date.now() - (pending[side] ?? 0) < WAIT;
 async function cycle(pk) {
   const price = await referencePrice(), ask = price * (1 + SPREAD), bid = price * (1 - SPREAD);
   const open = await myOrders(pk);
