@@ -11,6 +11,7 @@ import { ZP, formatZP, parseZP } from '../src/tx.js';
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i < 0 ? d : (process.argv[i + 1]?.startsWith('--') || i + 1 >= process.argv.length ? true : process.argv[i + 1]); };
 const NET = arg('net', 'test'), SEND = process.argv.includes('--send'), ONCE = process.argv.includes('--once');
+const PROBE = process.argv.includes('--probe');   // one end-to-end test now, in ANY phase: the ballot is ignored by the tally, the transaction is real
 const STOP_AFTER_VOTE = process.argv.includes('--stop-after-vote');   // exit when this interval's ballots are all sent, or the voting phase is over
 const node = new NodeClient(arg('node', 'http://127.0.0.1:31567'));
 const phrase = process.env.TESTNET_MNEMONIC;

@@ -167,14 +167,14 @@ const skeletonHex = (inputs, outputs) => {            // TxSkeleton (4.11): Poin
 
 // voterWallets: unlocked wallets whose keys sign the ballot. The funding wallet `w` pays the 1 kalapa fee.
 // Returns { hash, hex, phase } without publishing.
-export async function prepareVote({ w, state, node, votingContractId, command, ballotHex, voterKeys, exclude = [] }) {
+export async function prepareVote({ w, state, node, votingContractId, command, ballotHex, voterKeys, exclude = [], anyPhase = false }) {
   if (!canSpend(w)) throw new Error('This is a watch-only wallet');
   const params = CGP_PARAMS[w.network];
   const h = state.tip + 1;
   const ph = phaseAt(params, h);
   const want = command === 'Nomination' ? 'Nomination' : 'Vote';
-  if (ph.phase !== want) throw new Error(want === 'Nomination' ? 'Nominations are open only in the nomination phase' : 'Votes are open only in the voting phase');
-  if (ph.closes - h < VOTE_MARGIN) throw new Error('This phase closes in a few blocks: wait for the next one');
+  if (!anyPhase && ph.phase !== want) throw new Error(want === 'Nomination' ? 'Nominations are open only in the nomination phase' : 'Votes are open only in the voting phase');
+  if (!anyPhase && ph.closes - h < VOTE_MARGIN) throw new Error('This phase closes in a few blocks: wait for the next one');
   const cid = contractIdOf(votingContractId);
   const active = await node.activeContracts();
   if (!Array.isArray(active) || !active.some(c => c && c.contractId === votingContractId))
