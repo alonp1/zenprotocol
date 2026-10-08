@@ -33,8 +33,9 @@ The EVM test key needs a little test ETH for withdrawals. The default USDC addre
 
 ## What is and is not done
 
-- Done and tested in CI: link, deposit, issue to a chosen address.
-- Written but not yet tested end to end: withdrawal (needs the explorer index to read the paying transaction) and the real EVM connection.
+- Done and tested in CI: link, deposit, issue to a chosen address (mock EVM).
+- Done and tested on the live testnet server with Base Sepolia (2026-10-08): link by signature, a real USDC deposit issued as zUSDC, and a withdrawal that burned zUSDC and paid USDC back. See VERIFICATION.md.
+- Not done: pause switch, limits, proof of reserves page, multi-key custody.
 - Custody: one key holds the reserves and the issuing key. The plan is to move both to a community vote (multi-signature) before any real use. Real money, regulation and an independent audit come before that.
 - Needed next: a deposit/withdraw page on the site, proof-of-reserves page (EVM balance versus zUSDC outstanding), pause switch, limits per user.
 
