@@ -20,12 +20,19 @@ CRON
   for f in stats assets cgp-history; do [ -f "$VOL/web/$f.json" ] && cp -f "$VOL/web/$f.json" "$WEB/$f.json"; done
 fi
 cp "$REPO"/site/{index,dex,oracle,explorer,assets,stats,cgp}.html "$WEB/"
+# ZP Wallet on the same site: its node is this site's /node/ (config.json names it), so the testnet works at once. Plain HTTP: test coins only.
+IP=$(curl -s -m 5 https://api.ipify.org || hostname -I | awk '{print $1}')
+if command -v docker >/dev/null; then
+  docker run --rm -v "$REPO:/r" -w /r/wallet node:22-alpine sh -c "npm ci --no-audit --no-fund && npm test && npm run build" \
+    && { rm -rf "$WEB/wallet"; mkdir -p "$WEB/wallet"; cp "$REPO"/wallet/dist/* "$WEB/wallet/"; echo "{\"testNode\":\"http://$IP/node\"}" > "$WEB/wallet/config.json"; echo "wallet published at /wallet/"; } \
+    || echo "wallet build or tests failed: /wallet/ left as it was"
+fi
 cat > "$WEB/index.html" <<HTML
 <!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZP testnet</title>
 <style>body{font:16px system-ui;max-width:640px;margin:48px auto;padding:0 16px;line-height:1.6}a{display:block;padding:12px 0;font-size:18px}small{color:#666}</style>
 <h1>Zen Protocol testnet</h1><small>Plain HTTP, test coins only. Do not enter real keys or passwords here.</small>
 <a href="/dex.html">Dex: order book and trades</a><a href="/oracle.html">Oracle: published prices</a>
-<a href="/explorer.html">Explorer</a><a href="/assets.html">Assets</a><a href="/bridge/status">Bridge status (mock)</a>
+<a href="/explorer.html">Explorer</a><a href="/assets.html">Assets</a><a href="/wallet/">ZP Wallet (testnet)</a><a href="/bridge/status">Bridge status (mock)</a>
 HTML
 
 cat > /etc/nginx/sites-available/zen-testnet <<CONF
@@ -41,7 +48,7 @@ server {
     location = /api/peers { limit_except GET { deny all; } proxy_pass http://127.0.0.1:$NODE/network/connections/count; add_header Cache-Control "no-store"; }
 
     # read-only node endpoints for the explorer and light wallets
-    location ~ ^/node/(blockchain/(info|headers|cgp|mempool|block|blocks|transaction|winner|totalzp|candidates|blockreward)|addressdb/(balance|outputs|transactions|transactioncount|discovery)|contract/active|address/decode)\$ {
+    location ~ ^/node/(blockchain/(info|headers|cgp|mempool|block|blocks|transaction|winner|totalzp|candidates|blockreward|publishtransaction|contract/execute)|addressdb/(balance|outputs|transactions|transactioncount|discovery)|contract/active|address/decode)\$ {
         limit_req zone=zentest burst=40 nodelay;
         proxy_pass http://127.0.0.1:$NODE/\$1\$is_args\$args;
         add_header Cache-Control "no-store";

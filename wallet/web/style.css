@@ -64,7 +64,7 @@ input.mono { font-family: var(--mono); font-size: 13px; }
 .qr { background: #F4F7F6; border-radius: 16px; padding: 14px; align-self: center; line-height: 0; }
 .addr { font-family: var(--mono); font-size: 14px; word-break: break-all; line-height: 1.6; }
 .addr b { color: var(--accent); font-weight: 600; }
-.nav { margin-top: auto; border-top: 1px solid var(--line2); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 6px 8px 14px; position: sticky; bottom: 0; background: var(--bg); }
+.nav { margin-top: auto; border-top: 1px solid var(--line2); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 6px 4px 14px; position: sticky; bottom: 0; background: var(--bg); }
 .nav button { background: none; border: 0; color: var(--muted); font: 11px var(--sans); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; cursor: pointer; min-height: 48px; }
 .nav button.on { color: var(--accent); }
 .modal { position: fixed; inset: 0; background: rgba(5,10,12,.7); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }

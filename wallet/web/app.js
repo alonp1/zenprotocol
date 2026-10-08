@@ -20,6 +20,7 @@ const I = {
   recv: icon('<path d="M17 7L7 17"/><path d="M16 17H7V8"/>'), vote: icon('<path d="M9 12l2 2 4-4"/><rect x="4" y="4" width="16" height="16" rx="3"/>'),
   home: icon('<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2"/>'), gear: icon('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>'),
   doc: icon('<path d="M6 3h9l3 3v15H6z"/><path d="M9 12h6M9 16h6"/>'), refresh: icon('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>'),
+  chart: icon('<path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 15l4-5 3 3 4-6"/>'),
   copy: icon('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>'),
 };
 
@@ -37,6 +38,8 @@ function loadSettings() {
 }
 function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(S.settings)); } catch { /* private mode */ } }
 const net = () => S.settings.network;
+// a site that hosts this wallet next to its own node can name it in config.json ({ "testNode": "http://host/node" }), so its testnet works at once
+const defaultNode = n => DEFAULT_NODES[n][0] || S.siteDefaults?.[n] || '';
 const node = () => S.settings.nodes[net()] ? new NodeClient(S.settings.nodes[net()]) : null;
 const walletsHere = () => (S.vault?.wallets || []).filter(w => w.network === net());
 const active = () => { const ws = walletsHere(); return ws.find(w => w.id === S.settings.active) || ws[0] || null; };
@@ -48,7 +51,25 @@ const voteWeight = () => voters().reduce((s, w) => s + zpOf(w.id), 0n);
 const nameOf = (id, addr) => contractNames[addr] || contractNames[id] || null;
 const zpStr = v => Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '–';
 
-function go(screen, extra = {}) { Object.assign(S, { screen, error: '', modal: null }, extra); render(); window.scrollTo(0, 0); }
+function go(screen, extra = {}) { Object.assign(S, { screen, error: '', modal: null }, extra); render(); window.scrollTo(0, 0); if (screen === 'markets') loadMarkets(); }
+// the site that serves this node (oracle, explorer API and index files sit next to /node/)
+const siteBase = () => { try { const u = new URL(S.settings.nodes[net()]); return /\/node$/.test(u.pathname) ? u.origin : ''; } catch { return ''; } };
+async function loadMarkets() {
+  S.marketsError = '';
+  const base = siteBase();
+  if (!base) { S.markets = null; S.marketsError = 'This node has no oracle or Dex next to it. Markets are on the testnet node of the community.'; return render(); }
+  try {
+    const get = async p => { const r = await fetch(base + p, { cache: 'no-cache' }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); };
+    const norm = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.charAt(0).toLowerCase() + k.slice(1), v]));   // the oracle answers with capitalised names
+    const round = norm(await get('/oracle/rounds/latest'));
+    let evidence = {}; try { evidence = JSON.parse(round.evidence || '{}'); } catch { /* older round */ }
+    if (!Array.isArray(round.tickers) || !Array.isArray(round.values)) throw new Error('unexpected oracle answer');
+    const orders = await get('/explorer/api/dex/orders').then(j => Array.isArray(j?.orders) ? j.orders : []).catch(() => []);
+    S.markets = { round, evidence, orders, day: new Date(round.timestamp).toISOString().slice(0, 10) };
+  } catch (e) { S.markets = null; S.marketsError = 'Could not read the oracle: ' + e.message; }
+  render();
+}
+
 function fail(e) { S.error = e?.message || String(e); S.busy = false; render(); }
 
 // ---------------------------------------------------------------- views
@@ -57,7 +78,7 @@ const top = () => `<div class="top"><span class="brand">ZP Wallet</span>
   <span class="pill" title="${esc(S.settings.nodes[net()])}"><span class="dot ${S.nodeOk === true ? 'ok' : S.nodeOk === false ? 'bad' : ''}"></span>${S.nodeOk === false ? 'Node offline' : S.tip ? 'Block ' + esc(S.tip.toLocaleString('en-US')) : 'Connecting…'}</span></span></div>`;
 const backBar = (title, to = 'home') => `<div class="back"><button class="iconbtn" data-go="${to}" aria-label="Back">${I.back}</button><h1>${esc(title)}</h1></div>`;
 const errBox = () => S.error ? `<div class="err" role="alert">${esc(S.error)}</div>` : '';
-const nav = cur => `<nav class="nav">${[['home', 'Wallet', I.home], ['vote', 'Vote', I.vote], ['contracts', 'Contracts', I.doc], ['settings', 'Settings', I.gear]]
+const nav = cur => `<nav class="nav">${[['home', 'Wallet', I.home], ['markets', 'Markets', I.chart], ['vote', 'Vote', I.vote], ['contracts', 'Contracts', I.doc], ['settings', 'Settings', I.gear]]
   .map(([k, l, i]) => `<button data-go="${k}" class="${cur === k ? 'on' : ''}">${i}${l}</button>`).join('')}</nav>`;
 
 const views = {
@@ -172,6 +193,28 @@ const views = {
       <div class="card"><h2>Protocol upgrade vote</h2><p class="muted small">Inactive: the Repo voting contract has been inactive since block 233,874.</p></div></div>${nav('vote')}`;
   },
 
+  markets: () => {
+    const m = S.markets, base = siteBase();
+    const unit = (asset, v) => { const big = BigInt(v); return asset === '00' ? formatZP(big) + ' ZP' : (S.assetNames[asset] === 'zUSDC' ? (Number(big) / 1e6).toLocaleString('en-US', { maximumFractionDigits: 6 }) + ' zUSDC' : big.toString() + ' ' + (S.assetNames[asset] || shortAddr(asset))); };
+    const rows = (m?.round?.tickers || []).map((t, i) => {
+      const e = m.evidence[t] || {}, names = Object.keys(e.sources || {}), dropped = e.dropped || [];
+      const src = !names.length ? '1 source' : `${names.length - dropped.length} of ${names.length} agree${dropped.length ? ' · dropped ' + dropped.join(', ') : ''}`;
+      const day = e.asOf && m.day && e.asOf !== m.day ? 'close ' + e.asOf : '';
+      const tip = names.map(n => n + ' = ' + e.sources[n]).join('\n');
+      return `<div class="item" title="${esc(tip)}"><div><div><b>${esc(t)}</b></div><div class="muted small">${esc(src)}${day ? ' · ' + esc(day) : ''}</div></div><div class="amt">${esc(Number(m.round.values[i]).toLocaleString('en-US', { maximumFractionDigits: 6 }))}</div></div>`;
+    }).join('');
+    const orders = (m?.orders || []).slice(0, 12).map(o => {
+      let text = '';
+      try { text = `${unit(o.under_asset, o.under_amount)} for ${unit(o.pair_asset, o.pair_total)}`; } catch { text = 'order'; }
+      return `<div class="item"><div><div>${esc(text)}</div><div class="muted small mono" title="${esc(o.maker || '')}">${esc(shortAddr(String(o.maker || '')))}</div></div></div>`;
+    }).join('');
+    return `${top()}<div class="screen"><h1>Markets</h1>
+      ${S.marketsError ? `<div class="card"><p class="muted small">${esc(S.marketsError)}</p></div>` : ''}
+      <div class="card"><h2>Oracle prices (USD)${m?.round ? ' · ' + esc(ago(m.round.timestamp)) : ''}</h2><div class="list">${!m && !S.marketsError ? '<p class="muted small">Loading…</p>' : rows || '<p class="muted small">No prices yet.</p>'}</div></div>
+      <div class="card"><h2>Dex orders</h2><div class="list">${!m && !S.marketsError ? '<p class="muted small">Loading…</p>' : orders || '<p class="muted small">No open orders.</p>'}</div></div>
+      <div class="card"><p class="muted small">Prices come from the community oracle: several sources must agree, stocks and gold are end-of-day closes. Trading from the wallet arrives in the next version. Today use <a href="${esc(base)}/dex.html" rel="noopener">the Dex page</a>.</p></div></div>${nav('markets')}`;
+  },
+
   contracts: () => {
     const cs = S.contracts;
     return `${top()}<div class="screen"><h1>Smart contracts</h1>
@@ -191,7 +234,7 @@ const views = {
       <label class="field" data-s="mt10">Node address for ${net() === 'main' ? 'mainnet' : 'testnet'}
         <input name="url" class="mono" value="${esc(S.settings.nodes[net()])}" placeholder="https://… or http://localhost:11567"></label>
       <div class="row" data-s="mt10"><button class="btn primary">Save and test</button><button type="button" class="btn" data-act="node-default">Default</button></div>
-      <p class="muted small">${esc(DEFAULT_NODES[net()][0] ? 'Default: ' + DEFAULT_NODES[net()][0] : 'No public testnet node yet: run your own or enter one.')}</p></form>
+      <p class="muted small">${esc(defaultNode(net()) ? 'Default: ' + defaultNode(net()) : 'No public testnet node yet: run your own or enter one.')}</p></form>
     <div class="card"><h2>Wallets on ${net() === 'main' ? 'mainnet' : 'testnet'}</h2><div class="list">${walletsHere().map(w => `<div class="item"><div><div>${esc(w.name)}</div><div class="muted small">${{ mnemonic: '24 words', key: 'Private key', watch: 'Watch only' }[w.kind]}</div></div>
       <span class="row" data-s="fixed">${w.kind !== 'watch' ? `<button class="btn" data-act="reveal" data-id="${esc(w.id)}">Backup</button>` : ''}<button class="btn danger" data-act="remove" data-id="${esc(w.id)}">Remove</button></span></div>`).join('') || '<p class="muted small">None.</p>'}</div></div>
     <button class="btn big" data-act="lock">Lock now</button>
@@ -208,7 +251,7 @@ function cgpInfo() {
   const eta = new Date(Date.now() + (at - tip) * 236682).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const reward = 50 / 2 ** Math.floor(Math.max(0, tip - 2) / 800000);       // ZP per block, halving every 800,000 blocks
   // wallets and the explorer number intervals from the CGP launch (node interval 106 = interval 82)
-  return { interval, community: interval - 24, phase, next, blocksLeft: at - tip, eta, snapshot: snap, reward, cgpPerBlock: reward * alloc() / 100 };
+  return { interval, community: net() === 'test' ? interval : interval - 24, phase, next, blocksLeft: at - tip, eta, snapshot: snap, reward, cgpPerBlock: reward * alloc() / 100 };
 }
 const cgpBalance = (withBlock = false) => {
   const b = S.stats?.cgp?.balance;
@@ -332,7 +375,7 @@ $app.addEventListener('click', async e => {
     if (act === 'lock') return lock();
     if (act === 'copy') { await navigator.clipboard.writeText(t.dataset.text); t.innerHTML = I.copy + 'Copied'; return; }
     if (act === 'max') { const zp = S.data.get(active().id)?.state?.assets.find(x => x.asset === '00'); $app.querySelector('[name=amount]').value = formatZP(zp?.spendable || 0n).replace(/,/g, ''); return; }
-    if (act === 'node-default') { S.settings.nodes[net()] = DEFAULT_NODES[net()][0] || ''; saveSettings(); render(); return refreshAll(); }
+    if (act === 'node-default') { S.settings.nodes[net()] = defaultNode(net()); saveSettings(); render(); return refreshAll(); }
     if (act === 'reveal') { const r = S.vault.wallets.find(w => w.id === t.dataset.id); S.modal = { type: 'reveal', id: r.id, name: r.name, kind: r.kind }; S.error = ''; return render(); }
     if (act === 'remove') { const r = S.vault.wallets.find(w => w.id === t.dataset.id); S.modal = { type: 'confirm', title: `Remove ${r.name}?`, text: 'It is deleted from this browser. Without its 24 words or key you cannot get it back.', ok: 'Remove', act: 'do-remove', id: r.id }; return render(); }
     if (act === 'do-remove') { S.vault.wallets = S.vault.wallets.filter(w => w.id !== t.dataset.id); storage.save(S.vault); S.open.delete(t.dataset.id); S.modal = null; return render(); }
@@ -391,8 +434,8 @@ $app.addEventListener('submit', async e => {
       case 'node': {
         const url = v.url.trim().replace(/\/+$/, '');
         let u = null; try { u = url && new URL(url); } catch { /* invalid */ }
-        if (url && !(u && (u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) && !u.username && !u.password))
-          throw new Error('Use https://, or http://localhost for a node on this computer');
+        if (url && !(u && (u.protocol === 'https:' || (u.protocol === 'http:' && (['localhost', '127.0.0.1'].includes(u.hostname) || u.origin === location.origin))) && !u.username && !u.password))
+          throw new Error('Use https://, or http://localhost for a node on this computer (or the address of the site that serves this wallet)');
         S.settings.nodes[net()] = url; saveSettings(); S.error = '';
         await refreshAll(); if (!S.nodeOk) throw new Error('Saved, but ' + (S.nodeError || 'the node does not answer'));
         return;
@@ -411,5 +454,15 @@ setInterval(() => { if (S.key && Date.now() - S.lastActivity > LOCK_AFTER_MS) lo
 setInterval(() => { if (S.key && S.screen === 'home' && !S.modal) refreshAll(); }, 120000);
 ['keydown', 'pointerdown'].forEach(ev => addEventListener(ev, () => { S.lastActivity = Date.now(); }, { passive: true }));
 
-go(S.vault ? 'unlock' : 'welcome');
-refreshNode().then(render);
+(async () => {
+  try {
+    const r = await fetch('config.json', { cache: 'no-cache' });
+    const j = r.ok ? await r.json() : null;
+    if (typeof j?.testNode === 'string' && /^https?:\/\//.test(j.testNode) && new URL(j.testNode).origin === location.origin || (typeof j?.testNode === 'string' && j.testNode.startsWith('https://'))) {
+      S.siteDefaults = { test: j.testNode.replace(/\/+$/, '') };
+      if (!S.settings.nodes.test) { S.settings.nodes.test = S.siteDefaults.test; saveSettings(); }
+    }
+  } catch { /* no config: nothing to default */ }
+  go(S.vault ? 'unlock' : 'welcome');
+  refreshNode().then(render);
+})();

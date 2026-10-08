@@ -17,8 +17,11 @@ Live at `https://<site domain>/wallet/` (today `https://zen.sealinkgps.com/walle
 | CGP | Current interval, phase (before snapshot, nomination, voting) and time to the next phase, computed from the tip. The current block reward split comes from the node. |
 | Node | Choose the node per network: the community node (default), any `https://` node, or `http://localhost:<port>` for your own. The connection is tested on save. |
 | Mainnet / testnet | Each network keeps its own wallets. Testnet is marked in amber everywhere. There is no public testnet node yet: run one and enter its address. |
+| Markets (testnet) | Read-only: the oracle's latest prices with how many sources agreed and the day of a close, and the open Dex orders. Read from the site that serves the node (`/oracle/`, `/explorer/api/`). Trading from the wallet is the next step: it needs contract execution (`/blockchain/contract/execute` returns the full transaction for a skeleton the wallet builds; the wallet signs). |
 | Lock | A password unlocks the browser vault. The wallet locks itself after 15 minutes without activity, and "Lock now" is in Settings. |
 | Backup | Shows the 24 words or key of a wallet after the password is entered again. |
+
+A site that hosts the wallet next to its own node can name it in `config.json` next to `index.html` (`{ "testNode": "https://host/node" }`); `site/setup-testnet-web.sh` does this for the testnet server (plain HTTP on the IP until a domain exists).
 
 Coming next (see `wallet/README.md`, plan steps 4, 5 and 7): voting from the wallet, running and deploying contracts, and other chains.
 
