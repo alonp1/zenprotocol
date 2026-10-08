@@ -15,10 +15,12 @@
 // the tip that is fast. Run by the zen-explorer service (setup-site.sh).
 import http from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
+import { encodeAddress } from '../wallet/src/keys.js';
 
 const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : def; };
 const NODE = arg('api', 'http://127.0.0.1:11567'), PORT = Number(arg('port', 11580));
 const DB = arg('db', '/var/lib/zen-stats/chain-index.sqlite');
+const DEX = arg('dex', process.env.ZEN_DEX || '');
 const HEX64 = /^[0-9a-f]{64}$/;
 
 let db = null, q = null;
@@ -146,6 +148,7 @@ function findTxs(query, address) {
   return { ...total(from, w), page, take, transactions: rows.map(r => ({ hash: r.hash, block: r.block, index: r.idx, time: r.time, zp: r.zp, contract: r.contract, command: r.command, ...(address ? { received: r.recv, sent: r.sent } : {}) })) };
 }
 
+const dexAddress = () => encodeAddress(Uint8Array.from(Buffer.from(DEX, 'hex')), arg('net', process.env.ZEN_NET || 'main'), true);
 async function nodePost(path, body, timeout = 20000) {
   const r = await fetch(NODE + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeout) });
   if (!r.ok) throw new Error('node ' + r.status);
@@ -192,6 +195,15 @@ async function handle(p, query) {
   if ((m = p.match(/^\/address\/([0-9a-z]{10,120})$/))) {
     if (!ready()) throw Object.assign(new Error('the address index is being built'), { status: 503 });
     return { tip: t, indexedTo: indexed, ...(await address(m[1], query)) };
+  }
+  if (p === '/dex/orders' || p === '/dex/trades') {
+    if (!open()) throw Object.assign(new Error('index not ready'), { status: 503 });
+    if (!DEX) return { dex: null, orders: [], trades: [] };
+    if (p === '/dex/trades') return { tip: t, trades: db.prepare("SELECT tx, block, time, command, under_asset, under_amount, pair_asset, pair_total, maker FROM dex ORDER BY block DESC, tx LIMIT 100").all() };
+    // an order is open while its 1-unit order asset is still held by the contract
+    const held = new Set((await nodePost('/addressdb/balance', { addresses: [dexAddress()] })).map(x => x.asset));
+    const rows = db.prepare("SELECT * FROM dex WHERE order_asset IS NOT NULL ORDER BY block DESC").all();
+    return { tip: t, dex: DEX, orders: rows.filter(r => held.has(r.order_asset)).map(r => ({ ...r, open: true })) };
   }
   if (p === '/find/blocks') { if (!open()) throw Object.assign(new Error('index not ready'), { status: 503 }); return { tip: t, indexedTo: indexed, ...findBlocks(query) }; }
   if (p === '/find/txs') {

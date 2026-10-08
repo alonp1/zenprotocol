@@ -82,7 +82,7 @@
   <section>
     <h2>History</h2>
     <table>
-      <thead><tr><th>Time (UTC)</th><th>Block</th><th>Root</th><th class="num">EUR</th></tr></thead>
+      <thead><tr><th>Time (UTC)</th><th>Commitment</th><th>Root</th><th class="num">EUR</th></tr></thead>
       <tbody id="hist"></tbody>
     </table>
   </section>
@@ -107,11 +107,13 @@
   <footer>Testnet, no value. Part of the community node: <a href="/">home</a> · <a href="/explorer.html">explorer</a> · <a href="/stats.html">stats</a></footer>
 </main>
 <script>
-const DATA = {"timestamp": 1791390000000, "root": "30c8461b09fdde71df3ba5db747eff582108839501bb01a5570fa7070266c54a", "tx": "015f7f2a3f1fc6c8bd94515a91b77ad0f3292a5d998153343c9c656327a065e3", "block": 1042, "rows": [{"ticker": "EUR", "value": 1.083, "leaf": "0009b79f80a82d5b2a1df89793398f08ef955bb346d15dcab9537e45c1e898ee", "index": 0}, {"ticker": "GBP", "value": 1.271, "leaf": "32a60fff3e90a693db33d87f57861366bbaa36d417d56bd65d38c3be09aa9e31", "index": 1}, {"ticker": "CHF", "value": 1.111, "leaf": "26b3cad501cb773f6b7dbe6ba32a41c231dbf28a83526b48b814fc313069210e", "index": 2}, {"ticker": "AUD", "value": 0.655, "leaf": "328f3f3eca377e6eeefd6e031a618fbcac37d35c700755977f1f3979f53a04de", "index": 3}, {"ticker": "BTC", "value": 67250.12, "leaf": "9ba04e2fb7d26f94ede29f3c8a646674dbd29725af4f98b89971bd8011fd5440", "index": 4}, {"ticker": "ETH", "value": 2450.5, "leaf": "3aba1f0e0fa8db4e8bd36034653819dc37dabf6466b1f0ba2428916f6a84a703", "index": 5}]};
+let DATA = {"timestamp": 1791390000000, "root": "30c8461b09fdde71df3ba5db747eff582108839501bb01a5570fa7070266c54a", "tx": "015f7f2a3f1fc6c8bd94515a91b77ad0f3292a5d998153343c9c656327a065e3", "block": 1042, "rows": [{"ticker": "EUR", "value": 1.083, "leaf": "0009b79f80a82d5b2a1df89793398f08ef955bb346d15dcab9537e45c1e898ee", "index": 0}, {"ticker": "GBP", "value": 1.271, "leaf": "32a60fff3e90a693db33d87f57861366bbaa36d417d56bd65d38c3be09aa9e31", "index": 1}, {"ticker": "CHF", "value": 1.111, "leaf": "26b3cad501cb773f6b7dbe6ba32a41c231dbf28a83526b48b814fc313069210e", "index": 2}, {"ticker": "AUD", "value": 0.655, "leaf": "328f3f3eca377e6eeefd6e031a618fbcac37d35c700755977f1f3979f53a04de", "index": 3}, {"ticker": "BTC", "value": 67250.12, "leaf": "9ba04e2fb7d26f94ede29f3c8a646674dbd29725af4f98b89971bd8011fd5440", "index": 4}, {"ticker": "ETH", "value": 2450.5, "leaf": "3aba1f0e0fa8db4e8bd36034653819dc37dabf6466b1f0ba2428916f6a84a703", "index": 5}]};
+let LIVE = [];
 const $ = id => document.getElementById(id);
 const fmt = v => v >= 1000 ? v.toLocaleString('en', {maximumFractionDigits: 2}) : String(v);
+function render() {
 $('when').textContent = new Date(DATA.timestamp).toISOString().slice(0, 16).replace('T', ' ');
-$('block').textContent = DATA.block.toLocaleString();
+$('block').textContent = DATA.block == null ? '–' : DATA.block.toLocaleString();
 $('root').textContent = DATA.root;
 $('tx').textContent = DATA.tx;
 $('rows').innerHTML = DATA.rows.map(r =>
@@ -120,12 +122,27 @@ $('rows').innerHTML = DATA.rows.map(r =>
   '<tr class="proof" id="p' + r.index + '"><td colspan="4"><div class="hash">leaf ' + r.leaf + '</div>' +
   '<pre>GET /oracle/auditpath?ticker=' + r.ticker + '&amp;root=' + DATA.root.slice(0, 12) + '…</pre></td></tr>').join('');
 $('rows').onclick = e => { const i = e.target.dataset && e.target.dataset.i; if (i !== undefined) $('p' + i).classList.toggle('open'); };
-// history: this round and 5 earlier ones (sample)
+
+  if (LIVE.length) {
+    $('hist').innerHTML = LIVE.map(r => '<tr><td>' + new Date(r.timestamp).toISOString().slice(0, 16).replace('T', ' ') + '</td><td>' + (r.tx ? '<a href="/explorer.html#tx/' + r.tx + '">tx</a>' : '–') + '</td><td class="mono">' + r.root.slice(0, 10) + '…' + r.root.slice(-6) + '</td><td class="num">' + (r.values[r.tickers.indexOf('EUR')] ?? '–') + '</td></tr>').join('');
+    return;
+  }
+  // history: this round and 5 earlier ones (sample)
 $('hist').innerHTML = [0,1,2,3,4,5].map(n => {
   const t = new Date(DATA.timestamp - n * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
   const root = n === 0 ? DATA.root : Array.from({length: 64}, (_, k) => '0123456789abcdef'[(k * 7 + n * 13 + (k * k) % 5) % 16]).join('');
   return '<tr><td>' + t + '</td><td>' + (DATA.block - n * 15) + '</td><td class="mono">' + root.slice(0, 10) + '…' + root.slice(-6) + '</td><td class="num">' + (1.083 + ((n + 1) % 3 - 1) * 0.001).toFixed(4) + '</td></tr>';
 }).join('');
+}
+render();
+fetch('/oracle/rounds?take=24').then(r => r.ok ? r.json() : Promise.reject()).then(async rs => {
+  if (!rs.length) return;
+  LIVE = rs; const r = rs[0];
+  DATA = { timestamp: r.timestamp, root: r.root, tx: r.tx || '', block: null, rows: r.tickers.map((t, i) => ({ ticker: t, value: r.values[i], index: i, leaf: '' })) };
+  document.querySelector('.banner').style.display = 'none';
+  try { const t = await fetch('/explorer/api/tx/' + r.tx).then(x => x.json()); DATA.block = t.block ? t.block.number : null; } catch {}
+  render();
+}).catch(() => {});
 const TABS = {
   api: '<pre>GET /oracle/rounds/latest\nGET /oracle/auditpath?ticker=EUR\nGET /oracle/auditpath?ticker=EUR&amp;timestamp=1791390000000\nGET /oracle/health</pre><p style="color:var(--muted);margin:0">Answers are JSON: value, timestamp, root, index, audit path, commitment transaction.</p>',
   verify: '<pre>leaf  = SHA3-256( "EUR" + ";" + uint32_be(value × 1000) )\nroot  = merkle(leaves)          // same tree as the node (Consensus.MerkleTree)\ncheck = root == committed root  // from the chain, via the Oracle contract</pre><p style="color:var(--muted);margin:0">A reference implementation and test are in <code>src/Oracle</code>.</p>',

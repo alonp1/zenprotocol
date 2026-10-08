@@ -54,14 +54,14 @@
     <p class="lead">Swap one asset for another straight on the chain. An order is a locked output of the ZenDex contract; anyone can take it, only its maker can cancel it. No operator, no account, no fee besides the network's.</p>
   </header>
 
-  <div class="banner"><strong>Mockup.</strong> Sample data on the testnet. The live page will list the contract's unspent orders from the node.</div>
+  <div class="banner">Loading…</div>
 
   <section>
     <h2>Market</h2>
     <div class="grid">
       <div class="stat"><div class="k">Open orders</div><div class="v" id="n">–</div></div>
       <div class="stat"><div class="k">Pairs</div><div class="v" id="pairs">–</div></div>
-      <div class="stat"><div class="k">Trades (24 h)</div><div class="v">17</div></div>
+      <div class="stat"><div class="k">Orders made</div><div class="v" id="made">–</div></div>
       <div class="stat"><div class="k">Network</div><div class="v">Testnet</div></div>
     </div>
   </section>
@@ -88,7 +88,7 @@
   <section>
     <h2>Recent trades</h2>
     <table>
-      <thead><tr><th>Time (UTC)</th><th>Sold</th><th>Paid</th><th class="num">Price</th><th>Transaction</th></tr></thead>
+      <thead><tr><th>Time (UTC)</th><th>Action</th><th>Sells</th><th>Wants</th><th>Transaction</th></tr></thead>
       <tbody id="trades"></tbody>
     </table>
   </section>
@@ -107,14 +107,14 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const ORD = [
- ['zUSD',1000,'ZP',500,'tzn1q…x4a9','aa'], ['zUSD',2500,'ZP',1300,'tzn1q…7ke2','bb'], ['zUSD',300,'ZP',170,'tzn1q…p0m5','cc'],
- ['ZP',800,'zUSD',1500,'tzn1q…d3zq','dd'], ['ZP',200,'zUSD',390,'tzn1q…x4a9','ee'], ['EUR-token',50,'zUSD',55,'tzn1q…u8ww','ff']];
+const API = '/explorer/api/dex';
+const NAMES = {'00': 'ZP'};
+const nm = a => NAMES[a] || (a ? a.slice(0, 8) + '…' : '?');
+let ORD = [], TRADES = [];
 const pair = o => o[0] + ' / ' + o[2];
-const pairs = [...new Set(ORD.map(pair))];
-let cur = 'all';
+let pairs = [], cur = 'all';
 function draw() {
-  $('n').textContent = ORD.length; $('pairs').textContent = pairs.length;
+  $('n').textContent = ORD.length; $('made').textContent = TRADES.filter(t => t.command === 'Make').length; $('pairs').textContent = pairs.length;
   $('pairTabs').innerHTML = ['all', ...pairs].map(p => '<button data-p="' + p + '" class="' + (p === cur ? 'on' : '') + '">' + (p === 'all' ? 'All' : p) + '</button>').join('');
   $('orders').innerHTML = ORD.filter(o => cur === 'all' || pair(o) === cur).map(o =>
     '<tr><td><strong>' + o[0] + '</strong></td><td class="num">' + o[1].toLocaleString() + '</td><td><strong>' + o[2] + '</strong></td><td class="num">' + o[3].toLocaleString() +
@@ -122,10 +122,22 @@ function draw() {
 }
 $('pairTabs').onclick = e => { if (e.target.dataset.p) { cur = e.target.dataset.p; draw(); } };
 draw();
-$('trades').innerHTML = [0,1,2,3,4].map(n => {
-  const t = new Date(Date.now() - n * 41 * 60e3).toISOString().slice(0, 16).replace('T', ' ');
-  return '<tr><td>' + t + '</td><td>' + (1000 - n * 120) + ' zUSD</td><td>' + (500 - n * 61) + ' ZP</td><td class="num">' + (0.5 + n * 0.004).toFixed(4) + '</td><td class="hash">' + 'ab12cd34ef'.repeat(6).slice(n, n + 12) + '…</td></tr>';
-}).join('');
+function drawTrades() {
+  $('trades').innerHTML = TRADES.map(t => '<tr><td>' + new Date(t.time).toISOString().slice(0, 16).replace('T', ' ') + '</td><td>' + t.command + '</td><td>' +
+    Number(t.under_amount || 0).toLocaleString() + ' ' + nm(t.under_asset) + '</td><td>' + Number(t.pair_total || 0).toLocaleString() + ' ' + nm(t.pair_asset) +
+    '</td><td class="hash"><a href="/explorer.html#tx/' + t.tx + '">' + t.tx.slice(0, 12) + '…</a></td></tr>').join('') || '<tr><td colspan="5">No trades yet.</td></tr>';
+}
+async function load() {
+  try {
+    const [o, t] = await Promise.all([fetch(API + '/orders').then(r => r.json()), fetch(API + '/trades').then(r => r.json())]);
+    ORD = (o.orders || []).map(r => [nm(r.under_asset), Number(r.under_amount), nm(r.pair_asset), Number(r.pair_total), r.maker ? r.maker.slice(0, 10) + '…' : '', r.order_asset]);
+    TRADES = t.trades || [];
+    pairs = [...new Set(ORD.map(pair))];
+    document.querySelector('.banner').style.display = 'none';
+  } catch { document.querySelector('.banner').innerHTML = '<strong>Not available yet.</strong> The Dex index is not running.'; }
+  draw(); drawTrades();
+}
+load(); setInterval(load, 30000);
 </script>
 </body>
 </html>

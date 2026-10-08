@@ -86,6 +86,9 @@ let serve (s: Settings) =
                 match Store.latest s.Data with
                 | Some r -> reply 200 r
                 | None -> reply 404 {| error = "no round yet" |}
+            | "/rounds" ->
+                let n = match q.["take"] with null | "" -> 24 | v -> min 200 (max 1 (int v))
+                reply 200 (Store.all s.Data |> List.rev |> List.truncate n)
             | "/auditpath" ->
                 let ticker = q.["ticker"]
                 let root = match q.["root"] with null | "" -> None | v -> Some v

@@ -26,6 +26,8 @@ const COMMUNITY_INTERVAL_OFFSET = 24;      // wallets and the explorer count int
 const CONFIRM = 10, TAKE = 2000;
 
 const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : def; };
+const NET = arg('net', process.env.ZEN_NET || 'main');   // 'main' or 'test': address prefix of the chain being indexed (zen / tzn)
+const DEX_CONTRACT = arg('dex', process.env.ZEN_DEX || '');   // ZenDex contract id to index (testnet or mainnet); empty = off
 const API = arg('api', 'http://127.0.0.1:11567'), WEB = arg('web', '/var/www/zen');
 const DB = arg('db', '/var/lib/zen-stats/chain-index.sqlite'), BUDGET = Number(arg('budget', 270)) * 1000;
 const SPARSE = process.argv.includes('--test-sparse');     // tests: accept non-contiguous sample blocks
@@ -54,8 +56,8 @@ const cidStr = c => u32hex(c.version) + hex(c.hash);
 const isZero = a => a.every(x => x === 0);
 const assetStr = a => isZero(a.contract.hash) && isZero(a.subtype) && a.contract.version === 0 ? '00'
   : cidStr(a.contract) + (isZero(a.subtype) ? '' : hex(a.subtype));
-const contractAddress = cid => encodeAddress(unhex(cid), 'main', true);
-const pkAddress = pkHex => encodeAddress(pkHash(unhex(pkHex)), 'main');
+const contractAddress = cid => encodeAddress(unhex(cid), NET, true);
+const pkAddress = pkHex => encodeAddress(pkHash(unhex(pkHex)), NET);
 
 // ballot (Consensus/Serialization.fs Ballot): 1 = allocation byte; 2 = payout recipient + spends
 function ballot(hexStr) {
@@ -63,7 +65,7 @@ function ballot(hexStr) {
   if (kind === 1) return { allocation: r.u8() };
   if (kind === 2) {
     const rk = r.u8();
-    const recipient = rk === 1 ? encodeAddress(r.bytes(32), 'main') : rk === 2 ? contractAddress(cidStr(ContractId.read(r))) : null;
+    const recipient = rk === 1 ? encodeAddress(r.bytes(32), NET) : rk === 2 ? contractAddress(cidStr(ContractId.read(r))) : null;
     if (!recipient) throw new Error('recipient');
     const n = VarInt.read(r), spends = [];
     for (let i = 0; i < n; i++) { const s = Spend.read(r); spends.push([assetStr(s.asset), String(s.amount)]); }
@@ -95,6 +97,8 @@ CREATE TABLE IF NOT EXISTS assets (asset TEXT PRIMARY KEY, contract TEXT, minted
                                    txs INTEGER DEFAULT 0, first_block INTEGER);
 CREATE TABLE IF NOT EXISTS votes (tx TEXT, block INTEGER, time INTEGER, command TEXT, pk TEXT, ballot TEXT, PRIMARY KEY (tx, pk, command));
 CREATE TABLE IF NOT EXISTS payouts (tx TEXT, block INTEGER, time INTEGER, recipient TEXT, asset TEXT, amount TEXT);
+CREATE TABLE IF NOT EXISTS dex (tx TEXT, block INTEGER, time INTEGER, command TEXT, under_asset TEXT, under_amount TEXT, pair_asset TEXT,
+                                pair_total TEXT, maker TEXT, order_asset TEXT, PRIMARY KEY (tx, command));
 CREATE TABLE IF NOT EXISTS allocation (interval INTEGER PRIMARY KEY, pct INTEGER, block INTEGER);
 CREATE TABLE IF NOT EXISTS weights (interval INTEGER, pk TEXT, zp TEXT, PRIMARY KEY (interval, pk));
 CREATE TABLE IF NOT EXISTS blocks (number INTEGER PRIMARY KEY, hash TEXT, parent TEXT, time INTEGER, difficulty INTEGER,
@@ -123,14 +127,15 @@ const q = {
   assetMint: db.prepare('UPDATE assets SET minted=? WHERE asset=?'), assetBurn: db.prepare('UPDATE assets SET destroyed=? WHERE asset=?'),
   assetTx: db.prepare('UPDATE assets SET txs = txs + 1 WHERE asset=?'),
   vote: db.prepare('INSERT OR IGNORE INTO votes VALUES (?,?,?,?,?,?)'),
+  dexPut: db.prepare('INSERT OR REPLACE INTO dex VALUES (?,?,?,?,?,?,?,?,?,?)'),
   payout: db.prepare('INSERT INTO payouts VALUES (?,?,?,?,?,?)'),
   allocHas: db.prepare('SELECT 1 FROM allocation WHERE interval=?'), allocPut: db.prepare('INSERT INTO allocation VALUES (?,?,?)'),
 };
 const meta = (k, d) => q.meta.get(k)?.v ?? d;
 
 function addressOf(lock) {
-  if (lock.type === 'PK') return encodeAddress(lock.hash, 'main');
-  if (lock.type === 'Coinbase') return encodeAddress(lock.pkHash, 'main');
+  if (lock.type === 'PK') return encodeAddress(lock.hash, NET);
+  if (lock.type === 'Coinbase') return encodeAddress(lock.pkHash, NET);
   if (lock.type === 'Contract') return contractAddress(cidStr(lock.contractId));
   return null;
 }
@@ -206,6 +211,13 @@ function indexBlock(n, raw) {
         const b = entries.find(([k, d]) => k !== 'Signature' && d.t === 'String')?.[1].v ?? null;
         const sigs = entries.find(([k, d]) => k === 'Signature' && d.t === 'Dict')?.[1].v || [];
         for (const [pk] of sigs) q.vote.run(th, n, ts, w.command, pk, b);
+      }
+      if (DEX_CONTRACT && cid === DEX_CONTRACT && ['Make', 'Take', 'Cancel'].includes(w.command) && w.messageBody?.t === 'Dict') {
+        // the order is in the message body; the order asset is the 1-unit asset of the contract that the transaction locks to it
+        const f = Object.fromEntries(w.messageBody.v.map(([k, d]) => [k, d.v]));
+        const oa = outs.find(o => o[0] === contractAddress(DEX_CONTRACT) && o[2] === '1' && o[1].startsWith(DEX_CONTRACT))?.[1] ?? null;
+        const str = x => x == null ? null : typeof x === 'object' ? JSON.stringify(x, (_, v) => typeof v === 'bigint' ? String(v) : v) : String(x);
+        q.dexPut.run(th, n, ts, w.command, str(f.UnderlyingAsset), str(f.UnderlyingAmount), str(f.PairAsset), str(f.OrderTotal), str(f.MakerPubKey), oa);
       }
       if (cid === CGP_CONTRACT && w.command === 'Payout') {
         for (const o of tx.outputs) {
