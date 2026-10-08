@@ -81,13 +81,16 @@ const errBox = () => S.error ? `<div class="err" role="alert">${esc(S.error)}</d
 const nav = cur => `<nav class="nav">${[['home', 'Wallet', I.home], ['markets', 'Markets', I.chart], ['vote', 'Vote', I.vote], ['contracts', 'Contracts', I.doc], ['settings', 'Settings', I.gear]]
   .map(([k, l, i]) => `<button data-go="${k}" class="${cur === k ? 'on' : ''}">${i}${l}</button>`).join('')}</nav>`;
 
+// password field with a Show/Hide button; the type is switched in place so nothing typed is lost
+const pwField = (label, name, ac, extra = '') => `<label class="field">${label}<span class="pwrow"><input type="password" name="${name}" autocomplete="${ac}" ${extra}><button type="button" class="pwtoggle" data-act="toggle-pw" aria-pressed="false" aria-label="Show password">Show</button></span></label>`;
+
 const views = {
   welcome: () => `<div class="screen" data-s="center">
     <h1 data-s="title">ZP Wallet</h1>
     <p class="muted">A wallet for the ZP network. Your recovery phrase and keys stay on this device, encrypted with a password you choose. Nobody, including the node, ever sees them.</p>
     <form data-form="create-vault" class="screen" data-s="flush">
-      <label class="field">Choose a password for this device<input type="password" name="p1" autocomplete="new-password" required minlength="8"></label>
-      <label class="field">Repeat it<input type="password" name="p2" autocomplete="new-password" required minlength="8"></label>
+      ${pwField('Choose a password for this device (at least 8 characters)', 'p1', 'new-password', 'required minlength="8"')}
+      ${pwField('Repeat it', 'p2', 'new-password', 'required minlength="8"')}
       <div class="warn">The password only unlocks this browser. It cannot recover your coins: keep your 24 words on paper.</div>
       ${errBox()}<button class="btn primary big" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Continue'}</button>
     </form></div>`,
@@ -95,13 +98,13 @@ const views = {
   unlock: () => `<div class="screen" data-s="center">
     <h1 data-s="title">ZP Wallet</h1><p class="muted">Locked. Enter your password.</p>
     <form data-form="unlock" class="screen" data-s="flush">
-      <label class="field">Password<input type="password" name="p" autocomplete="current-password" required autofocus></label>
+      ${pwField('Password', 'p', 'current-password', 'required autofocus')}
       ${errBox()}<button class="btn primary big" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Unlock'}</button>
     </form>
     <button class="btn danger" data-act="reset">Forgot password: remove wallets from this browser</button></div>`,
 
   add: () => {
-    const t = S.tab, tabs = [['new', 'New'], ['phrase', '24 words'], ['key', 'Private key'], ['watch', 'Watch']];
+    const t = S.tab, importing = t !== 'new', subs = [['phrase', 'Recovery phrase'], ['key', 'Private key'], ['watch', 'Watch only']];
     let body = '';
     if (t === 'new') {
       S.draft.words ||= newMnemonic().split(' ');
@@ -112,12 +115,15 @@ const views = {
     else if (t === 'key') body = `<label class="field">Private key (64 hex characters or an extended key)<textarea name="key" autocomplete="off" spellcheck="false" required></textarea></label>`;
     else body = `<label class="field">Address to watch (balance only, no spending)<input name="addr" class="mono" placeholder="${net() === 'main' ? 'zen1q…' : 'tzn1q…'}" required></label>`;
     return `${backBar('Add a wallet', walletsHere().length ? 'home' : 'add')}<form data-form="add-wallet" class="screen">
-      <div class="tabs">${tabs.map(([k, l]) => `<button type="button" class="chip ${k === t ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
+      <div class="seg" role="tablist">
+        <button type="button" class="chip big ${!importing ? 'on' : ''}" data-tab="new" role="tab" aria-selected="${!importing}"><b>New wallet</b><span>Create a fresh wallet</span></button>
+        <button type="button" class="chip big ${importing ? 'on' : ''}" data-tab="${importing ? t : 'phrase'}" role="tab" aria-selected="${importing}"><b>Import existing</b><span>I already have a wallet</span></button></div>
+      ${importing ? `<p class="muted small">What do you have?</p><div class="tabs3">${subs.map(([k, l]) => `<button type="button" class="chip ${k === t ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>` : ''}
       <label class="field">Name<input name="name" maxlength="40" value="${esc(S.draft.name || ['Main', 'Mining', 'Savings', 'Test'][walletsHere().length] || 'Wallet ' + (walletsHere().length + 1))}"></label>
       ${body}
       ${t !== 'watch' && t !== 'new' ? '<div class="warn">Only type your words or key on your own device. Nobody from the community will ever ask for them.</div>' : ''}
       <p class="muted small">Network: <b>${net() === 'main' ? 'Mainnet' : 'Testnet'}</b> (change in Settings).</p>
-      ${errBox()}<button class="btn primary big" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Add wallet'}</button></form>`;
+      ${errBox()}<button class="btn primary big" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : importing ? 'Import wallet' : 'Create wallet'}</button></form>`;
   },
 
   home: () => {
@@ -275,7 +281,7 @@ function modalHtml() {
   if (m.type === 'reveal') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>Backup · ${esc(m.name)}</h2>
     ${m.secret ? `${m.kind === 'mnemonic' ? `<div class="words">${m.secret.split(' ').map((w, i) => `<div><span>${i + 1}</span>${esc(w)}</div>`).join('')}</div>` : `<div class="card mono small" data-s="wrap">${esc(m.secret)}</div>`}
       <div class="warn">Anyone with this can take the coins. Never send it to anyone or share it in a screenshot.</div>`
-    : `<form data-form="reveal" class="screen" data-s="flush"><label class="field">Password<input type="password" name="p" required autofocus></label>${errBox()}<button class="btn primary">Show</button></form>`}
+    : `<form data-form="reveal" class="screen" data-s="flush">${pwField('Password', 'p', 'current-password', 'required autofocus')}${errBox()}<button class="btn primary">Show</button></form>`}
     <button class="btn" data-act="close">Close</button></div></div>`;
   if (m.type === 'confirm') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>${esc(m.title)}</h2><p>${esc(m.text)}</p>
     <div class="row"><button class="btn" data-act="close">Cancel</button><button class="btn danger" data-act="${esc(m.act)}" data-id="${esc(m.id || '')}">${esc(m.ok)}</button></div></div></div>`;
@@ -373,6 +379,7 @@ $app.addEventListener('click', async e => {
     }
     if (act === 'close') { S.modal = null; S.error = ''; return render(); }
     if (act === 'lock') return lock();
+    if (act === 'toggle-pw') { const inp = t.parentElement.querySelector('input'), show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; t.textContent = show ? 'Hide' : 'Show'; t.setAttribute('aria-pressed', String(show)); t.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
     if (act === 'copy') { await navigator.clipboard.writeText(t.dataset.text); t.innerHTML = I.copy + 'Copied'; return; }
     if (act === 'max') { const zp = S.data.get(active().id)?.state?.assets.find(x => x.asset === '00'); $app.querySelector('[name=amount]').value = formatZP(zp?.spendable || 0n).replace(/,/g, ''); return; }
     if (act === 'node-default') { S.settings.nodes[net()] = defaultNode(net()); saveSettings(); render(); return refreshAll(); }
