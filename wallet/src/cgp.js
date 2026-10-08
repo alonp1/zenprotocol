@@ -67,7 +67,10 @@ export function payoutBallot(recipientAddress, spends) {
   }
   return hex(bytesOf(w => {
     w.u8(2);
-    if (d.contract) { w.u8(2); VarInt.write(w, 0); w.bytes(d.hash); } else { w.u8(1); w.bytes(d.hash); }
+    if (d.contract) {                                  // a contract address holds version (4 bytes) and hash (32 bytes)
+      if (d.hash.length !== 36) throw new Error('Invalid contract address');
+      w.u8(2); VarInt.write(w, new DataView(d.hash.buffer, d.hash.byteOffset).getUint32(0)); w.bytes(d.hash.slice(4));
+    } else { w.u8(1); w.bytes(d.hash); }
     VarInt.write(w, sorted.length);
     for (const s of sorted) Spend.write(w, s);
   }));

@@ -195,7 +195,7 @@ export async function prepareVote({ w, state, node, votingContractId, command, b
   const inputs = [{ outpoint: fund.outpoint, lock: fund.lock, spend: spend(fund.spend.amount) }];
 
   const res = await node.executeContract({
-    address: encodeAddress(cid.hash, w.network, true), command, messageBody: body.hex,
+    address: encodeAddress(unhex(votingContractId), w.network, true), command, messageBody: body.hex,   // a contract address holds the 4-byte version and the 32-byte hash
     options: { sender: '' }, tx: skeletonHex(inputs, outputs),
   });
   if (typeof res !== 'string' || !/^([0-9a-f]{2})+$/.test(res)) throw new Error('The node sent an invalid answer');

@@ -24,7 +24,7 @@ test('payout ballot: 1 ZP to a key, and the default nominee (1 kalapa to the CGP
   const pk = new Uint8Array(32).fill(0x26);
   const b = payoutBallot(encodeAddress(pk, 'main'), [{ asset: ZEN_ASSET, amount: 100000000n }]);
   assert.equal(b, '0201' + '26'.repeat(32) + '01' + '00' + '2001');
-  const cgp = unhex('00cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1'.slice(2));
+  const cgp = unhex('00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1');   // version + hash: what a contract address holds
   assert.equal(payoutBallot(encodeAddress(cgp, 'main', true), [{ asset: ZEN_ASSET, amount: 1n }]),
     '020200cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d101000001');
   assert.throws(() => payoutBallot(encodeAddress(pk, 'main'), []));
@@ -45,7 +45,7 @@ test('vote body: Signature first, signatures verify, one signature per key', () 
 });
 
 // --- sending a vote: a fake node plays /contract/active and /contract/execute ----------------------
-import { deriveKey } from '../src/keys.js';
+import { deriveKey, encodeAddress as enc } from '../src/keys.js';
 import { openWallet, prepareVote } from '../src/wallet.js';
 import { deserializeTx, serializeTx, txHash, witnessesHash, Output, Outpoint, VarInt } from '../src/serialize.js';
 import { sha3_256 } from '@noble/hashes/sha3.js';
@@ -107,4 +107,9 @@ test('allowed allocation votes: 90% in force allows 89 and 90 only; 0% allows 0 
   assert.deepEqual(allocationRange(P.main, 90), { min: 89, max: 90 });
   assert.deepEqual(allocationRange(P.main, 0), { min: 0, max: 15 });
   assert.deepEqual(allocationRange(P.main, 50), { min: 42, max: 58 });
+});
+
+test('the contract address sent to /contract/execute holds version and hash (as the node prints it)', async () => {
+  const id = '00000000e89738718a802a7d217941882efe8e585e20b20901391bc37af25fac2f22c8ab';
+  assert.equal(enc(unhex(id), 'test', true), 'ctzn1qqqqqqq8gjuu8rz5q9f7jz72p3qh0arjctcstyzgp8ydux7hjt7kz7gkg4v5lec88');   // printed by the node when the voting contract was activated
 });
