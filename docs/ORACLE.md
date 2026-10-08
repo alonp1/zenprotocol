@@ -7,7 +7,7 @@ Status: the contracts are the developers' originals (repository `zenprotocol/con
 ## How it works
 
 1. Every interval (default hourly) the service reads the price of each ticker, e.g. `EUR = 1.083` (USD per euro).
-2. For each ticker it builds a **leaf**: `Hash(identifier bytes ‖ ';' ‖ uint32 big-endian(value × 1000))`. The leaves, in the configured order, form a **Merkle tree** (the tree of the node's `Consensus` library, so the root is identical to what contracts compute).
+2. For each ticker it builds a **leaf**: the Zulib `Sha3` of the identifier string followed by the U64 `value × 1000` (exactly `hashLeaf` in FixedPayout.fst). The leaves, in the configured order, form a **Merkle tree** (the tree of the node's `Consensus` library, so the root is identical to what contracts compute).
 3. The service executes the Oracle contract with command `Commit` and the **root** as `Commit`. The transaction is signed with the oracle's key. The contract mints a *commitment token* derived from `(root ‖ oracle public key)` and keeps it. Now the chain proves *that root existed at that block*.
 4. Anyone who needs the value asks the service `GET /auditpath?...` for: timestamp, value, root, index, audit path.
 5. A consumer executes the Oracle contract with `Attest` (root, oracle public key, recipient) to receive an *attestation token* (`[[[ root ; pubkey ]]]`), proving the commitment is on the chain.

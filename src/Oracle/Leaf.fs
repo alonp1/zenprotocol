@@ -10,10 +10,18 @@ let encodeValue (value: decimal) : byte[] =
     let scaled = uint32 (Math.Round(value * 1000M, MidpointRounding.ToZero))
     [| byte (scaled >>> 24); byte (scaled >>> 16); byte (scaled >>> 8); byte scaled |]
 
-/// Hash(identifier bytes ; ';' ; value bytes)
+/// The value as the contract's U64: value x 1000.
+let scaled (value: decimal) : uint64 = uint64 (Math.Round(value * 1000M, MidpointRounding.ToZero))
+
+/// Built with the same Zulib functions as hashLeaf in FixedPayout.fst (Sha3 over the identifier string, then the U64 value),
+/// so the bytes are identical to what the contract checks the audit path against.
 let hashLeaf (ticker: string) (value: decimal) : Hash.Hash =
-    Array.concat [ Encoding.ASCII.GetBytes ticker; [| byte ';' |]; encodeValue value ]
-    |> Hash.compute
+    let sha3 =
+        Zen.Hash.Sha3.empty
+        |> Zen.Hash.Sha3.updateString (ZFStar.fsToFstString ticker) |> Zen.Cost.Realized.__force
+        |> Zen.Hash.Sha3.updateU64 (scaled value) |> Zen.Cost.Realized.__force
+        |> Zen.Hash.Sha3.finalize |> Zen.Cost.Realized.__force
+    Hash.Hash sha3
 
 let leaves (data: (string * decimal) list) = data |> List.map (fun (t, v) -> hashLeaf t v)
 

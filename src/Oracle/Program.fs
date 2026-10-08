@@ -66,7 +66,7 @@ let proof (r: Store.Round) (ticker: string) =
     | Some index ->
         let data = List.zip (List.ofArray r.Tickers) (List.ofArray r.Values)
         let path = Leaf.auditPath data index |> List.map Leaf.hex
-        Some {| ticker = ticker; value = r.Values.[index]; valueScaled = uint32 (r.Values.[index] * 1000M)
+        Some {| ticker = ticker; value = r.Values.[index]; valueScaled = Leaf.scaled r.Values.[index]
                 timestamp = r.Timestamp; root = r.Root; index = index; auditPath = path; tx = r.Tx |}
 
 let serve (s: Settings) =

@@ -12,7 +12,7 @@ let run () : bool =
     let data = [ "EURUSD", 1.0832M; "GBPUSD", 1.2711M; "USDJPY", 149.5M; "EURGBP", 0.852M; "USDCHF", 0.9M ]
     let root = Leaf.root data
     let results =
-        [ check "value encoding is value x 1000, big endian" (Leaf.encodeValue 1.0832M = [| 0uy; 0uy; 4uy; 59uy |])
+        [ check "value is scaled x 1000 as the contract's U64" (Leaf.scaled 1.0832M = 1083UL)
           check "every leaf verifies against the root with its audit path"
               (data |> List.mapi (fun i (t, v) -> Leaf.verify root (Leaf.auditPath data i) i t v) |> List.forall id)
           check "a changed value does not verify"
