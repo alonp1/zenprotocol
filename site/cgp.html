@@ -137,7 +137,17 @@ const tallyHtml = votes => {
 };
 
 // the three stages of an interval: snapshot, nominations, voting. Widths follow the block counts; the one in progress is filled up to the tip.
-const stageBar = (i, tip) => {
+const left = (blocks, bs) => {   // "1,234 blocks (about 2 d 3 h)"
+  if (!bs) return fmt(blocks) + ' blocks';
+  const m = Math.round(blocks * bs / 60), t = m >= 1440 ? Math.floor(m / 1440) + ' d ' + Math.floor(m % 1440 / 60) + ' h' : m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min';
+  return fmt(blocks) + ' blocks (about ' + t + ')';
+};
+// what the summary shows for an interval in progress: the stage and what is left of it
+const openText = (i, tip, bs) => tip < i.start ? 'not started' :
+  tip <= i.snapshot ? 'Snapshot in ' + left(i.snapshot - tip, bs) :
+  tip <= i.nominationEnd ? 'Nominations open, ' + left(i.nominationEnd - tip, bs) + ' left, then voting' :
+  'Voting open, ' + left(i.end - tip, bs) + ' left';
+const stageBar = (i, tip, bs) => {
   const segs = [['Until snapshot', i.start, i.snapshot], ['Nominations', i.snapshot, i.nominationEnd], ['Voting', i.nominationEnd, i.end]];
   const bar = segs.map(([n, a, b]) => {
     const len = Math.max(1, b - a), p = Math.max(0, Math.min(1, (tip - a) / len));
@@ -147,7 +157,7 @@ const stageBar = (i, tip) => {
   const labels = segs.map(([n, a, b], k) => `<span><i class="sw s${k}"></i><b>${n}</b> blocks ${fmt(a)}–${fmt(b)}</span>`).join('');
   const cur = tip < i.start ? 'not started' : tip > i.end ? 'finished' : tip <= i.snapshot ? 'before the snapshot (vote weight is the balance at the snapshot block)' : tip <= i.nominationEnd ? 'nominations are open' : 'voting is open';
   return `<div class="phase">${bar}</div><div class="stage-l">${labels}</div>
-    <div class="note" style="margin-top:6px">${tip >= i.start && tip <= i.end ? `Now: <b>${cur}</b> (block ${fmt(tip)} of ${fmt(i.end)})` : `Stage: ${cur}`}</div>`;
+    <div class="note" style="margin-top:6px">${tip >= i.start && tip <= i.end ? `Now: <b>${esc(openText(i, tip, bs))}</b> (block ${fmt(tip)} of ${fmt(i.end)})` : `Stage: ${cur}`}</div>`;
 };
 // how much vote weight stands behind each candidate (nominations and payout votes name a recipient and an amount)
 const candTally = votes => {
@@ -172,7 +182,7 @@ fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => 
   if (!ivs.length) ivs = d.intervals.slice(0, 1);   // a chain with no community numbering (testnet): show the current interval
   $('list').innerHTML = ivs.map((i, n) => {
     const pay = i.payouts.length ? i.payouts.map(p => `${amt(p.amount)} ${p.asset === '00' ? 'ZP' : esc(short(p.asset))} → ${esc(p.recipientName || short(p.recipient))}`).join('<br>') : 'none';
-    const decided = i.complete ? (i.allocationDecided != null ? i.allocationDecided + '%' : '–') : 'voting open';
+    const decided = i.complete ? (i.allocationDecided != null ? i.allocationDecided + '%' : '–') : openText(i, d.tip, d.blockSeconds);
     return `<details class="iv" ${n === 0 ? 'open' : ''}><summary>
       <div><div class="k">Interval</div><div class="v">${i.communityInterval >= 1 ? i.communityInterval : i.interval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
       <div><div class="k">Split in force</div>${splitBar(i.allocationInForce)}</div>
@@ -180,7 +190,7 @@ fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => 
       <div><div class="k">Voters · weight</div><div class="v">${i.voters} · ${amt(Math.round(i.weightVoted))} ZP</div></div>
       <div><div class="k">Payout</div><div class="v n">${pay}</div></div></summary>
       <div class="in">
-        ${stageBar(i, d.tip)}
+        ${stageBar(i, d.tip, d.blockSeconds)}
         <h2 style="margin-top:18px">Stage 1 · Nominations <span class="sub">(${i.votes.filter(v => v.command === 'Nomination').length} ballots)</span></h2>
         ${candTally(i.votes.filter(v => v.command === 'Nomination'))}
         ${ballotsTable(i.votes.filter(v => v.command === 'Nomination'), 'No nomination ballots in this interval.')}

@@ -361,7 +361,12 @@ function writeJson(name, data) {
   fs.writeFileSync(tmp, JSON.stringify(data)); fs.renameSync(tmp, path.join(WEB, name));
 }
 lap('vote weights and cgp history ready');
-writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, intervals: out });
+// average seconds per block over the last 500 indexed blocks (the page turns remaining blocks into time)
+let blockSeconds = null;
+{ const a = db.prepare('SELECT number, time FROM blocks ORDER BY number DESC LIMIT 1').get();
+  const b = a && db.prepare('SELECT number, time FROM blocks WHERE number <= ? ORDER BY number DESC LIMIT 1').get(Math.max(1, a.number - 500));
+  if (a && b && a.number > b.number && a.time > b.time) blockSeconds = Math.round((a.time - b.time) / 1000 / (a.number - b.number)); }
+writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, intervals: out });
 
 // ---- assets.json ------------------------------------------------------------------------------
 // Assets change slowly and computing them reads every unspent output (about 45 s): every 30 minutes is enough, or at once when the file is missing
