@@ -6,6 +6,13 @@ open System
 open System.Net.Http
 open System.Text.Json
 
+/// Reads a number out of an answer; a failure says which ticker and what the source answered (rate limits and errors come back as JSON without the field).
+let private pick (ticker: string) (body: string) (f: JsonElement -> decimal) : decimal =
+    try
+        use doc = JsonDocument.Parse body
+        f doc.RootElement
+    with ex -> failwithf "%s: %s (the source answered: %s)" ticker ex.Message (body.Substring(0, min 150 body.Length).Replace("\n", " "))
+
 type Provider =
     abstract Name: string
     abstract Fetch: ticker: string -> time: DateTimeOffset -> decimal
@@ -30,8 +37,7 @@ type Frankfurter(http: HttpClient, quote: string) =
             let from, to' = ticker, quote
             let url = sprintf "https://api.frankfurter.dev/v1/latest?base=%s&symbols=%s" from to'
             let body = http.GetStringAsync(url).Result
-            use doc = JsonDocument.Parse body
-            doc.RootElement.GetProperty("rates").GetProperty(to').GetDecimal()
+            pick ticker body (fun r -> r.GetProperty("rates").GetProperty(to').GetDecimal())
 
 let private ids = dict [ "BTC","bitcoin"; "ETH","ethereum"; "LTC","litecoin"; "XRP","ripple"; "SOL","solana"; "DOGE","dogecoin"; "ADA","cardano"; "XMR","monero"; "BNB","binancecoin" ]
 
@@ -45,8 +51,7 @@ type CoinGecko(http: HttpClient, key: string, quote: string) =
             let req = new HttpRequestMessage(HttpMethod.Get, sprintf "https://api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=%s" id cur)
             if key <> "" then req.Headers.Add("x-cg-demo-api-key", key)
             let body = http.Send(req).Content.ReadAsStringAsync().Result
-            use doc = JsonDocument.Parse body
-            doc.RootElement.GetProperty(id).GetProperty(cur).GetDecimal()
+            pick ticker body (fun r -> r.GetProperty(id).GetProperty(cur).GetDecimal())
 
 /// CoinMarketCap: needs an API key (free plan available) in ORACLE_CMC_KEY.
 type CoinMarketCap(http: HttpClient, key: string, quote: string) =
@@ -58,8 +63,7 @@ type CoinMarketCap(http: HttpClient, key: string, quote: string) =
             let req = new HttpRequestMessage(HttpMethod.Get, sprintf "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol=%s&convert=%s" sym cur)
             req.Headers.Add("X-CMC_PRO_API_KEY", key)
             let body = http.Send(req).Content.ReadAsStringAsync().Result
-            use doc = JsonDocument.Parse body
-            doc.RootElement.GetProperty("data").GetProperty(sym).[0].GetProperty("quote").GetProperty(cur).GetProperty("price").GetDecimal()
+            pick ticker body (fun r -> r.GetProperty("data").GetProperty(sym).[0].GetProperty("quote").GetProperty(cur).GetProperty("price").GetDecimal())
 
 /// Currencies from Frankfurter (ECB rates), crypto symbols (BTC, ETH, ...) from CoinGecko: one provider for a mixed ticker list.
 type Auto(fiat: Provider, crypto: Provider) =

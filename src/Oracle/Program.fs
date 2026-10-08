@@ -40,7 +40,12 @@ let settings () =
 let round (s: Settings) (provider: Providers.Provider) =
     let now = DateTimeOffset.UtcNow
     if s.Tickers |> List.exists (fun t -> t.Length > 4) then failwith "tickers are at most 4 characters (FixedPayout refuses longer ones)"
-    let data = s.Tickers |> List.map (fun t -> t, provider.Fetch t now)
+    // a ticker the source cannot give is left out of this round (and said so); no ticker at all fails the round
+    let data =
+        s.Tickers |> List.choose (fun t ->
+            try Some (t, provider.Fetch t now)
+            with ex -> eprintfn "ticker %s skipped: %s" t ex.Message; None)
+    if data.IsEmpty then failwith "no ticker could be fetched"
     let root = Leaf.root data
     let tx =
         if s.Contract = "" then ""
