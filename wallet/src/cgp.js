@@ -40,6 +40,14 @@ export function candidateBallot(c) {
   }));
 }
 
+// Allowed allocation votes (CGP share in %) given the allocation in force; Tally_Voting.fs validateCoinbaseRatio, PROTOCOL.md 7.4.
+// With 90% in force only 89 and 90 are valid; with 0% (a new chain) 0 to 15. Anything else is silently ignored by the tally.
+export function allocationRange(p, last) {
+  const L = 100 - last, cap = 100 - p.allocationCorrectionCap, lowerBound = 100 - p.upperAllocationBound;
+  const ratioMin = Math.max(lowerBound, Math.floor(L * cap / 100)), ratioMax = Math.min(100, Math.floor(L * 100 / cap));
+  return { min: 100 - ratioMax, max: 100 - ratioMin };
+}
+
 // --- ballots ------------------------------------------------------------------------------------
 const bytesOf = fn => { const w = new Writer(); fn(w); return w.out(); };
 

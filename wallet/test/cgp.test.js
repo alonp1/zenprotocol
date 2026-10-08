@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { CGP_PARAMS as P, allocationBallot, payoutBallot, hashBallot, voteBody, phaseAt, getInterval, isNomineePhase } from '../src/cgp.js';
+import { allocationRange, CGP_PARAMS as P, allocationBallot, payoutBallot, hashBallot, voteBody, phaseAt, getInterval, isNomineePhase } from '../src/cgp.js';
 import { Data, Reader, Writer, hex, unhex, ZEN_ASSET } from '../src/serialize.js';
 import { verifyDigest } from '../src/tx.js';
 import { encodeAddress } from '../src/keys.js';
@@ -101,4 +101,10 @@ test('wrong phase, last blocks of a phase, and a node that changes the transacti
   await assert.rejects(run(95, 'Allocation', tx => ({ ...tx, witnesses: [{ ...tx.witnesses[0], command: 'Payout' }] })), /unexpected contract witness/);
   await assert.rejects(run(95, 'Allocation', tx => ({ ...tx, witnesses: [{ ...tx.witnesses[0],
     messageBody: { t: 'String', v: 'x' } }] })), /changed the vote/);
+});
+
+test('allowed allocation votes: 90% in force allows 89 and 90 only; 0% allows 0 to 15', () => {
+  assert.deepEqual(allocationRange(P.main, 90), { min: 89, max: 90 });
+  assert.deepEqual(allocationRange(P.main, 0), { min: 0, max: 15 });
+  assert.deepEqual(allocationRange(P.main, 50), { min: 43, max: 58 });
 });

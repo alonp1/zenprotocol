@@ -4,7 +4,7 @@ import qrcode from 'qrcode-generator';
 import { newMnemonic, checkMnemonic, isValidAddress, decodeAddress } from '../src/keys.js';
 import { NodeClient, NodeError, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
-import { CGP_PARAMS, VOTING_CONTRACT, allocationBallot, payoutBallot, candidateBallot, phaseAt } from '../src/cgp.js';
+import { CGP_PARAMS, VOTING_CONTRACT, allocationRange, allocationBallot, payoutBallot, candidateBallot, phaseAt } from '../src/cgp.js';
 import { openWallet, prepareVote, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
 import { parseZP, formatZP, ZP } from '../src/tx.js';
 import contractNames from '../../site/contract-names.json';
@@ -272,7 +272,7 @@ function ballotsCard(c) {
   const note = none ? '<p class="muted small">Select at least one wallet that can sign above.</p>' : '';
   if (ph.phase === 'before') return `<div class="card"><h2>Casting ballots</h2><p class="muted small">Ballots open after the snapshot block (${c.snapshot.toLocaleString('en-US')}). Your balance at that block is your weight for this interval.</p></div>`;
   const allocForm = `<form data-form="vote-alloc" class="screen" data-s="flush"><h2>Allocation vote</h2>
-      <p class="muted small">Share of each block reward paid to the CGP fund (now ${alloc()}%). Counted in the voting phase; the share may change by at most 15 points per interval and stays at most 90%.</p>
+      <p class="muted small">Share of each block reward paid to the CGP fund (now ${alloc()}%). Counted in the voting phase. With ${alloc()}% in force the valid votes are ${allocationRange(CGP_PARAMS[net()], alloc()).min}% to ${allocationRange(CGP_PARAMS[net()], alloc()).max}%: anything else is ignored.</p>
       <label class="field">Allocation (%)<input name="pct" inputmode="numeric" autocomplete="off" value="${esc(S.draft.pct || '')}" required></label>
       ${ph.phase === 'Vote' ? `<button class="btn primary" ${none ? 'disabled' : ''}>Review</button>` : '<p class="muted small">Opens with the voting phase.</p>'}</form>`;
   const nom = `<form data-form="vote-nom" class="screen" data-s="flush"><h2>Payout nomination</h2>
@@ -499,6 +499,8 @@ $app.addEventListener('submit', async e => {
       }
       case 'vote-alloc': {
         S.draft.pct = v.pct; const pct = Number(v.pct.trim());
+        const r = allocationRange(CGP_PARAMS[net()], alloc());
+        if (!(pct >= r.min && pct <= r.max)) throw new Error(`With ${alloc()}% in force, only ${r.min}% to ${r.max}% counts`);
         return reviewVote('allocation vote', 'Allocation', allocationBallot(pct), `${pct}% of block rewards to the CGP`);
       }
       case 'vote-nom': {
