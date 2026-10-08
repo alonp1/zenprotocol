@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Markets</title>
+<meta name="description" content="Oracle prices and Dex order books of the testnet in one place.">
+<link rel="stylesheet" href="/shell/shell.css">
+<style>
+  .mk-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 20px; }
+  .mk-head .sub { color: var(--s-muted); margin: 0; }
+  .zp section.mk { background: var(--s-card); border: 1px solid var(--s-line); border-radius: 12px; padding: 18px 20px; margin: 18px 0; min-width: 0; }
+  .zp section.mk h2 { margin: 0 0 4px; font-size: 18px; }
+  .zp section.mk > .hint { color: var(--s-muted); font-size: 14px; margin: 0 0 12px; }
+  .zp td.num, .zp th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .zp td.tk { font-weight: 700; letter-spacing: .02em; }
+  .zp .pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 12px; border: 1px solid var(--s-line); color: var(--s-muted); white-space: nowrap; }
+  .zp .pill.ok { color: #1f7a3f; border-color: currentColor; } .zp .pill.warn { color: var(--s-test); border-color: currentColor; }
+  @media (prefers-color-scheme: dark) { .zp .pill.ok { color: #5ccb83; } }
+  .zp .empty { color: var(--s-muted); padding: 10px 0; }
+  .zp .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+  .zp .proof { color: var(--s-muted); font-size: 13px; margin-top: 10px; }
+  .zp .proof code { word-break: break-all; }
+</style>
+</head>
+<body class="zp">
+<main class="wide">
+  <div class="mk-head"><div><h1>Markets</h1><p class="sub">Oracle prices and the Dex in one place · testnet, no value</p></div><p class="sub" id="upd">Loading…</p></div>
+
+  <section class="mk">
+    <h2>Prices from the oracle</h2>
+    <p class="hint">Each price is the agreement of several public sources, committed to the chain in one transaction. Stocks and gold are end-of-day closes.</p>
+    <div class="tw"><table><thead><tr><th>Market</th><th class="num">Price (USD)</th><th>Sources</th><th>Close of</th></tr></thead><tbody id="px"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+    <p class="proof" id="proof"></p>
+  </section>
+
+  <section class="mk">
+    <h2>Dex order books</h2>
+    <p class="hint">Orders between two assets, held by the Dex contract. Anyone can take an order, wholly or in part. Price = wanted amount per unit sold.</p>
+    <div class="tw"><table><thead><tr><th>Pair (sells / wants)</th><th class="num">Open orders</th><th class="num">Best price</th><th class="num">Offered in total</th></tr></thead><tbody id="pairs"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+    <h3 style="margin:18px 0 6px">Open orders</h3>
+    <div class="tw"><table><thead><tr><th>Sells</th><th class="num">Amount</th><th>Wants</th><th class="num">Amount</th><th class="num">Price</th><th>Maker</th></tr></thead><tbody id="orders"></tbody></table></div>
+    <p class="hint" style="margin-top:12px">Placing and taking orders from this page comes with the wallet connection. Until then the wallet's Markets tab shows the same data and the <a href="/dex.html">Dex page</a> has the full trade history.</p>
+  </section>
+
+  <section class="mk">
+    <h2>Where to go next</h2>
+    <div class="cards">
+      <a class="card" href="/oracle.html"><h3>Oracle</h3><p>Every committed round, the evidence behind each price, and proofs.</p></a>
+      <a class="card" href="/dex.html"><h3>Dex</h3><p>Order book by pair and recent trades.</p></a>
+      <a class="card" href="/instruments.html"><h3>Instruments</h3><p>How tokens, prices and orders combine into markets.</p></a>
+      <a class="card" href="/wallet/"><h3>Wallet</h3><p>Hold test coins and watch these markets on your phone.</p></a>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = (v, d = 6) => Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
+const ago = ms => { const s = Math.max(0, (Date.now() - ms) / 1000); return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago'; };
+let names = { '00': 'ZP' };
+const nm = a => names[a] || (a ? a.slice(0, 8) + '…' : '?');
+
+async function oracle() {
+  const rs = await fetch('/oracle/rounds?take=1', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject());
+  const r = Array.isArray(rs) ? rs[0] : rs; if (!r) throw 0;
+  const T = r.Tickers || r.tickers || [], V = r.Values || r.values || [], tx = r.Tx || r.tx, root = r.Root || r.root, stamp = r.Timestamp ?? r.timestamp;
+  let ev = r.Evidence ?? r.evidence; try { if (typeof ev === 'string') ev = JSON.parse(ev); } catch { ev = {}; } ev = ev || {};
+  const day = new Date(stamp).toISOString().slice(0, 10);
+  $('px').innerHTML = T.map((t, i) => {
+    const e = ev[t] || {}, src = Object.keys(e.sources || {}), dropped = e.dropped || [], used = src.length - dropped.length;
+    const sources = !src.length ? '<span class="pill">1 source</span>' : `<span class="pill ${dropped.length ? 'warn' : 'ok'}" title="${esc(src.map(s => s + ' = ' + e.sources[s]).join('\n'))}">${used} of ${src.length} agree${dropped.length ? ' · dropped ' + esc(dropped.join(', ')) : ''}</span>`;
+    return `<tr><td class="tk">${esc(t)}</td><td class="num">${num(V[i])}</td><td>${sources}</td><td>${e.asOf && e.asOf !== day ? esc(e.asOf) : 'today'}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="empty">No prices yet.</td></tr>';
+  $('proof').innerHTML = `Committed ${esc(ago(stamp))} · root <code>${esc(String(root).slice(0, 16))}…</code>` + (tx ? ` · transaction <a href="/explorer.html#tx/${encodeURIComponent(tx)}"><code>${esc(String(tx).slice(0, 12))}…</code></a>` : '');
+}
+async function dex() {
+  const o = await fetch('/explorer/api/dex/orders', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject());
+  const list = (o.orders || []).map(r => ({ sell: nm(r.under_asset), n: Number(r.under_amount), want: nm(r.pair_asset), m: Number(r.pair_total), maker: r.maker ? String(r.maker).slice(0, 10) + '…' : '' })).filter(x => x.n > 0);
+  const by = new Map();
+  for (const x of list) { const k = x.sell + ' / ' + x.want, g = by.get(k) || { k, count: 0, best: Infinity, total: 0, sell: x.sell }; g.count++; g.best = Math.min(g.best, x.m / x.n); g.total += x.n; by.set(k, g); }
+  $('pairs').innerHTML = [...by.values()].map(g => `<tr><td class="tk">${esc(g.k)}</td><td class="num">${g.count}</td><td class="num">${num(g.best, 6)}</td><td class="num">${num(g.total, 2)} ${esc(g.sell)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No open orders.</td></tr>';
+  $('orders').innerHTML = list.slice(0, 40).map(x => `<tr><td class="tk">${esc(x.sell)}</td><td class="num">${num(x.n, 2)}</td><td class="tk">${esc(x.want)}</td><td class="num">${num(x.m, 2)}</td><td class="num">${num(x.m / x.n, 6)}</td><td class="mono">${esc(x.maker)}</td></tr>`).join('');
+}
+async function load() {
+  try { const a = await fetch('/assets.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : {}); for (const x of Array.isArray(a.assets) ? a.assets : []) if (typeof x?.asset === 'string' && typeof x?.name === 'string') names[x.asset] = x.name.slice(0, 40); } catch { /* names are optional */ }
+  const res = await Promise.allSettled([oracle(), dex()]);
+  if (res[0].status === 'rejected') $('px').innerHTML = '<tr><td colspan="4" class="empty">The oracle is not answering right now.</td></tr>';
+  if (res[1].status === 'rejected') { $('pairs').innerHTML = '<tr><td colspan="4" class="empty">The Dex index is not answering right now.</td></tr>'; $('orders').innerHTML = ''; }
+  $('upd').textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+load(); setInterval(load, 30000);
+</script>
+<script src="/shell/shell.js" defer></script>
+</body>
+</html>

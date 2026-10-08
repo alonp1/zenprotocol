@@ -22,7 +22,7 @@
   ];
   const TEST = [
     ['Home', '/'],
-    ['Trade', [['Dex', '/dex.html', 'Swap assets on the chain'], ['Oracle', '/oracle.html', 'Prices committed on the chain'], ['Bridge', '/bridge.html', 'USDC in and out (prototype)']]],
+    ['Trade', [['Markets', '/markets.html', 'Oracle prices and order books'], ['Dex', '/dex.html', 'Swap assets on the chain'], ['Oracle', '/oracle.html', 'Prices committed on the chain'], ['Bridge', '/bridge.html', 'USDC in and out (prototype)']]],
     ['Explore', [['Explorer', '/explorer.html', 'Blocks, transactions, addresses'], ['Assets', '/assets.html', 'Tokens on the testnet'], ['CGP voting', '/cgp.html', 'Votes and payouts']]],
     ['Wallet', '/wallet/'],
     ['Learn', [['Testnet guide', '/guide.html', 'First steps, test coins'], ['Instruments', '/instruments.html', 'Oracle, Dex and tokens together']]],
@@ -76,7 +76,7 @@
     const foot = el('footer', { class: 'zs-foot' }, el('div', { class: 'zs-foot-in' }, [
       el('div', {}, [el('p', { text: name }), el('p', { text: 'A community-run network built on the Zen Protocol code. Open source, no company behind it.' })]),
       col('Network', [['Explorer', '/explorer.html'], ['Assets', '/assets.html'], ['CGP voting', '/cgp.html'], ...(kind === 'main' ? [['Community votes', '/votes.html']] : []), ['Wallet', '/wallet/']]),
-      col(kind === 'test' ? 'Trade (testnet)' : 'Learn', kind === 'test' ? [['Dex', '/dex.html'], ['Oracle', '/oracle.html'], ['Bridge', '/bridge.html'], ['Guide', '/guide.html']] : [['About', '/about.html'], ['How it works', '/how-it-works.html'], ['Run a node', '/node.html'], ['Community', '/community.html']]),
+      col(kind === 'test' ? 'Trade (testnet)' : 'Learn', kind === 'test' ? [['Markets', '/markets.html'], ['Dex', '/dex.html'], ['Oracle', '/oracle.html'], ['Bridge', '/bridge.html'], ['Guide', '/guide.html']] : [['About', '/about.html'], ['How it works', '/how-it-works.html'], ['Run a node', '/node.html'], ['Community', '/community.html']]),
       col('Project', [['Developers', '/developers.html'], ['Source code', github], ...(other ? [[kind === 'test' ? 'Mainnet' : 'Testnet', other]] : [])]),
       el('div', { class: 'zs-legal', text: 'Community-run. Not affiliated with or endorsed by Zen Protocol Ltd. Nothing here is financial advice. ' + (kind === 'test' ? 'Testnet coins have no value.' : '') })]));
     document.body.append(foot);
