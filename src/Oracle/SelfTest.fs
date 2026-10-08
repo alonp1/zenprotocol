@@ -38,6 +38,29 @@ let run () : bool =
                let split = Providers.aggregate 2 0.01M [ "a", 100M; "b", 110M ]
                let few = Providers.aggregate 2 0.01M [ "a", 100M ]
                ok = Ok (100.2M, [ "c" ]) && (match split with Error _ -> true | _ -> false) && (match few with Error _ -> true | _ -> false))
+          check "data sources: a negative index counts from the end, a CSV answer is read by column name or index"
+              (let j = System.Text.Json.JsonDocument.Parse """{"chart":{"result":[{"close":[1.5,2.5,3.5]}]}}"""
+               let csv = "Symbol,Date,Time,Open,High,Low,Close,Volume\nSPY.US,2026-10-08,22:00:09,510,515,509,512.34,1000\n"
+               Providers.numberAt j.RootElement "chart.result[0].close[-1]" = 3.5M
+               && Providers.csvNumber csv "Close" None = 512.34M && Providers.csvNumber csv "6" None = 512.34M
+               && (try Providers.csvNumber "Symbol,Close\nX,N/D\n" "Close" None |> ignore; false with _ -> true))
+          check "quorum keeps its evidence: what each source said and who was dropped"
+              (let fake name v = { new Providers.Provider with
+                                     member _.Name = name
+                                     member _.Fetch _ _ = v }
+               let q = Providers.Quorum([ fake "a" 100M; fake "b" 100.2M; fake "c" 150M ], 2, 0.01M) :> Providers.Provider
+               let v = q.Fetch "TEST" DateTimeOffset.UtcNow
+               match Providers.evidence.TryGetValue "TEST" with
+               | true, (srcs, dropped) -> v = 100.1M && srcs.Length = 3 && dropped = [ "c" ]
+               | _ -> false)
+          check "daily close: due on a weekday after the close time once a day, never on a weekend"
+              (let close = TimeSpan(21, 30, 0)
+               let at s = DateTimeOffset.Parse(s + "Z")
+               Providers.dailyDue (at "2026-10-08T22:00:00") close None                          // Thursday evening
+               && not (Providers.dailyDue (at "2026-10-08T20:00:00") close None)                  // before the close
+               && not (Providers.dailyDue (at "2026-10-08T22:00:00") close (Some "2026-10-08"))   // already fetched today
+               && Providers.dailyDue (at "2026-10-09T22:00:00") close (Some "2026-10-08")         // next day
+               && not (Providers.dailyDue (at "2026-10-10T22:00:00") close None))                 // Saturday
           check "body builder: the Commit dictionary equals the hand-built one"
               (Body.build [ "Commit:h=" + Leaf.hex root ] = Leaf.commitMessageBody root)
           check "a body with a public key survives the node's deserializer (it silently drops a body it cannot read)"

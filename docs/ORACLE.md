@@ -98,3 +98,21 @@ Give a ticker a **list** of sources instead of one name and it is priced only wh
 
 The sources are asked together; their median is the reference, a source more than `tolerance` (1 %) away from it is dropped, and at least `min` sources must remain. A source that fails counts as not answering. If there is no agreement the ticker is **skipped in that round** (the log shows every answer), so a doubtful number is never committed: bets settle on what is committed and cannot be undone. Built-in source names: `coingecko`, `frankfurter`, `coinmarketcap` (key), and any `sources` entry of the file. Pyth (free, signed prices from many publishers) fits as a `sources` entry through its Hermes API; check the answer's path and exponent with `curl` first.
 
+
+### End-of-day tickers (stocks, indices, commodities)
+
+Free sources give no continuous trading for these, and none is needed: a ticker listed under `"daily"` is fetched **once per weekday after `closeUtc`** (default 21:30 UTC, after the US close) and every round carries the last close until the next one. The round's evidence says which day the value belongs to (`asOf`). Weekends and holidays publish nothing new (a holiday's source answer repeats the previous close, which is what it should be). The last closes are kept in `daily.json` in the data directory. Tickers are at most 4 characters: `SPY`, `AAPL`, `MSFT`, `XAU` (gold), `WTI` (oil).
+
+A source entry can read **CSV** (`"format": "csv"`, `"path"` = the column name or a 0-based index; the last data row is used) and map tickers to its own symbols (`"symbols": { "XAU": "xauusd" }`, used as `{symbol}` and `{symbol_lower}` in the URL). A negative index counts from the end (`close[-1]`). A `User-Agent` header replaces the default one (Yahoo refuses unknown agents).
+
+`site/oracle-sources.json` is the ready file: crypto from CoinGecko, Binance and Coinbase (2 of 3 must agree within 1 %), currencies from Frankfurter (ECB) and open.er-api.com, daily closes from Stooq and Yahoo Finance (2 of 2). Free sources change without notice, so **check them from the server first**:
+
+```
+ORACLE_SOURCES_FILE=/r/site/oracle-sources.json ORACLE_TICKERS=BTC,ETH,EUR,GBP,JPY,CHF,SPY,AAPL,MSFT,XAU,WTI zen-oracle probe
+```
+
+`probe` asks every ticker once and prints what each source said (`ok BTC 121000 coingecko=… binance=… coinbase=…`, or why it failed); nothing is signed or sent. A source that fails there is replaced in the file before the oracle is switched over.
+
+### Evidence
+
+Every round stores, next to the values, `Evidence` (JSON, in `/rounds` and `/rounds/latest`): for each ticker the value, the day (`asOf`), what each source answered and which sources were dropped as outliers. The commitment on the chain only holds the Merkle root; this is what shows later why a value was published. Keep the rounds directory backed up: a free source may change or remove its history, the oracle's own record must stay.

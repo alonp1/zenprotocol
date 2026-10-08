@@ -37,15 +37,49 @@ let settings () =
       Data = env "ORACLE_DATA" "oracle-data"
       Listen = env "ORACLE_LISTEN" "http://127.0.0.1:8085/" }
 
+/// Last published close of the daily tickers (stocks, commodities): { "SPY": { "date": "2026-10-08", "value": 512.3 } }
+let private dailyFile (s: Settings) = Path.Combine(s.Data, "daily.json")
+let private loadDaily (s: Settings) : Map<string, string * decimal> =
+    try
+        use doc = JsonDocument.Parse(File.ReadAllText(dailyFile s))
+        [ for p in doc.RootElement.EnumerateObject() -> p.Name, (p.Value.GetProperty("date").GetString(), p.Value.GetProperty("value").GetDecimal()) ] |> Map.ofList
+    with _ -> Map.empty
+let private saveDaily (s: Settings) (m: Map<string, string * decimal>) =
+    Directory.CreateDirectory s.Data |> ignore
+    let o = m |> Map.map (fun _ (d, v) -> {| date = d; value = v |})
+    File.WriteAllText(dailyFile s, JsonSerializer.Serialize o)
+
 let round (s: Settings) (provider: Providers.Provider) =
     let now = DateTimeOffset.UtcNow
+    let daily, closeUtc = Providers.dailyConfig ()
+    let closes = ref (loadDaily s)
+    let today = now.UtcDateTime.ToString "yyyy-MM-dd"
     if s.Tickers |> List.exists (fun t -> t.Length > 4) then failwith "tickers are at most 4 characters (FixedPayout refuses longer ones)"
     // a ticker the source cannot give is left out of this round (and said so); no ticker at all fails the round
     let data =
         s.Tickers |> List.choose (fun t ->
-            try Some (t, provider.Fetch t now)
-            with ex -> eprintfn "ticker %s skipped: %s" t ex.Message; None)
+            if daily.Contains t then
+                // end-of-day tickers: the close is fetched once a day after the close time; every round carries the last close
+                let last = closes.Value.TryFind t
+                if last.IsNone || Providers.dailyDue now closeUtc (last |> Option.map fst) then
+                    try
+                        let v = provider.Fetch t now
+                        closes.Value <- closes.Value.Add(t, (today, v))
+                    with ex -> eprintfn "ticker %s: close not fetched: %s" t ex.Message
+                match closes.Value.TryFind t with
+                | Some (_, v) -> Some (t, v)
+                | None -> eprintfn "ticker %s skipped: no close yet" t; None
+            else
+                try Some (t, provider.Fetch t now)
+                with ex -> eprintfn "ticker %s skipped: %s" t ex.Message; None)
     if data.IsEmpty then failwith "no ticker could be fetched"
+    saveDaily s closes.Value
+    let evidence =
+        data |> List.map (fun (t, v) ->
+            let srcs, dropped = match Providers.evidence.TryGetValue t with | true, e -> e | _ -> [], []
+            let asOf = if daily.Contains t then (match closes.Value.TryFind t with Some (d, _) -> d | None -> today) else today
+            t, {| value = v; asOf = asOf; sources = srcs |> List.map (fun (n, x) -> n, x) |> dict; dropped = dropped |})
+        |> dict
     let root = Leaf.root data
     let tx =
         if s.Contract = "" then ""
@@ -55,7 +89,8 @@ let round (s: Settings) (provider: Providers.Provider) =
             NodeClient.commit s.Node s.Contract body s.SignPath s.Password
     let r : Store.Round =
         { Timestamp = now.ToUnixTimeMilliseconds(); Root = Leaf.hex root; Tx = tx
-          Tickers = data |> List.map fst |> List.toArray; Values = data |> List.map snd |> List.toArray }
+          Tickers = data |> List.map fst |> List.toArray; Values = data |> List.map snd |> List.toArray
+          Evidence = JsonSerializer.Serialize evidence }
     Store.save s.Data r
     printfn "round %d root %s tx %s" r.Timestamp r.Root (if tx = "" then "(not sent)" else tx)
 
@@ -118,6 +153,18 @@ let main argv =
     | "body" :: specs ->
         printfn "%s" (Body.build specs)
         0
+    | [ "probe" ] ->
+        // asks every configured ticker once and prints what each source says (nothing is signed or sent): run it on the server before enabling a sources file
+        let s = settings ()
+        let provider = Providers.create s.Provider s.Quote
+        let mutable bad = 0
+        for t in s.Tickers do
+            try
+                let v = provider.Fetch t DateTimeOffset.UtcNow
+                let srcs, dropped = match Providers.evidence.TryGetValue t with | true, e -> e | _ -> [], []
+                printfn "ok   %-5s %M   %s%s" t v (srcs |> List.map (fun (n, x) -> sprintf "%s=%M" n x) |> String.concat " ") (if dropped.IsEmpty then "" else "   dropped: " + String.concat "," dropped)
+            with ex -> bad <- bad + 1; printfn "FAIL %-5s %s" t (ex.Message.Split('\n').[0])
+        if bad = 0 then 0 else 1
     | [ "once" ] ->
         let s = settings ()
         round s (Providers.create s.Provider s.Quote)
@@ -133,5 +180,5 @@ let main argv =
             Thread.Sleep(TimeSpan.FromMinutes(float s.IntervalMinutes))
         0
     | _ ->
-        eprintfn "usage: zen-oracle [run|once|selftest|body]   (settings from ORACLE_* environment variables, see docs/ORACLE.md)"
+        eprintfn "usage: zen-oracle [run|once|probe|selftest|body]   (settings from ORACLE_* environment variables, see docs/ORACLE.md)"
         2

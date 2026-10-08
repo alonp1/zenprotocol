@@ -10,7 +10,8 @@ type Round =
       Root: string                // hex
       Tx: string                  // transaction hash of the commitment ("" if it was not sent)
       Tickers: string[]
-      Values: decimal[] }
+      Values: decimal[]
+      Evidence: string }            // JSON: per ticker what each source answered, who was dropped, the day of a daily close (null in older rounds)
 
 let private options = JsonSerializerOptions(WriteIndented = true)
 

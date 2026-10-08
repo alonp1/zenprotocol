@@ -1,0 +1,32 @@
+{
+  "quorum": { "min": 2, "tolerance": 0.01 },
+  "closeUtc": "21:30",
+  "daily": ["SPY", "AAPL", "MSFT", "XAU", "WTI"],
+  "sources": {
+    "binance":    { "url": "https://api.binance.com/api/v3/ticker/price?symbol={TICKER}USDT", "path": "price" },
+    "coinbase":   { "url": "https://api.coinbase.com/v2/prices/{TICKER}-USD/spot", "path": "data.amount" },
+    "openrates":  { "url": "https://open.er-api.com/v6/latest/{TICKER}", "path": "rates.USD" },
+    "stooq": {
+      "url": "https://stooq.com/q/l/?s={symbol_lower}&f=sd2t2ohlcv&h&e=csv", "format": "csv", "path": "Close",
+      "symbols": { "SPY": "spy.us", "AAPL": "aapl.us", "MSFT": "msft.us", "XAU": "xauusd", "WTI": "cl.f" }
+    },
+    "yahoo": {
+      "url": "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1d", "path": "chart.result[0].meta.regularMarketPrice",
+      "headers": { "User-Agent": "Mozilla/5.0 (compatible; zen-oracle)" },
+      "symbols": { "XAU": "XAUUSD=X", "WTI": "CL=F" }
+    }
+  },
+  "tickers": {
+    "BTC": ["coingecko", "binance", "coinbase"],
+    "ETH": ["coingecko", "binance", "coinbase"],
+    "EUR": ["frankfurter", "openrates"],
+    "GBP": ["frankfurter", "openrates"],
+    "JPY": ["frankfurter", "openrates"],
+    "CHF": ["frankfurter", "openrates"],
+    "SPY": ["stooq", "yahoo"],
+    "AAPL": ["stooq", "yahoo"],
+    "MSFT": ["stooq", "yahoo"],
+    "XAU": ["stooq", "yahoo"],
+    "WTI": ["stooq", "yahoo"]
+  }
+}

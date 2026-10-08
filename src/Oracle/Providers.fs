@@ -17,7 +17,7 @@ let walk (root: JsonElement) (path: string) : JsonElement =
         let name = if i < 0 then seg else seg.Substring(0, i)
         let idxs = if i < 0 then [||] else seg.Substring(i).Split([| '['; ']' |], StringSplitOptions.RemoveEmptyEntries) |> Array.map int
         let el1 = if name = "" then el else el.GetProperty name
-        idxs |> Array.fold (fun (e: JsonElement) n -> e.[n]) el1) root
+        idxs |> Array.fold (fun (e: JsonElement) n -> e.[if n < 0 then e.GetArrayLength() + n else n]) el1) root
 
 /// The number at a path: a JSON number, or a number written as a string ("82984.01").
 let numberAt (root: JsonElement) (path: string) : decimal =
@@ -33,6 +33,21 @@ let private pick (ticker: string) (body: string) (f: JsonElement -> decimal) : d
         use doc = JsonDocument.Parse body
         f doc.RootElement
     with ex -> failwithf "%s: %s (the source answered: %s)" ticker ex.Message (body.Substring(0, min 150 body.Length).Replace("\n", " "))
+
+/// What each source answered for a ticker in the last fetch (kept with the round as evidence: who agreed, who was dropped).
+let evidence = System.Collections.Concurrent.ConcurrentDictionary<string, (string * decimal) list * string list>()
+
+/// The number in a CSV answer: the column (a name from the header line or a 0-based index) of a data row (default the last one).
+let csvNumber (body: string) (column: string) (row: int option) : decimal =
+    let lines = body.Split([| '\n'; '\r' |], StringSplitOptions.RemoveEmptyEntries)
+    if lines.Length < 2 then failwith "the CSV has no data row"
+    let header = lines.[0].Split(',') |> Array.map (fun h -> h.Trim().ToLowerInvariant())
+    let col = match Int32.TryParse column with
+              | true, i -> i
+              | _ -> (match Array.tryFindIndex ((=) (column.ToLowerInvariant())) header with Some i -> i | None -> failwithf "no column %s in %s" column lines.[0])
+    let line = match row with Some r -> lines.[r] | None -> lines.[lines.Length - 1]
+    let cells = line.Split(',')
+    Decimal.Parse(cells.[col].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture)
 
 type Provider =
     abstract Name: string
@@ -89,18 +104,27 @@ type CoinMarketCap(http: HttpClient, key: string, quote: string) =
 /// Any HTTP API that answers JSON, described in the sources file (docs/ORACLE.md, "Data sources"): url with {ticker} {TICKER}
 /// {ticker_lower} {quote} {quote_lower}, the path of the number in the answer, optional headers ("env:NAME" takes the value from the
 /// environment, so keys stay out of files), a factor to multiply by and whether to take 1/x.
-type Generic(http: HttpClient, name: string, url: string, path: string, headers: (string * string) list, multiply: decimal, invert: bool, quote: string) =
+type Generic(http: HttpClient, name: string, url: string, path: string, headers: (string * string) list, multiply: decimal, invert: bool, quote: string, format: string, symbols: Map<string, string>) =
     interface Provider with
         member _.Name = name
         member _.Fetch ticker _ =
-            let u = url.Replace("{ticker}", ticker).Replace("{TICKER}", ticker.ToUpperInvariant()).Replace("{ticker_lower}", ticker.ToLowerInvariant())
+            let symbol = match symbols.TryFind ticker with Some v -> v | None -> ticker
+            let u = url.Replace("{symbol}", symbol).Replace("{symbol_lower}", symbol.ToLowerInvariant()).Replace("{ticker}", ticker).Replace("{TICKER}", ticker.ToUpperInvariant()).Replace("{ticker_lower}", ticker.ToLowerInvariant())
                        .Replace("{quote}", quote).Replace("{quote_lower}", quote.ToLowerInvariant())
             let req = new HttpRequestMessage(HttpMethod.Get, u)
             for (k, v) in headers do
                 let value = if v.StartsWith "env:" then (Environment.GetEnvironmentVariable(v.Substring 4) |> Option.ofObj |> Option.defaultValue "") else v
+                if k.ToLowerInvariant() = "user-agent" then req.Headers.UserAgent.Clear()
                 req.Headers.TryAddWithoutValidation(k, value) |> ignore
-            let body = http.Send(req).Content.ReadAsStringAsync().Result
-            let v = pick ticker body (fun r -> numberAt r path) * multiply
+            let resp = http.Send(req)
+            let body = resp.Content.ReadAsStringAsync().Result
+            if not resp.IsSuccessStatusCode && format <> "csv" && not (body.TrimStart().StartsWith "{") then
+                failwithf "%s: HTTP %d from %s" ticker (int resp.StatusCode) name
+            let v =
+                (if format = "csv" then
+                    (try csvNumber body path None
+                     with ex -> failwithf "%s: %s (the source answered: %s)" ticker ex.Message (body.Substring(0, min 150 body.Length).Replace("\n", " ")))
+                 else pick ticker body (fun r -> numberAt r path)) * multiply
             if invert then 1M / v else v
 
 /// Each ticker can come from a different source.
@@ -162,9 +186,10 @@ type Quorum(sources: Provider list, minimum: int, tolerance: decimal) =
                     with ex -> eprintfn "%s: source %s failed: %s" ticker s.Name (ex.Message.Split('\n').[0]); None)
             match aggregate minimum tolerance answers with
             | Ok (v, off) ->
+                evidence.[ticker] <- (answers, off)
                 if not off.IsEmpty then eprintfn "%s: dropped %s (more than %M away from the others)" ticker (String.concat ", " off) tolerance
                 v
-            | Error e -> failwithf "%s: %s" ticker e
+            | Error e -> evidence.[ticker] <- (answers, []); failwithf "%s: %s" ticker e
 
 let create (name: string) (quote: string) : Provider =
     let fallback = createBuiltin name quote
@@ -185,7 +210,10 @@ let create (name: string) (quote: string) : Provider =
                               | _ -> []
                 let multiply = match v.TryGetProperty("multiply") with | true, x -> x.GetDecimal() | _ -> 1M
                 let invert = match v.TryGetProperty("invert") with | true, x -> x.GetBoolean() | _ -> false
-                custom.[p.Name] <- Generic(http, p.Name, str "url" "", str "path" "", headers, multiply, invert, str "quote" quote) :> Provider
+                let symbols = match v.TryGetProperty("symbols") with
+                              | true, m -> [ for kv in m.EnumerateObject() -> kv.Name, kv.Value.GetString() ] |> Map.ofList
+                              | _ -> Map.empty
+                custom.[p.Name] <- Generic(http, p.Name, str "url" "", str "path" "", headers, multiply, invert, str "quote" quote, str "format" "json", symbols) :> Provider
         | _ -> ()
         let resolve n = match custom.TryGetValue n with | true, p -> p | _ -> createBuiltin n quote
         let routes =
@@ -201,3 +229,27 @@ let create (name: string) (quote: string) : Provider =
                 |> Map.ofList
             | _ -> Map.empty
         Routed(routes, fallback) :> Provider
+
+
+/// Tickers that move once a day (stocks, indices, commodities: end-of-day prices) and the UTC time after which the day's close is
+/// published: { "daily": ["SPY","AAPL","XAU"], "closeUtc": "21:30" } in the sources file. Weekends are skipped.
+let dailyConfig () : Set<string> * TimeSpan =
+    match Environment.GetEnvironmentVariable "ORACLE_SOURCES_FILE" with
+    | null | "" -> Set.empty, TimeSpan(21, 30, 0)
+    | file ->
+        use doc = JsonDocument.Parse(File.ReadAllText file)
+        let root = doc.RootElement
+        let tickers = match root.TryGetProperty("daily") with
+                      | true, d -> [ for x in d.EnumerateArray() -> x.GetString() ] |> Set.ofList
+                      | _ -> Set.empty
+        let at = match root.TryGetProperty("closeUtc") with
+                 | true, c -> TimeSpan.Parse (c.GetString() + ":00")
+                 | _ -> TimeSpan(21, 30, 0)
+        tickers, at
+
+/// Whether the close of `now`'s day should be fetched now: a weekday, after the close time, and not fetched yet today.
+let dailyDue (now: DateTimeOffset) (closeUtc: TimeSpan) (lastDate: string option) : bool =
+    let d = now.UtcDateTime
+    d.DayOfWeek <> DayOfWeek.Saturday && d.DayOfWeek <> DayOfWeek.Sunday
+    && d.TimeOfDay >= closeUtc
+    && lastDate <> Some (d.ToString "yyyy-MM-dd")
