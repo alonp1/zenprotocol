@@ -59,6 +59,21 @@ async function step() {
   // done: both votes sent, or the voting phase has ended
   return allocIn === ph.interval && payoutIn === ph.interval || (lastVotePhase && ph.interval > lastVotePhase);
 }
+if (PROBE) {
+  const state = await readState(w, node), cgp = await node.cgp().catch(() => ({}));
+  const last = Number.isInteger(cgp.allocation) ? cgp.allocation : 0;
+  const p = await prepareVote({ w, state, node, votingContractId: contract, command: 'Allocation', ballotHex: allocationBallot(last), voterKeys: keys(), anyPhase: true });
+  say(`probe: node answered, transaction ${p.hash} built, witness checked and signed (phase now: ${p.phase.phase})`);
+  if (!SEND) { say('dry run: nothing published. Add --send to test that the node accepts it.'); process.exit(0); }
+  say('published', await publish(node, p));
+  for (let i = 0; i < 90; i++) {                         // up to 15 minutes
+    await new Promise(r => setTimeout(r, 10000));
+    const t = await node.request(`/blockchain/transaction?hash=${p.hash}`).catch(() => null);
+    if (t && (t.confirmations > 0 || t.blockNumber)) { say('IN A BLOCK:', JSON.stringify(t).slice(0, 200)); process.exit(0); }
+  }
+  say('not in a block after 15 minutes (slow miner?): check again with /blockchain/transaction?hash=' + p.hash);
+  process.exit(1);
+}
 for (;;) {
   let done = false;
   try { done = await step(); } catch (e) { say('ERROR', e.message); }
