@@ -7,86 +7,177 @@
 <meta name="description" content="Oracle prices and Dex order books of the testnet in one place.">
 <link rel="stylesheet" href="/shell/shell.css">
 <style>
-  .mk-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 20px; }
-  .mk-head .sub { color: var(--s-muted); margin: 0; }
-  .zp section.mk { background: var(--s-card); border: 1px solid var(--s-line); border-radius: 12px; padding: 18px 20px; margin: 18px 0; min-width: 0; }
-  .zp section.mk h2 { margin: 0 0 4px; font-size: 18px; }
-  .zp section.mk > .hint { color: var(--s-muted); font-size: 14px; margin: 0 0 12px; }
-  .zp td.num, .zp th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .zp td.tk { font-weight: 700; letter-spacing: .02em; }
-  .zp .pill { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 12px; border: 1px solid var(--s-line); color: var(--s-muted); white-space: nowrap; }
-  .zp .pill.ok { color: #1f7a3f; border-color: currentColor; } .zp .pill.warn { color: var(--s-test); border-color: currentColor; }
-  @media (prefers-color-scheme: dark) { .zp .pill.ok { color: #5ccb83; } }
-  .zp .empty { color: var(--s-muted); padding: 10px 0; }
-  .zp .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
-  .zp .proof { color: var(--s-muted); font-size: 13px; margin-top: 10px; }
-  .zp .proof code { word-break: break-all; }
+/* Same look as the Markets mockup: green-grey neutrals, one teal accent, green and rust for the two sides of an order book. */
+:root { --bg: #f1f4f3; --surface: #ffffff; --fg: #14201d; --muted: #5a6a65; --line: #d8dfdc; --accent: #0e6b5c; --accent-fg: #ffffff;
+        --bull: #17794a; --bear: #ae3f29; --warn-bg: #fbf1d9; --warn-fg: #6d4b00; --soft: #e6eeeb;
+        --sans: system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0e1513; --surface: #151f1c; --fg: #e3ebe8; --muted: #8da19b; --line: #26332f;
+        --accent: #4cc3a8; --accent-fg: #07211b; --bull: #4cc388; --bear: #e5836c; --warn-bg: #2d2610; --warn-fg: #e6c874; --soft: #1c2925; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.mk { max-width: 1060px; margin: 0 auto; padding: 22px 16px 8px; display: flex; flex-direction: column; gap: 16px; }
+.mk h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+.mk h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+.mk p { margin: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.sub { color: var(--muted); font-size: 14px; }
+.banner { background: var(--warn-bg); color: var(--warn-fg); border-radius: 6px; padding: 10px 14px; font-size: 14px; }
+.steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.steps button { font: inherit; font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.steps button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.steps button:disabled { color: var(--muted); cursor: not-allowed; }
+.steps small { font-size: 11px; margin-left: 4px; opacity: .8; }
+.mk section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; }
+.col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.scroll { overflow-x: auto; }
+.mk table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.mk th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.mk td { padding: 11px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; }
+.mk th.num { font-family: var(--sans); font-size: 12px; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--soft); } tr.click.sel td { background: var(--soft); }
+tr.click:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--soft); color: var(--accent); }
+.pill.warn { color: var(--warn-fg); background: var(--warn-bg); }
+.up { color: var(--bull); } .down { color: var(--bear); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; margin: 0; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.big { font-family: var(--mono); font-size: 30px; font-weight: 500; letter-spacing: -0.02em; }
+.note { font-size: 13px; color: var(--muted); }
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+.seg button { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 14px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
+.book { display: grid; gap: 2px; font-family: var(--mono); font-size: 13px; }
+.book div { display: grid; grid-template-columns: 84px 1fr 84px; align-items: center; gap: 10px; padding: 3px 6px; }
+.book i { display: block; height: 14px; border-radius: 2px; opacity: 0.28; }
+.book .ask i { background: var(--bear); } .book .bid i { background: var(--bull); }
+.book .ask b { color: var(--bear); font-weight: 500; } .book .bid b { color: var(--bull); font-weight: 500; }
+.book .ask span, .book .bid span { text-align: right; }
+.book .mid { background: var(--soft); color: var(--muted); grid-template-columns: 1fr; text-align: center; border-radius: 4px; font-size: 12px; }
+.decide { border-style: dashed !important; }
+.decide ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.empty { color: var(--muted); padding: 8px 0; }
+.mk a { color: var(--accent); }
 </style>
 </head>
-<body class="zp">
-<main class="wide">
-  <div class="mk-head"><div><h1>Markets</h1><p class="sub">Oracle prices and the Dex in one place · testnet, no value</p></div><p class="sub" id="upd">Loading…</p></div>
+<body>
+<div class="mk">
+  <div class="top"><div><h1>ZP Markets</h1><p class="sub">Oracle prices and the Dex in one place · testnet</p></div><p class="sub" id="upd">Loading…</p></div>
+  <div class="banner">Live data from the testnet. Coins have no value. This page reads only: buying and selling from it comes with signing in the wallet.</div>
+  <div class="steps" role="tablist">
+    <button role="tab" aria-selected="true">1 · Markets</button>
+    <button role="tab" disabled title="Needs the position contract (Bull/Bear tokens) on the testnet">2 · Instrument <small>soon</small></button>
+    <button role="tab" disabled title="Needs signing in the wallet">3 · My positions <small>soon</small></button>
+    <button role="tab" disabled title="Needs the position contract">4 · After the close <small>soon</small></button>
+  </div>
 
-  <section class="mk">
-    <h2>Prices from the oracle</h2>
-    <p class="hint">Each price is the agreement of several public sources, committed to the chain in one transaction. Stocks and gold are end-of-day closes.</p>
-    <div class="tw"><table><thead><tr><th>Market</th><th class="num">Price (USD)</th><th>Sources</th><th>Close of</th></tr></thead><tbody id="px"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
-    <p class="proof" id="proof"></p>
+  <section>
+    <h2>Markets</h2>
+    <div class="scroll"><table><thead><tr><th>Ticker</th><th>Name</th><th class="num">Oracle price (USD)</th><th>Sources</th><th>Price of</th><th class="num">Change <span title="against the oracle round about 24 hours earlier">24 h</span></th></tr></thead><tbody id="px"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody></table></div>
+    <p class="note" style="margin-top:10px">Crypto and currencies update through the day. Stocks and gold are end-of-day closes. Select a row to see the evidence behind its price.</p>
   </section>
 
-  <section class="mk">
-    <h2>Dex order books</h2>
-    <p class="hint">Orders between two assets, held by the Dex contract. Anyone can take an order, wholly or in part. Price = wanted amount per unit sold.</p>
-    <div class="tw"><table><thead><tr><th>Pair (sells / wants)</th><th class="num">Open orders</th><th class="num">Best price</th><th class="num">Offered in total</th></tr></thead><tbody id="pairs"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
-    <h3 style="margin:18px 0 6px">Open orders</h3>
-    <div class="tw"><table><thead><tr><th>Sells</th><th class="num">Amount</th><th>Wants</th><th class="num">Amount</th><th class="num">Price</th><th>Maker</th></tr></thead><tbody id="orders"></tbody></table></div>
-    <p class="hint" style="margin-top:12px">Placing and taking orders from this page comes with the wallet connection. Until then the wallet's Markets tab shows the same data and the <a href="/dex.html">Dex page</a> has the full trade history.</p>
-  </section>
+  <div class="grid2">
+    <section>
+      <h2>Order book · <span id="pairName">–</span></h2>
+      <div class="seg" id="pairTabs" role="group" aria-label="Pair"></div>
+      <div class="book" id="book"><p class="empty">Loading…</p></div>
+      <p class="note" style="margin-top:12px" id="bookNote">Price = quote asset per unit of the first asset. Orders can be taken in part.</p>
+    </section>
+    <section>
+      <h2>Oracle evidence · <span id="evName">–</span></h2>
+      <dl class="kv" id="ev"><dt>Loading…</dt><dd></dd></dl>
+      <div style="margin-top:14px" id="evSrc"></div>
+    </section>
+  </div>
 
-  <section class="mk">
-    <h2>Where to go next</h2>
-    <div class="cards">
-      <a class="card" href="/oracle.html"><h3>Oracle</h3><p>Every committed round, the evidence behind each price, and proofs.</p></a>
-      <a class="card" href="/dex.html"><h3>Dex</h3><p>Order book by pair and recent trades.</p></a>
-      <a class="card" href="/instruments.html"><h3>Instruments</h3><p>How tokens, prices and orders combine into markets.</p></a>
-      <a class="card" href="/wallet/"><h3>Wallet</h3><p>Hold test coins and watch these markets on your phone.</p></a>
-    </div>
+  <section class="decide">
+    <h2>Not built yet</h2>
+    <ul><li><b>Buy and sell from this page.</b> The Dex order is one transaction to the contract; the wallet has to sign it.</li>
+    <li><b>Positions (Bull/Bear) and Open interest.</b> They need the position contract on the testnet.</li>
+    <li><b>Price history.</b> Today only the latest round and its change over 24 hours.</li></ul>
+    <p class="note" style="margin-top:10px">More: <a href="/oracle.html">Oracle rounds</a> · <a href="/dex.html">Dex and trades</a> · <a href="/instruments.html">Instruments</a> · <a href="/wallet/">Wallet</a></p>
   </section>
-</main>
+</div>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const num = (v, d = 6) => Number(v).toLocaleString('en-US', { maximumFractionDigits: d });
-const ago = ms => { const s = Math.max(0, (Date.now() - ms) / 1000); return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago'; };
-let names = { '00': 'ZP' };
+const NAME = { BTC: 'Bitcoin', ETH: 'Ether', EUR: 'Euro', GBP: 'Pound sterling', JPY: 'Japanese yen', CHF: 'Swiss franc', AUD: 'Australian dollar', SPY: 'S&P 500 ETF', QQQ: 'Nasdaq 100 ETF', AAPL: 'Apple', MSFT: 'Microsoft', XAU: 'Gold', WTI: 'WTI crude oil' };
+let names = { '00': 'ZP' }, latest = null, evidence = {}, pickTicker = null, books = new Map(), pair = null;
 const nm = a => names[a] || (a ? a.slice(0, 8) + '…' : '?');
+const ago = ms => { const s = Math.max(0, (Date.now() - ms) / 1000); return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago'; };
+const dayOf = ms => new Date(ms).toISOString().slice(0, 10);
+const niceDay = d => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const field = (r, k) => r[k] ?? r[k[0].toLowerCase() + k.slice(1)];
 
-async function oracle() {
-  const rs = await fetch('/oracle/rounds?take=1', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject());
-  const r = Array.isArray(rs) ? rs[0] : rs; if (!r) throw 0;
-  const T = r.Tickers || r.tickers || [], V = r.Values || r.values || [], tx = r.Tx || r.tx, root = r.Root || r.root, stamp = r.Timestamp ?? r.timestamp;
-  let ev = r.Evidence ?? r.evidence; try { if (typeof ev === 'string') ev = JSON.parse(ev); } catch { ev = {}; } ev = ev || {};
-  const day = new Date(stamp).toISOString().slice(0, 10);
-  $('px').innerHTML = T.map((t, i) => {
-    const e = ev[t] || {}, src = Object.keys(e.sources || {}), dropped = e.dropped || [], used = src.length - dropped.length;
-    const sources = !src.length ? '<span class="pill">1 source</span>' : `<span class="pill ${dropped.length ? 'warn' : 'ok'}" title="${esc(src.map(s => s + ' = ' + e.sources[s]).join('\n'))}">${used} of ${src.length} agree${dropped.length ? ' · dropped ' + esc(dropped.join(', ')) : ''}</span>`;
-    return `<tr><td class="tk">${esc(t)}</td><td class="num">${num(V[i])}</td><td>${sources}</td><td>${e.asOf && e.asOf !== day ? esc(e.asOf) : 'today'}</td></tr>`;
-  }).join('') || '<tr><td colspan="4" class="empty">No prices yet.</td></tr>';
-  $('proof').innerHTML = `Committed ${esc(ago(stamp))} · root <code>${esc(String(root).slice(0, 16))}…</code>` + (tx ? ` · transaction <a href="/explorer.html#tx/${encodeURIComponent(tx)}"><code>${esc(String(tx).slice(0, 12))}…</code></a>` : '');
+function parseRound(r) {
+  let ev = field(r, 'Evidence'); try { if (typeof ev === 'string') ev = JSON.parse(ev); } catch { ev = {}; }
+  const T = field(r, 'Tickers') || [], V = field(r, 'Values') || [];
+  return { stamp: field(r, 'Timestamp'), root: field(r, 'Root'), tx: field(r, 'Tx'), values: Object.fromEntries(T.map((t, i) => [t, Number(V[i])])), tickers: T, ev: ev || {} };
 }
+async function oracle() {
+  const rs = await fetch('/oracle/rounds?take=96', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject());
+  const rounds = (Array.isArray(rs) ? rs : [rs]).map(parseRound).filter(r => r.stamp).sort((a, b) => b.stamp - a.stamp);
+  if (!rounds.length) throw 0;
+  latest = rounds[0]; evidence = latest.ev;
+  const target = latest.stamp - 24 * 3600 * 1000, old = rounds.filter(r => r.stamp <= target + 3600 * 1000).sort((a, b) => Math.abs(a.stamp - target) - Math.abs(b.stamp - target))[0];
+  const today = dayOf(latest.stamp);
+  $('px').innerHTML = latest.tickers.map(t => {
+    const e = evidence[t] || {}, src = Object.keys(e.sources || {}), dropped = e.dropped || [], used = src.length - dropped.length;
+    const sources = !src.length ? '1 source' : `<span class="${dropped.length ? 'pill warn' : ''}">${used} of ${src.length}${dropped.length ? ' · dropped ' + esc(dropped.join(', ')) : ''}</span>`;
+    const was = old && old.values[t], ch = was ? (latest.values[t] - was) / was * 100 : null;
+    const chCell = ch === null ? '–' : `<span class="${ch > 0.05 ? 'up' : ch < -0.05 ? 'down' : ''}">${ch > 0 ? '+' : ''}${ch.toFixed(1)}%</span>`;
+    return `<tr class="click${t === pickTicker ? ' sel' : ''}" tabindex="0" data-t="${esc(t)}"><td><b>${esc(t)}</b></td><td>${esc(NAME[t] || '')}</td><td class="num">${num(latest.values[t])}</td><td>${sources}</td><td>${e.asOf && e.asOf !== today ? 'close ' + niceDay(e.asOf) : 'latest'}</td><td class="num">${chCell}</td></tr>`;
+  }).join('');
+  if (!pickTicker || !latest.tickers.includes(pickTicker)) pickTicker = latest.tickers[0];
+  showEvidence();
+}
+function showEvidence() {
+  const t = pickTicker, e = evidence[t] || {}; if (!latest || !t) return;
+  $('evName').textContent = t;
+  $('ev').innerHTML = `<dt>Price</dt><dd><b>${num(latest.values[t])}</b> USD</dd><dt>Committed</dt><dd>${esc(ago(latest.stamp))}</dd><dt>Transaction</dt><dd class="mono">${latest.tx ? `<a href="/explorer.html#tx/${encodeURIComponent(latest.tx)}">${esc(String(latest.tx).slice(0, 8))}…${esc(String(latest.tx).slice(-6))}</a>` : '–'}</dd><dt>Merkle root</dt><dd class="mono">${esc(String(latest.root).slice(0, 8))}…${esc(String(latest.root).slice(-6))}</dd>`;
+  const src = Object.entries(e.sources || {}), dropped = new Set(e.dropped || []);
+  $('evSrc').innerHTML = src.length ? '<h2 style="margin-bottom:6px">Sources</h2><dl class="kv">' + src.map(([s, v]) => `<dt>${esc(s)}</dt><dd class="${dropped.has(s) ? 'down' : ''}">${num(v)}${dropped.has(s) ? ' · dropped' : ''}</dd>`).join('') + '</dl>' : '<p class="note">This price has one source.</p>';
+}
+$('px').addEventListener('click', e => { const tr = e.target.closest('tr[data-t]'); if (tr) { pickTicker = tr.dataset.t; document.querySelectorAll('#px tr').forEach(r => r.classList.toggle('sel', r === tr)); showEvidence(); } });
+$('px').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { const tr = e.target.closest('tr[data-t]'); if (tr) { e.preventDefault(); tr.click(); } } });
+
+// order books: the first asset of a pair is the one priced in the second (ZP is always the second)
 async function dex() {
   const o = await fetch('/explorer/api/dex/orders', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject());
-  const list = (o.orders || []).map(r => ({ sell: nm(r.under_asset), n: Number(r.under_amount), want: nm(r.pair_asset), m: Number(r.pair_total), maker: r.maker ? String(r.maker).slice(0, 10) + '…' : '' })).filter(x => x.n > 0);
-  const by = new Map();
-  for (const x of list) { const k = x.sell + ' / ' + x.want, g = by.get(k) || { k, count: 0, best: Infinity, total: 0, sell: x.sell }; g.count++; g.best = Math.min(g.best, x.m / x.n); g.total += x.n; by.set(k, g); }
-  $('pairs').innerHTML = [...by.values()].map(g => `<tr><td class="tk">${esc(g.k)}</td><td class="num">${g.count}</td><td class="num">${num(g.best, 6)}</td><td class="num">${num(g.total, 2)} ${esc(g.sell)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">No open orders.</td></tr>';
-  $('orders').innerHTML = list.slice(0, 40).map(x => `<tr><td class="tk">${esc(x.sell)}</td><td class="num">${num(x.n, 2)}</td><td class="tk">${esc(x.want)}</td><td class="num">${num(x.m, 2)}</td><td class="num">${num(x.m / x.n, 6)}</td><td class="mono">${esc(x.maker)}</td></tr>`).join('');
+  books = new Map();
+  for (const r of o.orders || []) {
+    const sA = r.under_asset, wA = r.pair_asset, n = Number(r.under_amount), m = Number(r.pair_total); if (!(n > 0 && m > 0)) continue;
+    const baseFirst = wA === '00' || (sA !== '00' && nm(sA) < nm(wA)), base = baseFirst ? sA : wA, quote = baseFirst ? wA : sA, key = nm(base) + ' / ' + nm(quote);
+    const b = books.get(key) || { key, asks: [], bids: [] }; books.set(key, b);
+    if (baseFirst) b.asks.push({ price: m / n, qty: n }); else b.bids.push({ price: n / m, qty: m });
+  }
+  if (!pair || !books.has(pair)) pair = [...books.keys()][0] || null;
+  drawBook();
 }
+function drawBook() {
+  $('pairTabs').innerHTML = [...books.keys()].map(k => `<button type="button" data-p="${esc(k)}" aria-pressed="${k === pair}">${esc(k)}</button>`).join('');
+  $('pairName').textContent = pair || '–';
+  const b = pair && books.get(pair);
+  if (!b) { $('book').innerHTML = '<p class="empty">No open orders.</p>'; return; }
+  const asks = [...b.asks].sort((x, y) => x.price - y.price).slice(0, 8), bids = [...b.bids].sort((x, y) => y.price - x.price).slice(0, 8);
+  const max = Math.max(...asks.map(x => x.qty), ...bids.map(x => x.qty), 1);
+  const row = (c, x) => `<div class="${c}"><b>${num(x.price, 6)}</b><i style="width:${Math.max(2, Math.round(x.qty / max * 100))}%"></i><span>${num(x.qty, 2)}</span></div>`;
+  const mid = asks.length && bids.length ? `<div class="mid">spread ${num(asks[0].price - bids[0].price, 6)} · mid ${num((asks[0].price + bids[0].price) / 2, 6)}</div>` : `<div class="mid">${asks.length ? 'no buyers yet' : 'no sellers yet'}</div>`;
+  $('book').innerHTML = [...asks.reverse().map(x => row('ask', x)), mid, ...bids.map(x => row('bid', x))].join('');
+  $('bookNote').textContent = 'Price = ' + pair.split(' / ')[1] + ' per ' + pair.split(' / ')[0] + '. Sizes in ' + pair.split(' / ')[0] + '. Red: offered for sale, green: wanted. Orders can be taken in part.';
+}
+$('pairTabs').addEventListener('click', e => { const b = e.target.closest('button[data-p]'); if (b) { pair = b.dataset.p; drawBook(); } });
+
 async function load() {
   try { const a = await fetch('/assets.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : {}); for (const x of Array.isArray(a.assets) ? a.assets : []) if (typeof x?.asset === 'string' && typeof x?.name === 'string') names[x.asset] = x.name.slice(0, 40); } catch { /* names are optional */ }
   const res = await Promise.allSettled([oracle(), dex()]);
-  if (res[0].status === 'rejected') $('px').innerHTML = '<tr><td colspan="4" class="empty">The oracle is not answering right now.</td></tr>';
-  if (res[1].status === 'rejected') { $('pairs').innerHTML = '<tr><td colspan="4" class="empty">The Dex index is not answering right now.</td></tr>'; $('orders').innerHTML = ''; }
+  if (res[0].status === 'rejected') $('px').innerHTML = '<tr><td colspan="6" class="empty">The oracle is not answering right now.</td></tr>';
+  if (res[1].status === 'rejected') { books = new Map(); pair = null; drawBook(); $('book').innerHTML = '<p class="empty">The Dex index is not answering right now.</p>'; }
   $('upd').textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 load(); setInterval(load, 30000);
