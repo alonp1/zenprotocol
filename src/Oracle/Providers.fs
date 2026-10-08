@@ -61,10 +61,20 @@ type CoinMarketCap(http: HttpClient, key: string, quote: string) =
             use doc = JsonDocument.Parse body
             doc.RootElement.GetProperty("data").GetProperty(sym).[0].GetProperty("quote").GetProperty(cur).GetProperty("price").GetDecimal()
 
+/// Currencies from Frankfurter (ECB rates), crypto symbols (BTC, ETH, ...) from CoinGecko: one provider for a mixed ticker list.
+type Auto(fiat: Provider, crypto: Provider) =
+    interface Provider with
+        member _.Name = "auto"
+        member _.Fetch ticker time = (if ids.ContainsKey ticker then crypto else fiat).Fetch ticker time
+
 let create (name: string) (quote: string) : Provider =
     match name.ToLowerInvariant() with
     | "mock" -> Mock(quote) :> Provider
     | "frankfurter" -> Frankfurter(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), quote) :> Provider
+    | "auto" ->
+        let http = new HttpClient(Timeout = TimeSpan.FromSeconds 20.0)
+        let key = Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue ""
+        Auto(Frankfurter(http, quote), CoinGecko(http, key, quote)) :> Provider
     | "coingecko" -> CoinGecko(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), Environment.GetEnvironmentVariable "ORACLE_COINGECKO_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
     | "coinmarketcap" -> CoinMarketCap(new HttpClient(Timeout = TimeSpan.FromSeconds 20.0), Environment.GetEnvironmentVariable "ORACLE_CMC_KEY" |> Option.ofObj |> Option.defaultValue "", quote) :> Provider
-    | other -> failwithf "unknown provider '%s' (mock, frankfurter, coingecko, coinmarketcap)" other
+    | other -> failwithf "unknown provider '%s' (mock, frankfurter, coingecko, coinmarketcap, auto)" other

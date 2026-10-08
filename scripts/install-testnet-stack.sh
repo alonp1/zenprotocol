@@ -8,7 +8,7 @@
 # Options (environment variables):
 #   MINER_THREADS=1     CPU threads the node mines with (the testnet needs a miner; difficulty is low). 0 = do not mine.
 #   SEEDS=...           other testnet seeds to connect to (comma separated)
-#   ORACLE_PROVIDER=mock|frankfurter|coingecko   price source (default frankfurter: free, no key)
+#   ORACLE_PROVIDER=mock|frankfurter|coingecko|auto   price source (default auto: currencies from Frankfurter, crypto from CoinGecko; free, no key)
 #   ORACLE_TICKERS=EUR,GBP,CHF,AUD,BTC          what to publish (at most 4 characters each)
 #   DIR=...             install folder (default ~/zenprotocol-testnet)
 # Re-running it updates the code and restarts the services; contracts that are already recorded in
@@ -66,7 +66,8 @@ if [ -z "$(get DEX_ID)" ]; then echo "-- ZenDex"; activate src/ContractExamples/
 put ORACLE_CONTRACT "$(get ORACLE_ADDRESS)"
 put BRIDGE_CONTRACT "$(get BRIDGE_ADDRESS)"; put BRIDGE_ASSET "$(get BRIDGE_ID)"
 put ZEN_DEX "$(get DEX_ID)"; put ZEN_NET test
-[ -n "$(get ORACLE_PROVIDER)" ] || put ORACLE_PROVIDER "${ORACLE_PROVIDER:-frankfurter}"
+[ -n "$(get ORACLE_PROVIDER)" ] || put ORACLE_PROVIDER "${ORACLE_PROVIDER:-auto}"
+[ "$(get ORACLE_PROVIDER)" = frankfurter ] && echo "$(get ORACLE_TICKERS)" | grep -q BTC && put ORACLE_PROVIDER auto   # frankfurter has no BTC
 [ -n "$(get ORACLE_TICKERS)" ] || put ORACLE_TICKERS "${ORACLE_TICKERS:-EUR,GBP,CHF,AUD,BTC}"
 [ -n "$(get ORACLE_QUOTE)" ] || put ORACLE_QUOTE USD
 [ -n "$(get BRIDGE_EVM)" ] || put BRIDGE_EVM "mock:/data/evm.json"

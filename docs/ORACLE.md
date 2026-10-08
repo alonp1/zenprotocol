@@ -57,7 +57,7 @@ Planned layout and behavior:
 
 1. Start a testnet node with a known wallet (see [TESTNET.md](TESTNET.md)).
 2. Activate the Oracle contract: `scripts/testnet-contract.sh` shows the activation call; the Oracle contract is activated the same way with `CONTRACT=<path to Oracle.fst>`.
-3. Start the oracle service with the `mock` provider (or `frankfurter` for ECB currency rates, `coingecko` for crypto prices, `coinmarketcap` with a key) pointing at the node and the contract address.
+3. Start the oracle service with the `mock` provider (or `frankfurter` for ECB currency rates, `coingecko` for crypto prices, `auto` for both in one list: currencies from Frankfurter, crypto symbols from CoinGecko, `coinmarketcap` with a key) pointing at the node and the contract address.
 4. Watch `/rounds/latest`; each round shows a transaction hash that appears in the explorer.
 
 Never use real money with this until the contract and the service have had an independent review.
