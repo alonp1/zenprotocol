@@ -15,7 +15,7 @@
 
   const MAIN = [
     ['Home', '/'],
-    ['Network', [['Stats', '/stats.html', 'Block height, hashrate, supply'], ['Explorer', '/explorer.html', 'Blocks, transactions, addresses'], ['Assets', '/assets.html', 'Tokens issued on the chain'], ['CGP voting', '/cgp.html', 'Votes and payouts of the community fund'], ['Community votes', '/votes.html', 'Protocol upgrade votes, by commit'], ['Run a node', '/node.html', 'Install, snapshots, mining']]],
+    ['Network', [['Stats', '/stats.html', 'Block height, hashrate, supply'], ['Explorer', '/explorer.html', 'Blocks, transactions, addresses'], ['Assets', '/assets.html', 'Tokens issued on the chain'], ['CGP voting', '/cgp.html', 'Votes and payouts of the community fund'], ['Community votes', '/votes.html', 'Protocol upgrade votes, by commit'], ['Run a node', '/node.html', 'Install and snapshots'], ['Mine ZP', '/mine.html', 'GPU miner and what it earns']]],
     ['Wallet', '/wallet/'],
     ['Learn', [['About', '/about.html', 'What this network is'], ['How it works', '/how-it-works.html', 'Blocks, contracts, the CGP'], ['Community', '/community.html', 'How to take part']]],
     ['Developers', '/developers.html']

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain Mine ZP</title>
+<meta name="description" content="Mine ZP with a GPU: SHA3-256 proof of work, an OpenCL miner that talks to your own node, and how to estimate what a GPU or a rented server would earn.">
+<link rel="stylesheet" href="/shell/shell.css">
+<style>
+  .calc { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; margin: 12px 0 6px; }
+  .calc label { font-size: 13px; color: var(--s-muted); display: block; margin-bottom: 4px; }
+  .calc input { font: inherit; padding: 8px 10px; width: 150px; border: 1px solid var(--s-line); border-radius: 8px; background: var(--s-card); color: inherit; }
+  .calc .out { font-variant-numeric: tabular-nums; }
+  .calc .out b { display: block; font-size: 20px; }
+  .live { font-variant-numeric: tabular-nums; }
+</style>
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>Mine ZP</h1>
+<p class="lead">ZP uses SHA3-256 proof of work. The repository has a GPU miner (OpenCL: NVIDIA, AMD or Intel) that mines through your own node. Rewards go to any address you own.</p>
+
+<h2>The network today</h2>
+<p class="live" id="live">Loading…</p>
+<p>The more independent miners, the harder it is for any one of them to rewrite the chain or block transactions. A single reward address mining every block is the main weakness of the network today.</p>
+
+<h2>What you need</h2>
+<ul>
+  <li>A synced node on the same machine: follow <a href="/node.html">Run a node</a>. The node's own CPU miner is not needed (<code>MINER_THREADS=0</code>).</li>
+  <li>A GPU with its normal driver (it includes OpenCL), and Python 3.9 or newer.</li>
+  <li>An address you own, for the rewards: create one in the <a href="/wallet/">ZP Wallet</a>. Keep the 24 words offline.</li>
+</ul>
+
+<h2>Install and test</h2>
+<pre>pip install pyopencl numpy
+cd zenprotocol/miner
+python zpminer.py list          # your OpenCL devices
+python zpminer.py selftest      # the GPU hashes must equal Python's SHA3-256
+python zpminer.py bench         # your hashrate, no node needed
+python zpminer.py verify        # rebuilds real mainnet headers from your node and checks their hashes</pre>
+<p>Run <code>verify</code> once against a synced node before mining.</p>
+
+<h2>Mine</h2>
+<pre>python zpminer.py mine --address zen1...your-address</pre>
+<p>Use <code>--device N</code> to pick a GPU, and run one process per GPU. The node must answer on <code>127.0.0.1:11567</code>. Block rewards can be spent after 100 blocks.</p>
+
+<h2>What would a GPU earn?</h2>
+<p>Run <code>bench</code>, enter the result, and see your share of the network. The numbers use the last 24 hours of this site's node. It is an estimate: the share changes with the network hashrate, and block luck varies a lot over a day.</p>
+<div class="calc">
+  <div><label for="mh">Your hashrate (MH/s)</label><input id="mh" type="number" min="0" step="any" placeholder="from bench" inputmode="decimal"></div>
+  <div class="out"><span>Share of network</span><b id="share">–</b></div>
+  <div class="out"><span>Blocks per day</span><b id="bpd">–</b></div>
+  <div class="out"><span>ZP per day</span><b id="zpd">–</b></div>
+</div>
+<p class="note" id="calcnote"></p>
+
+<h2>Rent a server with a GPU</h2>
+<p>If you have no GPU, you can rent a server that has one, install the node there with the <a href="/node.html">same steps</a>, and run the miner on it. Before you pay:</p>
+<ul>
+  <li><b>Check the provider's rules.</b> Many cloud providers forbid mining.</li>
+  <li><b>Measure first.</b> Run <code>bench</code> on a short rental, put the result in the calculator above, and compare the ZP per day with the price of the rental. Mining pays in ZP, so what ZP is worth to you decides whether it makes sense. This page does not promise any profit.</li>
+</ul>
+
+<h2>Hashrate rental markets</h2>
+<p>Marketplaces such as NiceHash rent out hashrate for algorithms they list, and miners connect to a pool through the Stratum protocol. As far as we found, no marketplace lists ZP, and the ZP node has no Stratum pool: the miner above talks to a node directly. So rented hashrate cannot be pointed at ZP today. It would need a Stratum bridge for the node, which does not exist yet.</p>
+
+<p><a href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script/miner">The miner on GitHub</a></p>
+</main>
+<script>
+const fmt = (n, d = 0) => Number(n).toLocaleString('en-US', { maximumFractionDigits: d });
+const hr = h => { const u = ['H/s','kH/s','MH/s','GH/s','TH/s']; let i = 0; while (h >= 1000 && i < u.length - 1) { h /= 1000; i++; } return h.toFixed(h < 10 ? 2 : 1) + ' ' + u[i]; };
+let S = null;
+function calc() {
+  if (!S) return;
+  const mh = Math.max(0, Number(document.getElementById('mh').value) || 0) * 1e6, net = S.hashrate24h;
+  if (!mh) { for (const id of ['share', 'bpd', 'zpd']) document.getElementById(id).textContent = '–'; return; }
+  const share = net ? mh / (net + mh) : 0, bpd = share * 86400 / S.targetBlockTime;
+  const reward = S.supply && S.supply.blockReward ? S.supply.blockReward * (S.supply.minerShare ?? 100) / 100 : null;
+  document.getElementById('share').textContent = (share * 100).toFixed(share < 0.01 ? 2 : 1) + '%';
+  document.getElementById('bpd').textContent = fmt(bpd, 1);
+  document.getElementById('zpd').textContent = reward == null ? '–' : fmt(bpd * reward);
+  document.getElementById('calcnote').textContent = reward == null ? '' : `Miner reward per block now: ${fmt(reward, 2)} ZP (the rest goes to the community fund). Network: ${hr(net)}.`;
+}
+fetch('/stats.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw 0; return r.json(); }).then(d => {
+  S = d; const n = (d.miners24h || []).length;
+  document.getElementById('live').textContent = `Last 24 hours: ${fmt(d.blocks24h)} blocks, ${hr(d.hashrate24h)}, ${n} reward ${n === 1 ? 'address' : 'addresses'}.`;
+  calc();
+}).catch(() => { document.getElementById('live').textContent = 'Network figures are not available yet.'; });
+document.getElementById('mh').addEventListener('input', calc);
+</script>
+</body>
+</html>
