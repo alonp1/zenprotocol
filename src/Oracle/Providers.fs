@@ -135,6 +135,37 @@ let createBuiltin (name: string) (quote: string) : Provider =
 
 /// The provider for ORACLE_PROVIDER, and, when ORACLE_SOURCES_FILE is set, a routing of single tickers to other sources:
 /// { "sources": { "binance": { "url": "...{TICKER}USDT", "path": "price" } }, "tickers": { "BTC": "binance", "EUR": "frankfurter" } }
+/// Several sources must agree. The values are compared with their median: a source further than `tolerance` (0.01 = 1 %) away is
+/// dropped, and at least `minimum` sources must remain, otherwise there is no value (the ticker is skipped in this round).
+/// Returns the median of the sources that agree and the names of those that were dropped.
+let aggregate (minimum: int) (tolerance: decimal) (answers: (string * decimal) list) : Result<decimal * string list, string> =
+    let median (xs: decimal list) =
+        let a = xs |> List.sort |> Array.ofList
+        if a.Length % 2 = 1 then a.[a.Length / 2] else (a.[a.Length / 2 - 1] + a.[a.Length / 2]) / 2M
+    if answers.Length < minimum then Error (sprintf "only %d of the required %d sources answered" answers.Length minimum)
+    else
+        let m = answers |> List.map snd |> median
+        let agree, off = answers |> List.partition (fun (_, v) -> m = 0M && v = 0M || m <> 0M && abs (v - m) / abs m <= tolerance)
+        if agree.Length < minimum then
+            Error (sprintf "no agreement: %s" (answers |> List.map (fun (n, v) -> sprintf "%s=%M" n v) |> String.concat ", "))
+        else Ok (agree |> List.map snd |> median, off |> List.map fst)
+
+/// A ticker priced by several sources at once (see `aggregate`). A source that fails counts as not answering.
+type Quorum(sources: Provider list, minimum: int, tolerance: decimal) =
+    interface Provider with
+        member _.Name = "quorum(" + (sources |> List.map (fun s -> s.Name) |> String.concat ",") + ")"
+        member _.Fetch ticker time =
+            let answers =
+                sources
+                |> List.choose (fun s ->
+                    try Some (s.Name, s.Fetch ticker time)
+                    with ex -> eprintfn "%s: source %s failed: %s" ticker s.Name (ex.Message.Split('\n').[0]); None)
+            match aggregate minimum tolerance answers with
+            | Ok (v, off) ->
+                if not off.IsEmpty then eprintfn "%s: dropped %s (more than %M away from the others)" ticker (String.concat ", " off) tolerance
+                v
+            | Error e -> failwithf "%s: %s" ticker e
+
 let create (name: string) (quote: string) : Provider =
     let fallback = createBuiltin name quote
     match Environment.GetEnvironmentVariable "ORACLE_SOURCES_FILE" with
@@ -159,6 +190,14 @@ let create (name: string) (quote: string) : Provider =
         let resolve n = match custom.TryGetValue n with | true, p -> p | _ -> createBuiltin n quote
         let routes =
             match root.TryGetProperty("tickers") with
-            | true, t -> [ for kv in t.EnumerateObject() -> kv.Name, resolve (kv.Value.GetString()) ] |> Map.ofList
+            | true, t ->
+                let minimum = match root.TryGetProperty("quorum") with | true, q -> (match q.TryGetProperty("min") with | true, x -> x.GetInt32() | _ -> 2) | _ -> 2
+                let tol = match root.TryGetProperty("quorum") with | true, q -> (match q.TryGetProperty("tolerance") with | true, x -> x.GetDecimal() | _ -> 0.01M) | _ -> 0.01M
+                [ for kv in t.EnumerateObject() ->
+                    kv.Name,
+                    (if kv.Value.ValueKind = JsonValueKind.Array
+                     then Quorum([ for n in kv.Value.EnumerateArray() -> resolve (n.GetString()) ], minimum, tol) :> Provider
+                     else resolve (kv.Value.GetString())) ]
+                |> Map.ofList
             | _ -> Map.empty
         Routed(routes, fallback) :> Provider

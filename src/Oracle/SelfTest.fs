@@ -33,6 +33,11 @@ let run () : bool =
               (let j = System.Text.Json.JsonDocument.Parse """{"data":{"rates":[{"USD":1.5},{"USD":2.5}]},"price":"82984.01","result":{"XXBTZUSD":{"c":["81000.5","0.1"]}}}"""
                let r = j.RootElement
                Providers.numberAt r "data.rates[1].USD" = 2.5M && Providers.numberAt r "price" = 82984.01M && Providers.numberAt r "result.XXBTZUSD.c[0]" = 81000.5M)
+          check "quorum: the median of sources that agree; an outlier is dropped; no agreement gives no value"
+              (let ok = Providers.aggregate 2 0.01M [ "a", 100M; "b", 100.4M; "c", 150M ]
+               let split = Providers.aggregate 2 0.01M [ "a", 100M; "b", 110M ]
+               let few = Providers.aggregate 2 0.01M [ "a", 100M ]
+               ok = Ok (100.2M, [ "c" ]) && (match split with Error _ -> true | _ -> false) && (match few with Error _ -> true | _ -> false))
           check "body builder: the Commit dictionary equals the hand-built one"
               (Body.build [ "Commit:h=" + Leaf.hex root ] = Leaf.commitMessageBody root)
           check "a body with a public key survives the node's deserializer (it silently drops a body it cannot read)"

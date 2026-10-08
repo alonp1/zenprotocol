@@ -84,3 +84,17 @@ The oracle takes its prices from one provider (`ORACLE_PROVIDER`: `mock`, `frank
 - `headers` values written `env:NAME` are read from the environment, so keys stay out of the file. `multiply` scales the value (cents to dollars), `invert` takes 1/x (a source that quotes the other way round).
 - A ticker not listed in `tickers` comes from `ORACLE_PROVIDER`. A ticker the source cannot give is left out of that round and the log says which and what the source answered; the other tickers are still published.
 - The paths above are examples: check them against the real answer of the source (`curl` it once) before relying on them. Sources have rate limits and terms of use; for anything that matters, use a paid source with a key.
+
+### Several sources for one ticker (quorum)
+
+Give a ticker a **list** of sources instead of one name and it is priced only when they agree:
+
+```json
+{
+  "quorum": { "min": 2, "tolerance": 0.01 },
+  "tickers": { "BTC": ["coingecko", "binance", "kraken"], "EUR": ["frankfurter", "ecb2"] }
+}
+```
+
+The sources are asked together; their median is the reference, a source more than `tolerance` (1 %) away from it is dropped, and at least `min` sources must remain. A source that fails counts as not answering. If there is no agreement the ticker is **skipped in that round** (the log shows every answer), so a doubtful number is never committed: bets settle on what is committed and cannot be undone. Built-in source names: `coingecko`, `frankfurter`, `coinmarketcap` (key), and any `sources` entry of the file. Pyth (free, signed prices from many publishers) fits as a `sources` entry through its Hermes API; check the answer's path and exponent with `curl` first.
+
