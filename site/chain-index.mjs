@@ -279,19 +279,30 @@ if (!migrated) {
 
 // ---- one-time backfill of the Repo votes of blocks indexed before they were collected (about a hundred blocks, one request each) --
 if (REPO_CONTRACT && meta('repomig', '') !== 'done') {
-  const blocksWith = db.prepare("SELECT DISTINCT block FROM txs WHERE contract=? AND length(command)=40 ORDER BY block").all(REPO_CONTRACT).map(r => r.block);
-  let ok = true;
-  for (const n of blocksWith) {
-    if (Date.now() - start0 > BUDGET * 0.8) { ok = false; break; }
+  // resumable: the node answers slowly, so each run works for a short while from where the last one stopped
+  const cursor = Number(meta('repomig_cursor', '0')), allowed = Math.min(BUDGET * 0.3, 100000);
+  const todo = db.prepare("SELECT DISTINCT block FROM txs WHERE contract=? AND length(command)=40 AND block > ? ORDER BY block").all(REPO_CONTRACT, cursor).map(r => r.block);
+  let ok = true, i = 0;
+  while (i < todo.length) {
+    if (Date.now() - start0 > allowed) { ok = false; break; }
+    const from = todo[i]; let j = i;                       // one request for blocks close together (at most 300 blocks)
+    while (j + 1 < todo.length && todo[j + 1] - from < 300) j++;
+    const to = todo[j], want = new Set(todo.slice(i, j + 1));
     try {
-      const [b] = (await api(`/blockchain/blocks?blockNumber=${n}&take=1`)).filter(x => x.blockNumber === n);
-      const blk = deserializeBlock(unhex(b.rawBlock), { lenient: true }), ts = Number(new DataView(blk.header.buffer, blk.header.byteOffset).getBigUint64(72));
+      const got = (await api(`/blockchain/blocks?blockNumber=${to}&take=${to - from + 1}`, undefined, 120000, 2)).filter(x => want.has(x.blockNumber));
+      if (got.length !== want.size) throw new Error(`got ${got.length} of ${want.size} blocks`);
       db.exec('BEGIN');
-      for (const { tx } of blk.txs) for (const w of tx.witnesses.filter(x => x.type === 'Contract')) repoVote(tx, hex(txHash(tx)), n, ts, w);
+      for (const b of got) {
+        const blk = deserializeBlock(unhex(b.rawBlock), { lenient: true }), ts = Number(new DataView(blk.header.buffer, blk.header.byteOffset).getBigUint64(72));
+        for (const { tx } of blk.txs) for (const w of tx.witnesses.filter(x => x.type === 'Contract')) repoVote(tx, hex(txHash(tx)), b.blockNumber, ts, w);
+      }
+      q.setMeta.run('repomig_cursor', String(to));
       db.exec('COMMIT');
-    } catch (e) { try { db.exec('ROLLBACK'); } catch { /* none open */ } console.log(`chain-index: repo votes of block ${n}: ${e.message} (next run retries)`); ok = false; break; }
+    } catch (e) { try { db.exec('ROLLBACK'); } catch { /* none open */ } console.log(`chain-index: repo votes of blocks ${from}-${to}: ${e.message} (next run retries)`); ok = false; break; }
+    i = j + 1;
   }
-  if (ok) { q.setMeta.run('repomig', 'done'); console.log(`chain-index: repo votes backfilled from ${blocksWith.length} blocks`); }
+  if (ok) { q.setMeta.run('repomig', 'done'); console.log('chain-index: repo votes backfilled'); }
+  else console.log(`chain-index: repo votes backfill continues from block ${meta('repomig_cursor', '0')}`);
 }
 
 // ---- index new blocks ------------------------------------------------------------------------

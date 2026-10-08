@@ -63,9 +63,9 @@ test('an index made before the address table existed is backfilled to the same r
 test('the Repo vote backfill runs, and community-votes.json is written', async () => {
   const REPO = '00000000e3113f8bf9cf8b764d945d6f99c642bdb069d137bdd5f7e44f1e75947f58a044';
   const db = new DatabaseSync(DB);
-  db.exec(`INSERT OR IGNORE INTO txs (hash, block, idx, inputs, outputs, contract, command) VALUES ('${'ab'.repeat(32)}', ${fixture.blocks[5].blockNumber}, 1, '[]', '[]', '${REPO}', '${'cd'.repeat(20)}'); DELETE FROM meta WHERE k = 'repomig'`);
+  db.exec(`INSERT OR IGNORE INTO txs (hash, block, idx, inputs, outputs, contract, command) VALUES ('${'ab'.repeat(32)}', ${fixture.blocks[5].blockNumber}, 1, '[]', '[]', '${REPO}', '${'cd'.repeat(20)}'); DELETE FROM meta WHERE k LIKE 'repomig%'`);
   db.close();
-  assert.match(await run([]), /repo votes backfilled from 1 blocks/);
+  assert.match(await run([]), /repo votes backfilled/);
   const j = JSON.parse(fs.readFileSync(path.join(dir, 'community-votes.json'), 'utf8'));
   assert.equal(j.contract, REPO);
   assert.deepEqual(j.intervals, []);      // the sample blocks hold no vote on that contract
