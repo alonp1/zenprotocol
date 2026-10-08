@@ -17,7 +17,7 @@ const node = new NodeClient(arg('node', 'http://127.0.0.1:11567'));
 const rows = db.prepare('SELECT hash, block, command FROM txs WHERE contract = ? ORDER BY block DESC LIMIT ?').all(VOTING_CONTRACT.main, Number(arg('limit', 40)));
 console.log(`${rows.length} voting-contract transactions found`);
 const tally = { txs: 0, roundTrip: 0, signatures: 0, signaturesOk: 0, following: 0, followingOk: 0 };
-const bad = [];
+const bad = [], byCommand = {};
 for (const r of rows) {
   const res = await node.request(`/blockchain/transaction?hash=${r.hash}&hex=true`);
   const raw = unhex(res.tx), tx = deserializeTx(raw);
@@ -36,11 +36,18 @@ for (const r of rows) {
       const hash = hashBallot(CGP_PARAMS.main, r.block, ballot[1].v);
       for (const [pk, s] of sigs.v) {
         tally.signatures++;
-        if (verifyDigest(s.v, hash, unhex(pk))) tally.signaturesOk++;
-        else bad.push(`${r.hash} (block ${r.block}, ${r.command}, phase ${phaseAt(CGP_PARAMS.main, r.block).phase}): a ballot signature does not verify`);
+        const c = byCommand[r.command] ||= { ok: 0, notOk: 0 };
+        if (verifyDigest(s.v, hash, unhex(pk))) { tally.signaturesOk++; c.ok++; }
+        else {
+          c.notOk++;
+          // a wallet signs for the block it expects; a transaction mined later (another phase or interval) is ignored by the tally. Find the block it was signed for.
+          let signedFor = null;
+          for (let d = -400; d <= 400 && signedFor === null; d++) if (verifyDigest(s.v, hashBallot(CGP_PARAMS.main, r.block + d, ballot[1].v), unhex(pk))) signedFor = r.block + d;
+          bad.push(`${r.hash} (block ${r.block}, ${r.command}, phase ${phaseAt(CGP_PARAMS.main, r.block).phase}): signature does not verify for this block; ` + (signedFor === null ? 'no block within 400 matches' : `it was signed for block ${signedFor} (phase ${phaseAt(CGP_PARAMS.main, signedFor).phase}, interval ${phaseAt(CGP_PARAMS.main, signedFor).interval})`));
+        }
       }
     }
   });
 }
-console.log(tally);
+console.log(tally); console.log('by command:', JSON.stringify(byCommand));
 console.log(bad.length ? 'PROBLEMS:\n' + bad.slice(0, 20).join('\n') : 'ALL CHECKS PASS: the wallet signs and encodes votes the way the chain does');
