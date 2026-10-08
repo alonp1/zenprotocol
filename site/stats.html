@@ -46,6 +46,9 @@
          border-radius: 6px; padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
          white-space: nowrap; display: none; z-index: 2; }
   .tip b { font-variant-numeric: tabular-nums; }
+  .range { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+  .range button { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; }
+  .range button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
   .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
   details { margin-top: 10px; font-size: 13px; }
   summary { cursor: pointer; color: var(--muted); }
@@ -89,22 +92,25 @@
     </div>
   </section>
 
+  <div class="range" id="range" role="group" aria-label="Time range of the charts">
+    <button data-r="7" aria-pressed="true">7 days</button><button data-r="30" aria-pressed="false">30 days</button><button data-r="365" aria-pressed="false">1 year</button><button data-r="0" aria-pressed="false">All time</button>
+  </div>
   <div class="two">
     <section>
-      <h2>Hashrate · 7 days</h2>
+      <h2>Hashrate · <span class="rng">7 days</span></h2>
       <div class="chart" id="c-hr"></div>
     </section>
     <section>
-      <h2>Difficulty · 7 days</h2>
+      <h2>Difficulty · <span class="rng">7 days</span></h2>
       <div class="chart" id="c-df"></div>
     </section>
     <section>
-      <h2>Block time · 7 days</h2>
+      <h2>Block time · <span class="rng">7 days</span></h2>
       <div class="chart" id="c-bt"></div>
-      <div class="note">Each point averages 4 hours. Dashed line: protocol target (<span id="tgt"></span>).</div>
+      <div class="note"><span id="grain">Each point averages 4 hours.</span> Dashed line: protocol target (<span id="tgt"></span>).</div>
     </section>
     <section>
-      <h2>Transactions per day</h2>
+      <h2>Transactions per day · <span class="rng">7 days</span></h2>
       <div class="chart" id="c-tx"></div>
       <div class="note">UTC days, block rewards excluded. The last bar is today so far.</div>
     </section>
@@ -183,6 +189,7 @@ const fmtDur = s => s == null ? '–' : (s >= 3600 ? (s/3600).toFixed(1) + ' h' 
 const ago = ms => { const s = (Date.now() - ms) / 1000;
   return s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s/60) + ' min ago' :
          s < 172800 ? Math.round(s/3600) + ' h ago' : Math.round(s/86400) + ' d ago'; };
+const dayText = ms => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const dateTime = ms => new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const short = a => a ? a.slice(0, 10) + '…' + a.slice(-6) : '–';
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -195,7 +202,7 @@ function niceTicks(min, max, n) {
 }
 
 // Single-series line chart with crosshair tooltip. ref = optional dashed reference value.
-function lineChart(el, pts, { y, fmtY, label, ref }) {
+function lineChart(el, pts, { y, fmtY, label, ref, daily }) {
   el.innerHTML = '';
   if (pts.length < 2) { el.textContent = 'Not enough data yet.'; return; }
   const W = el.clientWidth || 400, H = 220, m = { l: 52, r: 10, t: 10, b: 24 };
@@ -214,9 +221,16 @@ function lineChart(el, pts, { y, fmtY, label, ref }) {
     s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)" stroke-width="1"/>`;
     s += `<text class="axis" x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtY(v, true, tstep)}</text>`;
   }
-  const day = 86400000, every = Math.max(1, Math.ceil(56 / ((W - m.l - m.r) / ((x1 - x0) / day))));
-  for (let t = Math.ceil(x0 / day) * day, k = 0; t <= x1; t += day, k++) if (k % every === 0)
-    s += `<text class="axis" x="${X(t)}" y="${H - 6}" text-anchor="middle">${new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</text>`;
+  const day = 86400000, ndays = (x1 - x0) / day;
+  if (ndays > 100) {                                 // long ranges: a label at the start of every few months
+    const px = (W - m.l - m.r) / ndays * 30.4, every = Math.max(1, Math.ceil(64 / px)), d0 = new Date(x0);
+    for (let k = 0, mo = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() + 1, 1); mo <= x1; k++, mo = Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth() + 1 + k, 1))
+      if (k % every === 0) s += `<text class="axis" x="${X(mo)}" y="${H - 6}" text-anchor="middle">${new Date(mo).toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })}</text>`;
+  } else {
+    const every = Math.max(1, Math.ceil(56 / ((W - m.l - m.r) / ndays)));
+    for (let t = Math.ceil(x0 / day) * day, k = 0; t <= x1; t += day, k++) if (k % every === 0)
+      s += `<text class="axis" x="${X(t)}" y="${H - 6}" text-anchor="middle">${new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</text>`;
+  }
   if (ref != null)
     s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
   s += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p.t).toFixed(1) + ' ' + Y(y(p)).toFixed(1)).join('')}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
@@ -233,7 +247,7 @@ function lineChart(el, pts, { y, fmtY, label, ref }) {
     const p = pts[i], cx = X(p.t), cy = Y(y(p));
     xh.setAttribute('x1', cx); xh.setAttribute('x2', cx); xh.setAttribute('visibility', 'visible');
     dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('visibility', 'visible');
-    tip.innerHTML = `${dateTime(p.t)}<br><b>${fmtY(y(p))}</b> · ${p.blocks} blocks`;
+    tip.innerHTML = `${daily ? dayText(p.t) : dateTime(p.t)}<br><b>${fmtY(y(p))}</b> · ${p.blocks} blocks`;
     tip.style.display = 'block';
     const left = cx * r.width / W, tw = tip.offsetWidth;
     tip.style.left = Math.min(Math.max(0, left - tw / 2), r.width - tw) + 'px';
@@ -250,7 +264,7 @@ function barChart(el, pts, { y, fmtY, label, tipText }) {
   if (!pts.length) { el.textContent = 'Collecting data – fills in over the next hours.'; return; }
   const W = el.clientWidth || 400, H = 220, m = { l: 52, r: 10, t: 10, b: 24 };
   const hi = Math.max(1, ...pts.map(y)) * 1.08;
-  const step = (W - m.l - m.r) / pts.length, bw = Math.max(4, Math.min(48, step * 0.7));
+  const step = (W - m.l - m.r) / pts.length, bw = Math.max(1, Math.min(48, step * 0.7));
   const Y = v => H - m.b - v / hi * (H - m.t - m.b);
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
@@ -264,7 +278,7 @@ function barChart(el, pts, { y, fmtY, label, tipText }) {
     const cx = m.l + step * (i + 0.5), v = y(p), top = Y(v), h = Math.max(0, H - m.b - top), r = Math.min(4, bw / 2, h);
     s += `<path data-i="${i}" d="M${cx - bw / 2} ${H - m.b} V${top + r} q0 ${-r} ${r} ${-r} H${cx + bw / 2 - r} q${r} 0 ${r} ${r} V${H - m.b} Z" fill="var(--series)" opacity="${p.partial ? 0.45 : 1}"/>`;
     s += `<rect data-i="${i}" x="${cx - step / 2}" y="${m.t}" width="${step}" height="${H - m.t - m.b}" fill="transparent"/>`;
-    if ((pts.length - 1 - i) % Math.ceil(46 / step) === 0) s += `<text class="axis" x="${cx}" y="${H - 6}" text-anchor="middle">${new Date(p.t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</text>`;
+    if ((pts.length - 1 - i) % Math.ceil((pts.length > 120 ? 64 : 46) / step) === 0) s += `<text class="axis" x="${cx}" y="${H - 6}" text-anchor="middle">${new Date(p.t).toLocaleDateString('en-GB', pts.length > 120 ? { month: 'short', year: '2-digit', timeZone: 'UTC' } : { day: 'numeric', month: 'short', timeZone: 'UTC' })}</text>`;
   });
   svg.innerHTML = s;
   const tip = document.createElement('div'); tip.className = 'tip';
@@ -281,18 +295,40 @@ function barChart(el, pts, { y, fmtY, label, tipText }) {
   svg.addEventListener('pointerleave', () => tip.style.display = 'none');
 }
 
-let data = null;
+let data = null, hist = null, histState = 'idle', range = 7;
 function drawCharts() {
   if (!data) return;
-  lineChart($('c-hr'), data.series, { y: p => p.hashrate, fmtY: fmtHr, label: 'Hashrate, 4-hour averages, last 7 days' });
-  lineChart($('c-df'), data.series, { y: p => p.difficulty, fmtY: (v, axis, step) => fmtNum(v, axis, step),
-    label: 'Mining difficulty, 4-hour averages, last 7 days' });
-  barChart($('c-tx'), data.daily || [], { y: p => p.txs, fmtY: v => fmt(Math.round(v)),
-    label: 'Transactions per day', tipText: p => `${new Date(p.t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}${p.partial ? ' (so far)' : ''}<br><b>${fmt(p.txs)} transactions</b> · ${fmt(p.blocks)} blocks` });
-  lineChart($('c-bt'), data.series, { y: p => p.blockTime / 60,
+  const names = { 7: '7 days', 30: '30 days', 365: 'last year', 0: 'all time' };
+  document.querySelectorAll('.rng').forEach(e => e.textContent = names[range]);
+  $('grain').textContent = range === 7 ? 'Each point averages 4 hours.' : 'Each point is one UTC day.';
+  document.querySelectorAll('#range button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.r === range)));
+  let pts = data.series, tx = data.daily || [], daily = false;
+  if (range !== 7) {
+    if (!hist) { const msg = histState === 'failed' ? 'History is not available yet: the index is still being built.' : 'Loading…';
+      ['c-hr', 'c-df', 'c-bt', 'c-tx'].forEach(id => $(id).textContent = msg); return; }
+    const cut = range ? hist.days.length - range : 0;
+    pts = hist.days.slice(Math.max(0, cut)); tx = pts; daily = true;
+  }
+  const when = range === 7 ? 'last 7 days' : names[range];
+  const hp = daily ? pts.filter(p => p.hashrate != null) : pts, bp = daily ? pts.filter(p => p.blockTime != null) : pts;
+  lineChart($('c-hr'), hp, { y: p => p.hashrate, fmtY: fmtHr, daily, label: 'Hashrate, ' + when });
+  lineChart($('c-df'), pts, { y: p => p.difficulty, fmtY: (v, axis, step) => fmtNum(v, axis, step), daily,
+    label: 'Mining difficulty, ' + when });
+  barChart($('c-tx'), tx, { y: p => p.txs, fmtY: v => fmt(Math.round(v)),
+    label: 'Transactions per day, ' + when, tipText: p => `${dayText(p.t)}${p.partial ? ' (so far)' : ''}<br><b>${fmt(p.txs)} transactions</b> · ${fmt(p.blocks)} blocks` });
+  lineChart($('c-bt'), bp, { y: p => p.blockTime / 60, daily,
     fmtY: (v, axis) => axis ? v.toFixed(v < 10 ? 1 : 0) : v.toFixed(1) + ' min',
-    label: 'Average block time in minutes, 4-hour averages, last 7 days', ref: data.targetBlockTime / 60 });
+    label: 'Average block time in minutes, ' + when, ref: data.targetBlockTime / 60 });
 }
+document.getElementById('range').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  range = +b.dataset.r; drawCharts();
+  if (range !== 7 && !hist && histState !== 'loading') {
+    histState = 'loading';
+    fetch('/history.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw 0; return r.json(); })
+      .then(h => { hist = h; histState = 'ok'; drawCharts(); }).catch(() => { histState = 'failed'; drawCharts(); });
+  }
+});
 
 function render(d) {
   data = d;

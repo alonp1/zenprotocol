@@ -466,6 +466,25 @@ if (REPO_CONTRACT) {
   }).sort((a, b) => b.snapshot - a.snapshot);
   writeJson('community-votes.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, contract: REPO_CONTRACT, phases: phOut });
 }
+// ---- history.json: the whole chain, one row per UTC day (hashrate, difficulty, block time, transactions) for the stats page ----
+{
+  const D = 86400000, days = new Map(), workOf = new Map();
+  const work = bits => { let w = workOf.get(bits); if (w === undefined) { const e = bits >>> 24, mant = BigInt(bits & 0xffffff);
+    const target = e <= 3 ? mant >> BigInt(8 * (3 - e)) : mant << BigInt(8 * (e - 3)); w = Number((1n << 256n) / (target + 1n)); workOf.set(bits, w); } return w; };
+  const diff = bits => (0xffff / Math.max(1, bits & 0xffffff)) * 256 ** (29 - (bits >>> 24));
+  let lastBits = null;
+  for (const b of db.prepare('SELECT time, difficulty, txs FROM blocks ORDER BY number').iterate()) {
+    const t = Math.floor(b.time / D) * D, d = days.get(t) || { n: 0, txs: 0, work: 0, diff: 0, first: b.time, firstWork: work(b.difficulty), last: b.time }; days.set(t, d);
+    d.n++; d.txs += Math.max(0, b.txs - 1); d.work += work(b.difficulty); d.diff += diff(b.difficulty); d.last = b.time;       // transactions without the coinbase
+  }
+  const keys = [...days.keys()].sort((a, b) => a - b), edge = new Set([keys[0], keys[keys.length - 1]]);
+  const rowsH = keys.map(t => { const d = days.get(t), partial = edge.has(t) && (t === keys[keys.length - 1] ? t + D > Date.now() : true);
+    const span = (d.last - d.first) / 1000;                       // first and last day are not whole days: rates use the span the blocks cover
+    const secs = partial ? span : 86400, w = partial ? d.work - d.firstWork : d.work, n = partial ? d.n - 1 : d.n;
+    return { t, blocks: d.n, txs: d.txs, difficulty: Math.round(d.diff / d.n * 100) / 100, hashrate: secs > 0 ? Math.round(w / secs) : null,
+             blockTime: n > 0 && secs > 0 ? Math.round(secs / n * 10) / 10 : null, partial }; });
+  writeJson('history.json', { updated: Date.now(), indexedTo: last, tip, complete, days: rowsH });
+}
 writeJson('cgp-history.json', { updated: Date.now(), indexedTo: last, tip, complete, blockSeconds, intervals: out });
 
 // ---- assets.json ------------------------------------------------------------------------------

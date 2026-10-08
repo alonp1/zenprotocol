@@ -69,6 +69,9 @@ test('the Repo vote backfill runs, and community-votes.json is written', async (
   const j = JSON.parse(fs.readFileSync(path.join(dir, 'community-votes.json'), 'utf8'));
   assert.equal(j.contract, REPO);
   assert.deepEqual(j.phases, []);      // the sample blocks hold no vote on that contract
+  const h = JSON.parse(fs.readFileSync(path.join(dir, 'history.json'), 'utf8'));
+  assert.ok(h.days.length >= 1 && h.days.every(x => x.blocks > 0 && x.difficulty > 0), 'history.json has one row per day');
+  assert.equal(h.days.reduce((a, x) => a + x.blocks, 0), fixture.blocks.length, 'every indexed block is in a day');
   const d = new DatabaseSync(DB); d.exec(`DELETE FROM txs WHERE hash = '${'ab'.repeat(32)}'`); d.close();
 });
 
