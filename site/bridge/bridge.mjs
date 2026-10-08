@@ -63,7 +63,8 @@ const bridgeEvm = () => wallet ? wallet.address.toLowerCase() : env('BRIDGE_EVM_
 // USDC transfers to the bridge: [{tx, log, from, amount, block}] with block <= tip - confirmations
 async function evmDeposits() {
   if (EVM.startsWith('mock:')) {
-    const f = EVM.slice(5), list = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const f = EVM.slice(5); if (!fs.existsSync(f)) return [];
+    const list = JSON.parse(fs.readFileSync(f, 'utf8'));
     return list.map(d => ({ tx: d.tx, log: d.log ?? 0, from: d.from.toLowerCase(), amount: String(d.amount), block: d.block ?? 0 }));
   }
   const tip = await provider.getBlockNumber(), from = Number(load('evm-cursor.json', { block: Math.max(0, tip - 5000) }).block);

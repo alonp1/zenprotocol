@@ -9,7 +9,7 @@ j() { python3 -c "import json,sys;print(json.dumps($1))"; }
 post() { curl -s -X POST -H "Content-Type: application/json" -d "$2" "$API$1"; }
 
 echo "== activate $CODE"
-BODY=$(CODE="$CODE" PW="$PW" python3 -c "import json,os,re;print(json.dumps({'code':re.sub(r'^module \w+\s*\n','',open(os.environ['CODE']).read()),'numberOfBlocks':100,'password':os.environ['PW'],**({'rlimit':int(os.environ['RLIMIT'])} if os.environ.get('RLIMIT') else {})}))")
+BODY=$(CODE="$CODE" PW="$PW" python3 -c "import json,os,re;print(json.dumps({'code':re.sub(r'^module \w+\s*\n','',open(os.environ['CODE']).read()),'numberOfBlocks':int(os.environ.get('NUMBLOCKS','100')),'password':os.environ['PW'],**({'rlimit':int(os.environ['RLIMIT'])} if os.environ.get('RLIMIT') else {})}))")
 OUT=$(post /wallet/contract/activate "$BODY"); echo "$OUT" | cut -c1-300
 echo "$OUT" | grep -q contractId || { echo "activation failed"; exit 1; }
 ADDR=$(echo "$OUT" | python3 -c "import json,sys;print(json.load(sys.stdin)['address'])")

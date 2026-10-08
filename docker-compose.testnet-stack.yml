@@ -1,0 +1,41 @@
+# Everything around a testnet node on one server (docs/TESTNET.md, "Server for the testnet"). Started by
+# scripts/install-testnet-stack.sh, which writes testnet-stack.env (contract ids) first.
+#   oracle    price service for the Oracle contract        127.0.0.1:8085
+#   index     indexes the testnet chain (blocks, assets, Dex orders)
+#   explorer  read-only API over that index                127.0.0.1:11581
+#   bridge    USDC bridge prototype (mock EVM until BRIDGE_EVM is set)   127.0.0.1:8090
+# All use the host network and talk to the node on 127.0.0.1:31567.
+x-tools: &tools
+  image: zen-tools
+  network_mode: host
+  restart: unless-stopped
+  env_file: testnet-stack.env
+  volumes: ["./:/r:ro"]
+x-web: &web
+  image: node:22-alpine
+  network_mode: host
+  restart: unless-stopped
+  env_file: testnet-stack.env
+  volumes: ["./:/r:ro", "stack-data:/data"]
+services:
+  oracle:
+    <<: *tools
+    command: dotnet /app/zen-oracle.dll run
+    volumes: ["./:/r:ro", "oracle-data:/data"]
+    environment: { ORACLE_NODE: "http://127.0.0.1:31567", ORACLE_DATA: /data, ORACLE_LISTEN: "http://127.0.0.1:8085/", ORACLE_PASSWORD: "${TESTNET_PASSWORD:-testnet}" }
+  index:
+    <<: *web
+    command: sh -c 'mkdir -p /data/web; while true; do node --no-warnings --experimental-sqlite /r/site/chain-index.mjs --api http://127.0.0.1:31567 --db /data/index.sqlite --web /data/web --net test --budget 50 || true; sleep 20; done'
+  explorer:
+    <<: *web
+    command: node --no-warnings --experimental-sqlite /r/site/explorer-api.mjs --api http://127.0.0.1:31567 --db /data/index.sqlite --port 11581 --net test
+  bridge:
+    <<: *tools
+    working_dir: /r
+    command: node /r/site/bridge/bridge.mjs
+    volumes: ["./:/r:ro", "bridge-data:/data"]
+    environment: { BRIDGE_NODE: "http://127.0.0.1:31567", BRIDGE_DATA: /data, BRIDGE_EXPLORER: "http://127.0.0.1:11581/explorer/api", BRIDGE_PASSWORD: "${TESTNET_PASSWORD:-testnet}" }
+volumes:
+  oracle-data:
+  stack-data:
+  bridge-data:

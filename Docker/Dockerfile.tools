@@ -1,0 +1,19 @@
+# Oracle service + body tool (.NET 10) with Node 22 next to it: runs zen-oracle and the USDC bridge on a server.
+#   docker build -f Docker/Dockerfile.tools -t zen-tools .
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+COPY nuget.config ./
+COPY src ./src
+RUN dotnet restore src/Oracle/Oracle.fsproj \
+ && dotnet build src/Oracle/Oracle.fsproj -c Release --no-restore -v minimal -o /app \
+ && test -f /app/zen-oracle.dll && test -f /app/libsecp256k1.so
+
+FROM mcr.microsoft.com/dotnet/runtime:10.0
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=build /app /app
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 LD_LIBRARY_PATH=/app
+RUN node --version && ln -s /app /app-link
+# the bridge looks for the body tool here
+ENV BRIDGE_ZO="dotnet /app/zen-oracle.dll"
+WORKDIR /app
+CMD ["dotnet", "/app/zen-oracle.dll", "run"]
