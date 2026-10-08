@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain Instruments</title>
+<meta name="description" content="How tokens, the oracle and the Dex combine into markets.">
+<link rel="stylesheet" href="/shell/shell.css">
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>Instruments</h1>
+<p class="lead">Each part is a small contract. Together they make the building blocks of a market.</p>
+<div class="tw"><table>
+<tr><th>Instrument</th><th>What it does</th><th>Status</th></tr>
+<tr><td>Token for ZP</td><td>Pay ZP, receive a token 1:1; redeem back</td><td>Works on the testnet</td></tr>
+<tr><td>Named token</td><td>Create a token with a name, e.g. a test dollar</td><td>Works</td></tr>
+<tr><td>Issuer-controlled token</td><td>Only one key may issue or destroy: the model for a bridged stable token</td><td>Works</td></tr>
+<tr><td>Price oracle</td><td>Commit a Merkle root of prices; anyone can prove a price</td><td>Works, multi-source</td></tr>
+<tr><td>Dex</td><td>Make, take and cancel orders, no operator</td><td>Works</td></tr>
+<tr><td>Bull/Bear bet</td><td>Position tokens against collateral, settled by an oracle proof</td><td>Works in CI scenarios</td></tr>
+</table></div>
+<h2>How they fit</h2>
+<p>A bridged stable token gives a unit to price things in. The oracle says what an asset such as gold or a stock index is worth. A position contract turns that price into tokens that win or lose with it. The Dex lets people trade those tokens with each other.</p>
+<h2>Limits</h2>
+<ul><li>The oracle is one operator today. The chain proves <i>when</i> a price was published and that it was not changed, not that it was right.</li><li>The bridge is trusted-operator and a prototype.</li><li>Nothing here carries real money. Independent review and legal advice come first.</li></ul>
+<p><a href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/INSTRUMENTS.md">Full technical table on GitHub →</a></p>
+
+</main>
+
+</body>
+</html>

@@ -3,17 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Zen Chain Home</title>
-<meta name="description" content="A community-run blockchain with smart contracts, an on-chain exchange and price oracles.">
+<title>Zen Chain Run a node</title>
+<meta name="description" content="Install a node with Docker, load a snapshot and connect to the seed.">
 <link rel="stylesheet" href="/shell/shell.css">
 <script src="/shell/shell.js" defer></script>
 </head>
 <body class="zp">
 <main>
-<h1>A blockchain for contracts that can be proven correct</h1>
-<p class="lead">Zen Chain is a community-run network built on the Zen Protocol code: a proof-of-work chain with formally verifiable smart contracts, a community fund governed by votes, and tools for open markets.</p>
-<div class="actions"><a class="btn" href="/wallet/">Open the wallet</a><a class="btn ghost" href="/how-it-works.html">How it works</a><a class="btn ghost" href="/node.html">Run a node</a></div>
-<h2>Network now</h2>
+<h1>Run a node</h1>
+<p class="lead">Docker on Linux, macOS or Windows. A snapshot skips most of the initial sync.</p>
+<h2>Install</h2>
+<pre>git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
+cd zenprotocol
+docker compose build
+docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
+docker compose up -d</pre>
+<p>Seed address of this site: <code><span class="host">this-site</span>:9655</code></p>
+<p><a href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script/Docker">Full setup guide on GitHub</a></p>
+<h2>Snapshot</h2>
+<div id="snap">Loading…</div>
+<h2>Status of this site's node</h2>
 <div class="status"><span class="dot" id="dot"></span><span id="state">Checking…</span></div>
 <div class="stats">
  <div><div class="k">Block height</div><div class="v" id="height">–</div></div>
@@ -21,20 +30,6 @@
  <div><div class="k">Peers of this node</div><div class="v" id="peers">–</div></div>
  <div><div class="k">Difficulty</div><div class="v" id="diff">–</div></div>
 </div>
-<p><a href="/stats.html">Hashrate, block times, miners and the CGP cycle →</a></p>
-<h2>What you can do here</h2>
-<div class="cards">
- <a class="card" href="/wallet/"><h3>Hold and send</h3><p>An open-source web wallet. Your keys stay on your device.</p></a>
- <a class="card" href="/explorer.html"><h3>Look inside</h3><p>Blocks, transactions and addresses, read straight from the chain.</p></a>
- <a class="card" href="/cgp.html"><h3>Govern</h3><p>See how holders vote on the community fund, interval by interval.</p></a>
- <a class="card" href="/assets.html"><h3>Issue and trade assets</h3><p>Every token on the chain, with its issuing contract.</p></a>
- <a class="card" href="/node.html"><h3>Run a node</h3><p>Docker install, a ready snapshot and a seed address.</p></a>
- <a class="card" href="/developers.html"><h3>Build</h3><p>Contracts in F*, public APIs, the oracle and the Dex.</p></a>
-</div>
-<div class="note"><b>Markets are on the testnet.</b> The exchange (Dex), price oracle and USDC bridge prototype run on a separate test network with coins that have no value, so they can be tried freely. <span id="testlink"></span></div>
-<h2>Blockchain snapshot</h2>
-<p>Load it into a new node to skip most of the initial sync. Chain data only, no wallets.</p>
-<div id="snap">Loading…</div>
 
 </main>
 <script>
@@ -63,7 +58,6 @@ refresh(); setInterval(refresh, 30000);
   const u = document.createElement('p'); u.append('Or let a Docker node fetch it: '); const uc = document.createElement('code'); uc.textContent = 'SNAPSHOT_URL=' + location.origin + '/snapshots/' + s.file; u.append(uc);
   el.replaceChildren(a, i, h, u); } catch (e) { el.textContent = 'No snapshot published yet.'; } })();
 document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
-fetch('/site-config.json').then(r => r.ok ? r.json() : {}).then(c => { if (/^https?:\/\/[^\s"'<>]+$/.test(c.testUrl || '')) { const a = document.createElement('a'); a.href = c.testUrl; a.textContent = 'Visit the testnet →'; $('testlink').append(a); } }).catch(() => {});
 </script>
 </body>
 </html>

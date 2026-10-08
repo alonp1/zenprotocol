@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain Developers</title>
+<meta name="description" content="Public APIs, contracts, the oracle, the Dex and the repository.">
+<link rel="stylesheet" href="/shell/shell.css">
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>Developers</h1>
+<p class="lead">Everything is in one repository. This page points to the parts you will touch first.</p>
+<div class="cards">
+ <a class="card" href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script"><h3>Repository</h3><p>Node, wallet, oracle, indexer, bridge and contract examples.</p></a>
+ <a class="card" href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/INSTRUMENTS.md"><h3>Contracts</h3><p>Token, named token, authenticated supply, oracle, Dex and fixed-payout bet.</p></a>
+ <a class="card" href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/ORACLE.md"><h3>Oracle</h3><p>Sources file, rounds, Merkle proofs, audit paths.</p></a>
+ <a class="card" href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/WALLET.md"><h3>Wallet</h3><p>Web wallet internals, signing, node configuration.</p></a>
+ <a class="card" href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/BRIDGE.md"><h3>Bridge</h3><p>Prototype USDC bridge: link, deposit, withdraw, reserves.</p></a>
+ <a class="card" href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/TESTNET.md"><h3>Testnet</h3><p>Run your own test network with the public test wallet.</p></a>
+</div>
+<h2>Public read-only endpoints</h2>
+<p>These paths are available on this site. Rates are limited; no keys are needed.</p>
+<div class="tw"><table>
+<tr><th>Path</th><th>Returns</th></tr>
+<tr><td><code>/api/info</code></td><td>Chain height, difficulty, sync state</td></tr>
+<tr><td><code>/node/blockchain/block?blockNumber=N</code></td><td>One block (and other read-only chain calls)</td></tr>
+<tr><td><code>/node/addressdb/balance?address=…</code></td><td>Balance of an address</td></tr>
+<tr><td><code>/explorer/api/blocks?take=10</code></td><td>Indexed blocks for the explorer</td></tr>
+<tr><td><code>/oracle/rounds/latest</code></td><td>Latest committed prices (testnet)</td></tr>
+<tr><td><code>/stats.json</code>, <code>/assets.json</code>, <code>/cgp-history.json</code></td><td>Aggregates used by the pages</td></tr>
+</table></div>
+<div class="note warnbox">Contracts are early software. Get an independent review before they hold anything of value.</div>
+
+</main>
+
+</body>
+</html>

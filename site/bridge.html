@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain Bridge</title>
+<meta name="description" content="Live status of the prototype USDC bridge on the testnet.">
+<link rel="stylesheet" href="/shell/shell.css">
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>Bridge status</h1>
+<p class="lead">A prototype that mints a test token on the Zen testnet against USDC deposited on an EVM test network, and burns it on the way back. Live figures from the bridge service.</p>
+<div class="stats" id="bs"><div><div class="k">Status</div><div class="v">Loading…</div></div></div>
+<div class="note warnbox">Prototype for experiments. One operator holds the reserves. Test networks only.</div>
+<h2>How it works</h2>
+<ol><li><b>Link.</b> Sign a message with your EVM key that links it to your Zen address.</li><li><b>Deposit.</b> Send USDC to the bridge address. After confirmations, the same amount of the token arrives at your Zen address.</li><li><b>Withdraw.</b> Send the token to the bridge and name an EVM address. The bridge destroys the tokens and pays out USDC.</li></ol>
+<p>Deposit and withdraw from this page are not built yet; today they use the scripts described in <a href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/BRIDGE.md">BRIDGE.md</a>.</p>
+
+</main>
+<script>
+(async () => { const box = document.getElementById('bs');
+  const units = v => { try { const n = BigInt(v), w = n / 1000000n, f = String(n % 1000000n).padStart(6, '0').slice(0, 2); return w.toLocaleString('en-US') + '.' + f; } catch (e) { return String(v); } };
+  try { const r = await fetch('/bridge/status', { cache: 'no-store' }); if (!r.ok) throw 0; const s = await r.json();
+    const rows = [['Network', s.evm], ['Links', s.links], ['Deposits', s.deposits], ['Withdrawals', s.withdrawals], ['Token outstanding', units(s.zusdcOutstanding)], ['Pending deposits', s.pendingDeposits]];
+    box.replaceChildren(...rows.map(([k, v]) => { const d = document.createElement('div'), a = document.createElement('div'), b = document.createElement('div'); a.className = 'k'; b.className = 'v'; a.textContent = k; b.textContent = String(v); d.append(a, b); return d; }));
+  } catch (e) { box.firstChild.lastChild.textContent = 'Unavailable'; } })();
+</script>
+</body>
+</html>

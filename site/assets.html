@@ -85,6 +85,7 @@
   @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } }
   h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
 </style>
+<link rel="stylesheet" href="/shell/shell.css">
 </head>
 <body>
 <main>
@@ -122,5 +123,6 @@ fetch('/assets.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
 }).catch(() => { $('updated').textContent = 'Not available yet: the index is being built.'; });
 $('q').addEventListener('input', () => data && draw());
 </script>
+<script src="/shell/shell.js" defer></script>
 </body>
 </html>

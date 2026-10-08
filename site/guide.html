@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain Testnet guide</title>
+<meta name="description" content="First steps on the testnet: wallet, test coins, Dex and oracle.">
+<link rel="stylesheet" href="/shell/shell.css">
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>Testnet guide</h1>
+<p class="lead">Ten minutes from nothing to a first look at an on-chain market.</p>
+<ol>
+ <li><b>Open the <a href="/wallet/">wallet</a>.</b> Create a new wallet and write the recovery phrase on paper. Use a throwaway phrase here, never one you use anywhere else.</li>
+ <li><b>Check it is on the testnet.</b> The coloured "Testnet" tag in the top bar and the banner under it say so.</li>
+ <li><b>Look at the <a href="/oracle.html">oracle</a>.</b> It lists the latest committed prices and how many sources agreed on each.</li>
+ <li><b>Look at the <a href="/dex.html">Dex</a>.</b> Orders on the book are outputs of the Dex contract; the explorer shows the same transactions.</li>
+ <li><b>Open the Markets tab in the wallet</b> to see prices next to the assets you hold.</li>
+</ol>
+<div class="note">Trading from the wallet itself is being added step by step. Today the wallet shows markets read-only; placing orders is done with the command-line scripts in the repository (see <a href="/instruments.html">Instruments</a>).</div>
+<h2>Getting test coins</h2>
+<p>There is no public faucet yet. The repository's testnet guide explains how to run the public test wallet and mine your own test coins.</p>
+<p><a href="https://github.com/alonp1/zenprotocol/blob/node-upgrade-script/docs/TESTNET.md">Testnet guide on GitHub →</a></p>
+
+</main>
+
+</body>
+</html>

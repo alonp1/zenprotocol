@@ -119,6 +119,7 @@
   form.search button { padding: 9px 16px; border: 1px solid var(--accent); background: var(--accent); color: var(--card); border-radius: 8px; font: inherit; cursor: pointer; }
   .pager { display: flex; justify-content: space-between; margin-top: 12px; }
 </style>
+<link rel="stylesheet" href="/shell/shell.css">
 </head>
 <body>
 <main>
@@ -324,5 +325,6 @@ Promise.race([namesLoaded, new Promise(r => setTimeout(r, 2000))]).finally(() =>
   go.catch(err => { $('sub').textContent = err.message; $('view').innerHTML = ''; });
 });
 </script>
+<script src="/shell/shell.js" defer></script>
 </body>
 </html>

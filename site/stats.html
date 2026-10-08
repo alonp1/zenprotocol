@@ -68,6 +68,7 @@
   .phase-l span { position: absolute; top: 0; white-space: nowrap; }
   footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 </style>
+<link rel="stylesheet" href="/shell/shell.css">
 </head>
 <body>
 <main>
@@ -376,5 +377,6 @@ document.querySelectorAll('.host').forEach(e => e.textContent = location.hostnam
 load(); setInterval(load, 60000);
 let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(drawCharts, 150); });
 </script>
+<script src="/shell/shell.js" defer></script>
 </body>
 </html>

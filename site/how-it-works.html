@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain How it works</title>
+<meta name="description" content="Blocks, contracts, the community fund, oracles and the exchange explained plainly.">
+<link rel="stylesheet" href="/shell/shell.css">
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>How it works</h1>
+<p class="lead">The pieces of the network, from the bottom up, without jargon where we can avoid it.</p>
+<h2>The chain</h2>
+<p>New blocks are found by miners who solve a proof-of-work puzzle. Coins are held in outputs, as in Bitcoin, so every transaction spends some outputs and creates new ones. The <a href="/explorer.html">explorer</a> shows all of it and <a href="/stats.html">stats</a> shows the network's health.</p>
+<h2>Contracts</h2>
+<p>A contract is a small program stored on the chain. Zen contracts are written in F*, whose compiler checks a proof of how much computation the code can use before it is accepted. To put a contract on the chain its author locks a small amount of ZP for the time it should stay active (the cost is the size of the code times the number of blocks). People who <i>use</i> a contract pay nothing extra: no ZP is needed to call it.</p>
+<h2>Assets</h2>
+<p>Any contract can issue its own asset. The <a href="/assets.html">assets page</a> lists every token on the chain with the contract that created it. Typical examples: a token sold for ZP, a named token like a test dollar, a token only one key may issue.</p>
+<h2>The community fund (CGP)</h2>
+<p>Each interval, holders can vote on how a share of new coins is paid out and which payouts are funded. Voting has two stages: nominating proposals, then voting on those that were nominated. The <a href="/cgp.html">CGP page</a> shows the stage and time left, and the history of past intervals.</p>
+<h2>Oracle</h2>
+<p>A chain cannot look up a price by itself. The oracle service reads prices from several public sources, checks that they agree, and writes one Merkle root of all of them into a transaction. Anyone can then prove that a particular price was part of what was committed. Contracts, such as a bet on a price, use that proof. This runs on the <a href="__TEST__/oracle.html" class="tl">testnet</a>.</p>
+<h2>Exchange</h2>
+<p>The Dex is a contract. Anyone can place an order between two assets; anyone can take it, wholly or in part, or cancel their own. There is no operator in the middle and no account to open. This too runs on the <a href="__TEST__/dex.html" class="tl">testnet</a>.</p>
+<h2>Bridge</h2>
+<p>A prototype lets USDC from an EVM test network appear on the testnet as a token and return. It is a trusted-operator design for experiments, with reserves visible on a status page. Not for real money.</p>
+<script>fetch('/site-config.json').then(r => r.ok ? r.json() : {}).then(c => { const ok = /^https?:\/\/[^\s"'<>]+$/.test(c.testUrl || ''); document.querySelectorAll('a.tl').forEach(a => { if (ok) a.href = a.getAttribute('href').replace('__TEST__', c.testUrl.replace(/\/+$/, '')); else a.removeAttribute('href'); }); }).catch(() => {});</script>
+
+</main>
+
+</body>
+</html>

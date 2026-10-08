@@ -46,6 +46,7 @@
   .tabs button.on { background: var(--accent); color: var(--card); border-color: var(--accent); }
   footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 </style>
+<link rel="stylesheet" href="/shell/shell.css">
 </head>
 <body>
 <main>
@@ -167,5 +168,6 @@ const showTab = k => { $('tab').innerHTML = TABS[k]; document.querySelectorAll('
 document.querySelector('.tabs').onclick = e => { if (e.target.dataset.t) showTab(e.target.dataset.t); };
 showTab('api');
 </script>
+<script src="/shell/shell.js" defer></script>
 </body>
 </html>

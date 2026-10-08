@@ -19,28 +19,28 @@ if [ -n "$VOL" ]; then
 CRON
   for f in stats assets cgp-history; do [ -f "$VOL/web/$f.json" ] && cp -f "$VOL/web/$f.json" "$WEB/$f.json"; done
 fi
-cp "$REPO"/site/{index,dex,oracle,explorer,assets,stats,cgp}.html "$WEB/"
+for f in dex oracle explorer assets stats cgp bridge guide instruments developers; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
+cp "$REPO/site/testnet-home.html" "$WEB/index.html"
+rm -rf "$WEB/shell"; cp -r "$REPO/site/shell" "$WEB/shell"
+# Site frame settings. DOMAIN (e.g. testnet.example.org) turns on HTTPS; MAIN_URL links to the mainnet site.
+old() { grep -o "\"$1\":\"[^\"]*\"" "$WEB/site-config.json" 2>/dev/null | cut -d'"' -f4; }   # values from the last run are kept
+DOMAIN="${DOMAIN:-}"; MAIN_URL="${MAIN_URL:-$(old mainUrl)}"; SITE_NAME="${SITE_NAME:-$(old name)}"; SITE_NAME="${SITE_NAME:-Zen Chain}"
+printf '{"kind":"test","name":"%s","mainUrl":"%s","github":"https://github.com/alonp1/zenprotocol"}\n' "$SITE_NAME" "$MAIN_URL" > "$WEB/site-config.json"
 # ZP Wallet on the same site: its node is this site's /node/ (config.json names it), so the testnet works at once. Plain HTTP: test coins only.
 IP=$(curl -s -m 5 https://api.ipify.org || hostname -I | awk '{print $1}')
+BASE=${DOMAIN:+https://$DOMAIN}; BASE=${BASE:-http://$IP}
 if command -v docker >/dev/null; then
   docker run --rm -v "$REPO:/r" -w /r/wallet node:22-alpine sh -c "npm ci --no-audit --no-fund && npm test && npm run build" \
-    && { rm -rf "$WEB/wallet"; mkdir -p "$WEB/wallet"; cp "$REPO"/wallet/dist/* "$WEB/wallet/"; echo "{\"testNode\":\"http://$IP/node\"}" > "$WEB/wallet/config.json"; echo "wallet published at /wallet/"; } \
+    && { rm -rf "$WEB/wallet"; mkdir -p "$WEB/wallet"; cp "$REPO"/wallet/dist/* "$WEB/wallet/"; echo "{\"testNode\":\"$BASE/node\"}" > "$WEB/wallet/config.json"; echo "wallet published at /wallet/"; } \
     || echo "wallet build or tests failed: /wallet/ left as it was"
 fi
-cat > "$WEB/index.html" <<HTML
-<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZP testnet</title>
-<style>body{font:16px system-ui;max-width:640px;margin:48px auto;padding:0 16px;line-height:1.6}a{display:block;padding:12px 0;font-size:18px}small{color:#666}</style>
-<h1>Zen Protocol testnet</h1><small>Plain HTTP, test coins only. Do not enter real keys or passwords here.</small>
-<a href="/dex.html">Dex: order book and trades</a><a href="/oracle.html">Oracle: published prices</a>
-<a href="/explorer.html">Explorer</a><a href="/assets.html">Assets</a><a href="/wallet/">ZP Wallet (testnet)</a><a href="/bridge/status">Bridge status (mock)</a>
-HTML
 
 cat > /etc/nginx/sites-available/zen-testnet <<CONF
 limit_req_zone \$binary_remote_addr zone=zentest:10m rate=10r/s;
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name _;
+    server_name ${DOMAIN:-_};
     root $WEB;
     index index.html;
 
@@ -72,4 +72,10 @@ ln -sf /etc/nginx/sites-available/zen-testnet /etc/nginx/sites-enabled/zen-testn
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx || systemctl restart nginx
 IP=$(curl -s -m 5 https://api.ipify.org || hostname -I | awk '{print $1}')
-echo "Published: http://$IP/   (Dex: http://$IP/dex.html)"
+if [ -n "$DOMAIN" ]; then
+  command -v certbot >/dev/null || apt-get install -y -qq certbot python3-certbot-nginx
+  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email --redirect --keep-until-expiring
+  echo "Published: https://$DOMAIN/"
+else
+  echo "Published: http://$IP/   (Dex: http://$IP/dex.html)"
+fi

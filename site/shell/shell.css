@@ -1,0 +1,74 @@
+/* Shared frame of every page: header with menus, footer. Tokens match the pages' own (light and dark follow the visitor's system). */
+:root { --s-bg: #f6f5f1; --s-card: #ffffff; --s-ink: #1d1d1b; --s-muted: #6b6a64; --s-line: #e3e1da; --s-accent: #1f6f5c; --s-accent-ink: #ffffff; --s-test: #8a5a00; --s-test-bg: #fbf1d9; }
+@media (prefers-color-scheme: dark) { :root { --s-bg: #121311; --s-card: #1b1c1a; --s-ink: #ecebe6; --s-muted: #9a9890; --s-line: #2c2d2a; --s-accent: #5cc3a6; --s-accent-ink: #0c1f19; --s-test: #e6c874; --s-test-bg: #2b2410; } }
+.zs-head { position: sticky; top: 0; z-index: 50; background: var(--s-card); border-bottom: 1px solid var(--s-line); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.zs-bar { max-width: 1100px; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; gap: 8px 20px; min-height: 58px; }
+.zs-brand { display: flex; align-items: center; gap: 9px; color: var(--s-ink); text-decoration: none; font-weight: 700; font-size: 17px; letter-spacing: -0.01em; white-space: nowrap; }
+.zs-brand svg { color: var(--s-accent); flex: none; }
+.zs-net { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--s-line); color: var(--s-muted); }
+.zs-net.test { background: var(--s-test-bg); color: var(--s-test); }
+.zs-nav { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.zs-nav > a, .zs-nav > .zs-grp > button { font: inherit; color: var(--s-ink); background: none; border: 0; padding: 8px 11px; border-radius: 7px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+.zs-nav > a:hover, .zs-nav > .zs-grp > button:hover { background: var(--s-bg); }
+.zs-nav [aria-current="page"], .zs-nav .zs-grp.here > button { color: var(--s-accent); font-weight: 600; }
+.zs-nav a:focus-visible, .zs-nav button:focus-visible, .zs-brand:focus-visible, .zs-burger:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+.zs-grp { position: relative; }
+.zs-grp > button::after { content: ""; width: 6px; height: 6px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: rotate(45deg) translateY(-2px); opacity: .6; }
+.zs-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 230px; background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 6px; box-shadow: 0 8px 28px rgba(0, 0, 0, .12); }
+.zs-grp.open .zs-menu { display: block; }
+.zs-menu a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--s-ink); text-decoration: none; }
+.zs-menu a small { display: block; color: var(--s-muted); font-size: 12.5px; }
+.zs-menu a:hover { background: var(--s-bg); }
+.zs-menu a[aria-current="page"] { color: var(--s-accent); font-weight: 600; }
+.zs-other { margin-left: 6px; font-size: 13px; padding: 6px 11px !important; border: 1px solid var(--s-line); border-radius: 99px !important; }
+.zs-burger { display: none; margin-left: auto; font: inherit; background: none; border: 1px solid var(--s-line); color: var(--s-ink); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+@media (max-width: 860px) {
+  .zs-burger { display: block; }
+  .zs-nav { display: none; position: absolute; left: 0; right: 0; top: 100%; background: var(--s-card); border-bottom: 1px solid var(--s-line); flex-direction: column; align-items: stretch; padding: 8px 16px 14px; margin: 0; max-height: calc(100vh - 60px); overflow-y: auto; }
+  .zs-head.open .zs-nav { display: flex; }
+  .zs-grp > button { width: 100%; justify-content: space-between; }
+  .zs-menu { position: static; display: none; box-shadow: none; border: 0; padding: 0 0 4px 12px; }
+  .zs-other { margin: 6px 0 0; text-align: center; }
+}
+.zs-test-note { background: var(--s-test-bg); color: var(--s-test); font: 13.5px/1.4 system-ui, sans-serif; text-align: center; padding: 6px 16px; }
+.zs-foot { border-top: 1px solid var(--s-line); background: var(--s-card); margin-top: 48px; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--s-muted); }
+.zs-foot-in { max-width: 1100px; margin: 0 auto; padding: 32px 16px 28px; display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 24px; }
+.zs-foot h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--s-ink); }
+.zs-foot a { display: block; color: var(--s-muted); text-decoration: none; padding: 2px 0; }
+.zs-foot a:hover { color: var(--s-accent); text-decoration: underline; }
+.zs-foot p { margin: 0 0 8px; }
+.zs-legal { grid-column: 1 / -1; border-top: 1px solid var(--s-line); padding-top: 16px; font-size: 13px; }
+@media (max-width: 760px) { .zs-foot-in { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .zs-foot-in > :first-child { grid-column: 1 / -1; } }
+main > footer { display: none; }   /* the pages' own footers are replaced by this one */
+
+/* Content pages written for the site frame (home, about, guides): class "zp" on <body> */
+body.zp { margin: 0; background: var(--s-bg); color: var(--s-ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.zp main { max-width: 860px; margin: 0 auto; padding: 36px 16px 8px; }
+.zp .wide { max-width: 1100px; }
+.zp h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+.zp h2 { font-size: 22px; letter-spacing: -0.01em; margin: 40px 0 10px; text-wrap: balance; }
+.zp h3 { font-size: 16px; margin: 0 0 6px; }
+.zp p { margin: 0 0 12px; max-width: 68ch; }
+.zp .lead { font-size: 19px; color: var(--s-muted); max-width: 62ch; }
+.zp main a { color: var(--s-accent); }
+.zp code, .zp pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13.5px; }
+.zp pre { background: var(--s-card); border: 1px solid var(--s-line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 10px 0 14px; }
+.zp ul, .zp ol { padding-left: 22px; max-width: 68ch; } .zp li { margin-bottom: 6px; }
+.zp .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 18px 0; }
+.zp .card { background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+.zp .card p { margin: 0; color: var(--s-muted); font-size: 15px; }
+.zp a.card { text-decoration: none; color: var(--s-ink); } .zp a.card:hover { border-color: var(--s-accent); }
+.zp .btn { display: inline-block; background: var(--s-accent); color: var(--s-accent-ink); text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; }
+.zp .btn.ghost { background: none; color: var(--s-accent); border: 1px solid var(--s-line); }
+.zp .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
+.zp .note { border-left: 3px solid var(--s-accent); background: var(--s-card); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; max-width: 68ch; }
+.zp .warnbox { border-left-color: var(--s-test); }
+.zp .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 16px 18px; margin: 18px 0; }
+.zp .stats .k { font-size: 13px; color: var(--s-muted); } .zp .stats .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.zp .status { display: flex; align-items: center; gap: 9px; font-weight: 600; margin: 16px 0 0; }
+.zp .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--s-muted); } .zp .dot.ok { background: #1f9a55; } .zp .dot.warn { background: #d08a00; } .zp .dot.bad { background: #c43030; }
+.zp table { border-collapse: collapse; width: 100%; font-size: 15px; } .zp th, .zp td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--s-line); vertical-align: top; }
+.zp .tw { overflow-x: auto; }
+@media (max-width: 860px) { .zs-foot-in { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .zs-foot-in { grid-template-columns: 1fr; } }
+.zs-tw { overflow-x: auto; max-width: 100%; }

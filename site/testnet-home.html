@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zen Chain Testnet</title>
+<meta name="description" content="A test network with an exchange, a price oracle and a USDC bridge prototype. Coins have no value.">
+<link rel="stylesheet" href="/shell/shell.css">
+<script src="/shell/shell.js" defer></script>
+</head>
+<body class="zp">
+<main>
+<h1>The markets testnet</h1>
+<p class="lead">A separate network where the exchange, the price oracle and the bridge can be tried with coins that have no value. Nothing here touches the main network.</p>
+<div class="actions"><a class="btn" href="/guide.html">Start here</a><a class="btn ghost" href="/dex.html">Open the Dex</a><a class="btn ghost" href="/oracle.html">See the oracle</a></div>
+<div class="status"><span class="dot" id="dot"></span><span id="state">Checking…</span></div>
+<div class="stats">
+ <div><div class="k">Block height</div><div class="v" id="height">–</div></div>
+ <div><div class="k">Chain time</div><div class="v" id="age">–</div></div>
+ <div><div class="k">Peers of this node</div><div class="v" id="peers">–</div></div>
+ <div><div class="k">Difficulty</div><div class="v" id="diff">–</div></div>
+</div>
+<h2>The pieces</h2>
+<div class="cards">
+ <a class="card" href="/dex.html"><h3>Dex</h3><p>Order book and trades between any two assets. No operator.</p></a>
+ <a class="card" href="/oracle.html"><h3>Oracle</h3><p>Prices from several sources, committed to the chain with proofs.</p></a>
+ <a class="card" href="/bridge.html"><h3>Bridge</h3><p>USDC in and out, prototype. Live reserves.</p></a>
+ <a class="card" href="/instruments.html"><h3>Instruments</h3><p>How tokens, oracle prices and the Dex combine into markets.</p></a>
+ <a class="card" href="/wallet/"><h3>Wallet</h3><p>Testnet wallet with a Markets tab that shows live prices.</p></a>
+ <a class="card" href="/explorer.html"><h3>Explorer</h3><p>Every block and transaction of the test network.</p></a>
+</div>
+<div class="note warnbox">Test coins have no value. This site runs over plain HTTP until a domain is set up: never enter a real seed phrase or password here.</div>
+
+</main>
+<script>
+const $ = id => document.getElementById(id), fmt = n => Number(n).toLocaleString('en-US');
+async function ask(p, tries = 3) { for (let i = 0; i < tries; i++) { const c = new AbortController(), t = setTimeout(() => c.abort(), 8000); try { const r = await fetch(p, { cache: 'no-store', signal: c.signal }); if (r.ok) return await r.text(); } catch (e) {} finally { clearTimeout(t); } if (i < tries - 1) await new Promise(r => setTimeout(r, 2000)); } return null; }
+let failed = 0;
+async function refresh() {
+  let info = null; try { const t = await ask('/api/info'); info = t && JSON.parse(t); } catch (e) {}
+  if (info && Number.isFinite(Number(info.blocks))) {
+    failed = 0; $('height').textContent = fmt(info.blocks); $('diff').textContent = Number(info.difficulty).toFixed(0);
+    const s = Math.max(0, (Date.now() - info.medianTime) / 1000); $('age').textContent = s < 90 ? Math.round(s) + ' s ago' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' d ago';
+    let cls = 'ok', text = 'Synced and following the chain';
+    if (info.initialBlockDownload || info.blocks < info.headers) { cls = 'warn'; text = 'Syncing: ' + fmt(info.blocks) + ' / ' + fmt(info.headers); }
+    else if (s / 60 > 120) { cls = 'warn'; text = 'No new blocks for ' + Math.round(s / 60) + ' minutes'; }
+    $('dot').className = 'dot ' + cls; $('state').textContent = text;
+  } else { failed++; if (failed >= 3) { $('dot').className = 'dot bad'; $('state').textContent = 'Node unreachable'; } else { $('dot').className = 'dot warn'; $('state').textContent = 'Node is busy, retrying...'; } }
+  const p = await ask('/api/peers'); if (p !== null && /^\s*\d+\s*$/.test(p) && $('peers')) $('peers').textContent = p.trim();
+}
+refresh(); setInterval(refresh, 30000);
+
+</script>
+</body>
+</html>
