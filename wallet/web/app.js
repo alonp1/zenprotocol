@@ -308,6 +308,10 @@ async function refreshNode() {
       await new Promise(r => setTimeout(r, 1500));
     }
   }
+  refreshExtras().then(render);        // names, stats and contracts are shown when they arrive: the balance does not wait for them
+}
+async function refreshExtras() {
+  const n = node(); if (!n) return;
   // the community site publishes stats.json next to /node/ (CGP fund balance, named contracts)
   S.stats = null;
   try {
@@ -330,20 +334,23 @@ async function refreshNode() {
     .map(c => ({ ...c, name: nameOf(c.id, c.address) }))
     .sort((x, y) => x.expire - y.expire) : null;
 }
-async function refreshWallet(id, full) {
+async function refreshWallet(id, full, onState) {
   const n = node(), w = S.open.get(id); if (!n || !w) return;
   const d = S.data.get(id) || {};
   try {
     if (full || !d.discovered) { await discover(w, n); d.discovered = true; }
-    d.state = await readState(w, n); d.history = await readHistory(w, n); d.error = '';
+    d.state = await readState(w, n); d.error = '';
+    S.data.set(id, d); if (onState) onState();                   // balance first: the history follows
+    d.history = await readHistory(w, n);
   } catch (e) { d.error = e.message; d.history ||= []; }
   S.data.set(id, d);
 }
 async function refreshAll(full = false) {
   S.busy = true; render();
-  await refreshNode();
-  const a = active();
-  if (a && S.nodeOk) { await refreshWallet(a.id, full); for (const w of walletsHere()) if (w.id !== a.id) refreshWallet(w.id, full).then(render); }
+  const nodeP = refreshNode(), a = active();                     // node status and the active wallet are asked at the same time
+  if (a) await refreshWallet(a.id, full, () => { S.busy = false; render(); });
+  await nodeP;
+  if (a && S.nodeOk) for (const w of walletsHere()) if (w.id !== a.id) refreshWallet(w.id, full).then(render);
   S.busy = false; render();
 }
 

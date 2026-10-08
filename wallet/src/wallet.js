@@ -41,7 +41,7 @@ export const canSpend = w => w.keys.size > 0;
 // Find addresses with history on each branch, stopping after GAP_LIMIT unused in a row.
 export async function discover(w, node) {
   if (!w.account) return addresses(w);
-  for (const branch of BRANCHES) {
+  await Promise.all(BRANCHES.map(async branch => {            // both branches at once: the node answers in parallel
     let start = 0;
     for (;;) {
       const batch = [];
@@ -53,7 +53,7 @@ export async function discover(w, node) {
       if (!any) break;
       start += GAP_LIMIT;
     }
-  }
+  }));
   return addresses(w);
 }
 
