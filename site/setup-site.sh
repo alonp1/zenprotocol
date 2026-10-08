@@ -23,7 +23,7 @@ mkdir -p "$WEB/snapshots"
 for f in index about how-it-works community node developers stats assets cgp votes explorer; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
 rm -rf "$WEB/shell"; cp -r "$REPO/site/shell" "$WEB/shell"
 # Site frame settings (menus, name, link to the other network). Set SITE_NAME / TEST_URL once; they are kept in the file for later runs.
-old() { grep -o "\"$1\":\"[^\"]*\"" "$WEB/site-config.json" 2>/dev/null | cut -d'"' -f4; }   # values from the last run are kept
+old() { grep -o "\"$1\":\"[^\"]*\"" "$WEB/site-config.json" 2>/dev/null | cut -d'"' -f4 || true; }   # values from the last run are kept
 SITE_NAME="${SITE_NAME:-$(old name)}"; SITE_NAME="${SITE_NAME:-Zen Chain}"; TEST_URL="${TEST_URL:-$(old testUrl)}"
 printf '{"kind":"main","name":"%s","testUrl":"%s","github":"https://github.com/alonp1/zenprotocol"}\n' "$SITE_NAME" "$TEST_URL" > "$WEB/site-config.json"
 
