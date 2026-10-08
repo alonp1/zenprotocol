@@ -3,6 +3,7 @@
 #   oracle    price service for the Oracle contract        127.0.0.1:8085
 #   index     indexes the testnet chain (blocks, assets, Dex orders)
 #   explorer  read-only API over that index                127.0.0.1:11581
+#   marketmaker  keeps a buy and a sell order on the Dex (needs ZP and zUSDC in the wallet; see docs/INSTRUMENTS.md)
 #   bridge    USDC bridge prototype (mock EVM until BRIDGE_EVM is set)   127.0.0.1:8090
 # All use the host network and talk to the node on 127.0.0.1:31567.
 x-tools: &tools
@@ -35,6 +36,11 @@ services:
     command: node /r/site/bridge/bridge.mjs
     volumes: ["./:/r:ro", "bridge-data:/data"]
     environment: { BRIDGE_NODE: "http://127.0.0.1:31567", BRIDGE_DATA: /data, BRIDGE_EXPLORER: "http://127.0.0.1:11581/explorer/api", BRIDGE_PASSWORD: "${TESTNET_PASSWORD:-testnet}" }
+  marketmaker:
+    <<: *tools
+    working_dir: /r
+    command: node /r/site/marketmaker/maker.mjs
+    environment: { MM_NODE: "http://127.0.0.1:31567", MM_EXPLORER: "http://127.0.0.1:11581/explorer/api", MM_PASSWORD: "${TESTNET_PASSWORD:-testnet}" }
 volumes:
   oracle-data:
   stack-data:

@@ -66,6 +66,8 @@ if [ -z "$(get DEX_ID)" ]; then echo "-- ZenDex"; activate src/ContractExamples/
 put ORACLE_CONTRACT "$(get ORACLE_ADDRESS)"
 put BRIDGE_CONTRACT "$(get BRIDGE_ADDRESS)"; put BRIDGE_ASSET "$(get BRIDGE_ID)"
 put ZEN_DEX "$(get DEX_ID)"; put ZEN_NET test
+put MM_DEX "$(get DEX_ADDRESS)"; put MM_ASSET "$(get BRIDGE_ID)"
+[ -n "$(get MM_PRICE)" ] || put MM_PRICE 0.10
 [ -n "$(get ORACLE_PROVIDER)" ] || put ORACLE_PROVIDER "${ORACLE_PROVIDER:-auto}"
 [ "$(get ORACLE_PROVIDER)" = frankfurter ] && echo "$(get ORACLE_TICKERS)" | grep -q BTC && put ORACLE_PROVIDER auto   # frankfurter has no BTC
 [ -n "$(get ORACLE_TICKERS)" ] || put ORACLE_TICKERS "${ORACLE_TICKERS:-EUR,GBP,CHF,AUD,BTC}"

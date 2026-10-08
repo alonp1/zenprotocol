@@ -28,3 +28,13 @@ Everything here runs on our testnet (testnet coins, no value) with the original 
 ## Run it
 
 Needs Docker and a testnet node with the public test wallet (see [TESTNET.md](TESTNET.md)); the CI workflow `testnet` runs all of it and prints the result of each scenario as a notice. By hand, from the repository: `scripts/testnet-contract.sh` (Token), `scripts/testnet-oracle.sh`, `scripts/testnet-bet.sh`, `scripts/testnet-instruments.sh`.
+
+## Market maker (testnet)
+
+`site/marketmaker/maker.mjs` keeps one sell-ZP and one buy-ZP order on the Dex around a reference price, so the order book is never empty. It runs as the `marketmaker` service of the testnet stack.
+
+- Price: `MM_PRICE` (USD per ZP, default 0.10), or `MM_ORACLE=http://127.0.0.1:8085/<TICKER>` to take it from the latest oracle round.
+- `MM_SPREAD_BPS` (100 = 1 % each side), `MM_REQUOTE_BPS` (50: cancel and re-make when the price moved this much), `MM_SIZE_ZP` (ZP per order), `MM_INTERVAL` seconds.
+- It needs ZP and zUSDC in the node wallet (mining pays ZP; zUSDC comes from the bridge). Without funds it says so and waits.
+- `MM_DRY=1` only prints what it would do.
+- Orders it has open are read from the explorer API, so partial fills are handled: the remainder is what the Dex shows.
