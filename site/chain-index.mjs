@@ -423,7 +423,7 @@ if (REPO_CONTRACT) {
     const t = txs.get(v.tx) || { tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, pks: [] }; txs.set(v.tx, t); t.pks.push(v.pk);
   }
   const phases = new Map(), stray = [];
-  const phaseOf = b => { for (const { sem, cont, cand } of SEMESTERS) for (const [kind, snap] of [['contestants', cont], ['candidates', cand]]) if (b >= snap && b < snap + PHASE) return { sem, kind, snap }; return null; };
+  const phaseOf = b => { for (const { sem, cont, cand } of SEMESTERS) for (const [kind, snap] of [['contestants', cont], ['candidates', cand]]) if (snap != null && b >= snap && b < snap + PHASE) return { sem, kind, snap }; return null; };
   for (const t of txs.values()) {
     const ph = phaseOf(t.block); if (!ph) { stray.push(t.block); continue; }
     const key = ph.sem + ph.kind, P = phases.get(key) || { ...ph, seen: new Set(), votes: [] }; phases.set(key, P);
