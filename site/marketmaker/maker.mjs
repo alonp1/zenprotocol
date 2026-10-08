@@ -59,19 +59,24 @@ const impliedPrice = o => o.underAsset === '00'
   ? (Number(o.pairTotal) / 1e6) / (Number(o.underAmount) / 1e8)        // sells ZP: usdc per zp
   : (Number(o.underAmount) / 1e6) / (Number(o.pairTotal) / 1e8);       // sells zUSDC: usdc per zp
 
+const pending = {};          // side -> time of the Make/Cancel not yet seen in the index: do not repeat it while it waits to be mined
+const WAIT = Number(env('MM_WAIT', '300')) * 1000, waiting = side => Date.now() - (pending[side] ?? 0) < WAIT;
 async function cycle(pk) {
   const price = await referencePrice(), ask = price * (1 + SPREAD), bid = price * (1 - SPREAD);
   const open = await myOrders(pk);
+  for (const side of ['ask', 'bid']) if (open.some(o => (o.underAsset === '00') === (side === 'ask'))) delete pending[side];   // seen: no longer pending
   const stale = open.filter(o => Math.abs(impliedPrice(o) / (o.underAsset === '00' ? ask : bid) - 1) > REQUOTE);
-  for (const o of stale) { log('cancel', o.underAsset === '00' ? 'ask' : 'bid', 'at', impliedPrice(o).toFixed(5)); log(' tx', await execute('Cancel', o, [])); }
-  if (stale.length) return;        // let the cancels confirm before making new orders
+  for (const o of stale) { const side = o.underAsset === '00' ? 'ask' : 'bid'; if (waiting('c' + side)) continue; pending['c' + side] = Date.now(); log('cancel', o.underAsset === '00' ? 'ask' : 'bid', 'at', impliedPrice(o).toFixed(5)); log(' tx', await execute('Cancel', o, [])); }
+  if (stale.length || waiting('cask') || waiting('cbid')) return;        // let the cancels confirm before making new orders
   const hasAsk = open.some(o => o.underAsset === '00'), hasBid = open.some(o => o.underAsset === USDC);
-  if (!hasAsk) {
+  if (!hasAsk && !waiting('ask')) {
+    pending.ask = Date.now();
     const kalapas = Math.round(SIZE * 1e8), total = Math.round(SIZE * ask * 1e6);
     if (await balance('00') >= kalapas + 1e6) { log(`make ask: sell ${SIZE} ZP for ${total / 1e6} zUSDC (price ${ask.toFixed(5)})`); log(' tx', await execute('Make', { underAsset: '00', underAmount: kalapas, pairAsset: USDC, pairTotal: total, maker: pk }, [{ asset: '00', amount: kalapas }])); }
     else log('not enough ZP for an ask');
   }
-  if (!hasBid) {
+  if (!hasBid && !waiting('bid')) {
+    pending.bid = Date.now();
     const units = Math.round(SIZE * bid * 1e6), total = Math.round(SIZE * 1e8);
     if (await balance(USDC) >= units) { log(`make bid: buy ${SIZE} ZP with ${units / 1e6} zUSDC (price ${bid.toFixed(5)})`); log(' tx', await execute('Make', { underAsset: USDC, underAmount: units, pairAsset: '00', pairTotal: total, maker: pk }, [{ asset: USDC, amount: units }])); }
     else log('not enough zUSDC for a bid');
