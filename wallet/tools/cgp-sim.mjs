@@ -4,7 +4,10 @@
 //   fund   before the snapshot block: the node wallet (TESTNET_MNEMONIC) gives each test wallet its weight
 //   run    waits for the nomination and voting phases and sends every ballot (stops itself when the voting phase is over)
 //   plan   prints the scenario and what the tally should show
-// Weights are fractions of the ZP issued at the snapshot block (threshold: 3%).
+// The CGP fund is empty until an allocation vote gives it a share of the block rewards, which starts the interval after
+// the vote. So the scenario takes two intervals: in the first only the allocation is voted; in the second (the target
+// interval, snapshot block --target, default the next interval's) the nominations and payout votes happen too.
+// Weights are fractions of the ZP issued at the TARGET snapshot block (threshold: 3%).
 //   A 1.4%   B 2.1%   C 4.2%   D 0.7%
 //   nomination  A and B nominate X (together 3.5% -> passes), C nominates Y (4.2% -> passes), D nominates Z (0.7% -> fails)
 //   payout vote A->X, D->X, B->Y, C->Y        Y 6.3% beats X 2.1%
@@ -31,6 +34,9 @@ const PEOPLE = [
   { name: 'C', share: 4.2, nominate: 'Y', vote: 'Y', alloc: 15 },
   { name: 'D', share: 0.7, nominate: 'Z', vote: 'X', alloc: 0 },
 ];
+const TARGET = Number(opt('target', 0));       // snapshot block of the interval with nominations
+const intervalOfTip = tip => Math.floor(tip / params.intervalLength) + 1;
+const targetSnap = tip => TARGET || snapshotBlock(params, intervalOfTip(tip) + 1);
 const PAY = { X: opt('x', '1'), Y: opt('y', '2'), Z: opt('z', '0.5') };   // ZP each nominee asks from the CGP fund
 
 const issued = snapshot => 1n + 50n * 100000000n * BigInt(snapshot - 1);       // Chain.fs genesisTotal + reward * blocks (testnet)
@@ -45,8 +51,8 @@ const recipients = m => ({ X: encodeAddress(deriveKey(m.account, 0, 21).pkHash, 
 const ballotOf = (m, x) => payoutBallot(recipients(m)[x], [{ asset: ZP, amount: parseZP(PAY[x]) }]);
 
 function plan() {
-  const t = Number(opt('tip', 0)), i = Math.floor((t) / params.intervalLength) + 1, snap = snapshotBlock(params, i), tot = issued(snap), thr = tot * 3n / 100n;
-  say(`interval ${i}: snapshot ${snap}, nominations ${snap + 1}-${snap + params.nomination}, voting ${snap + params.nomination + 1}-${i * params.intervalLength}`);
+  const t = Number(opt('tip', 0)), snap = targetSnap(t), i = intervalOfTip(snap), tot = issued(snap), thr = tot * 3n / 100n;
+  say(`target interval ${i}: snapshot ${snap}, nominations ${snap + 1}-${snap + params.nomination}, voting ${snap + params.nomination + 1}-${i * params.intervalLength}`);
   say(`ZP issued at the snapshot ~ ${formatZP(tot)}, threshold 3% = ${formatZP(thr)}`);
   for (const p of PEOPLE) say(`wallet ${p.name}: ${formatZP(share(snap, p.share))} ZP (${p.share}%)  nominates ${p.nominate}  votes ${p.vote}  allocation ${p.alloc}%`);
   const w = n => PEOPLE.filter(p => p.nominate === n).reduce((s, p) => s + p.share, 0);
@@ -56,8 +62,8 @@ function plan() {
 }
 
 async function fund() {
-  const info = await node.info(), tip = info.blocks, i = Math.floor(tip / params.intervalLength) + 1, snap = snapshotBlock(params, i);
-  if (tip + 3 > snap) throw new Error(`Too late for this interval: the tip is ${tip} and the snapshot is block ${snap}. Wait for the next interval.`);
+  const info = await node.info(), tip = info.blocks, snap = targetSnap(tip);
+  if (tip + 3 > snap) throw new Error(`Too late: the tip is ${tip} and the target snapshot is block ${snap}.`);
   const m = master(); await discover(m, node);
   let people = fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : null;
   if (!people || people.snapshot !== snap) {
@@ -81,11 +87,12 @@ async function fund() {
 
 async function run() {
   const m = master(); const people = JSON.parse(fs.readFileSync(FILE, 'utf8')); const rec = recipients(m);
+  const lastInterval = intervalOfTip(people.snapshot), nomFrom = Number(opt('nominate-from', lastInterval));
   const ws = []; for (const p of PEOPLE) { const w = openWallet({ id: p.name, name: p.name, network: NET, kind: 'mnemonic' }, people.wallets.find(x => x.name === p.name).mnemonic); await discover(w, node); ws.push({ p, w, used: [], done: {} }); }
   for (;;) {
     const tip = (await node.info()).blocks, ph = phaseAt(params, tip + 1);
     say(`block ${tip}, interval ${ph.interval}, phase ${ph.phase}`);
-    if (ph.interval > Math.floor(people.snapshot / params.intervalLength) + 1) { say('this interval is over'); return; }
+    if (ph.interval > lastInterval) { say('the target interval is over'); return; }
     for (const x of ws) {
       const key = ph.interval + ph.phase;
       const go = async (what, command, ballotHex) => {
@@ -97,12 +104,13 @@ async function run() {
           say(`${x.p.name} ${what}: ${SEND ? 'published ' + await publish(node, pr) : 'built (dry run)'}`);
         } catch (e) { say(`${x.p.name} ${what}: ${e.message}`); }
       };
-      if (ph.phase === 'Nomination') await go('nominates ' + x.p.nominate, 'Nomination', ballotOf(m, x.p.nominate));
+      if (ph.phase === 'Nomination' && ph.interval >= nomFrom) await go('nominates ' + x.p.nominate, 'Nomination', ballotOf(m, x.p.nominate));
       if (ph.phase === 'Vote') {
         const cgp = await node.cgp().catch(() => ({})), last = Number.isInteger(cgp.allocation) ? cgp.allocation : 0;
         const L = 100 - last, lo = Math.max(10, Math.floor(L * 85 / 100)), hi = Math.min(100, Math.floor(L * 100 / 85));   // allowed values of 100 - allocation (PROTOCOL.md 7.4)
         const ratio = Math.min(hi, Math.max(lo, 100 - x.p.alloc));
         await go(`allocation ${100 - ratio}%`, 'Allocation', allocationBallot(100 - ratio));
+        if (ph.interval < nomFrom) continue;   // the fund is still empty: only the allocation is voted
         const cands = await node.candidates().catch(() => []);
         const mine = cands.find(c => c.recipient === rec[x.p.vote]);
         if (mine) await go('payout vote ' + x.p.vote, 'Payout', candidateBallot(mine)); else say(`${x.p.name}: nominee ${x.p.vote} is not a candidate (${cands.length} candidates)`);
