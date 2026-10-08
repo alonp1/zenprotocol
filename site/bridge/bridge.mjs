@@ -44,7 +44,7 @@ async function zp(pathname, body) {
 const pkHashHex = addr => Buffer.from(decodeAddress(addr).hash).toString('hex');
 const body = specs => execFileSync(ZO[0], [...ZO.slice(1), 'body', ...specs], { encoding: 'utf8' }).trim();
 async function execute(command, specs, spends) {
-  const r = await zp('/wallet/contract/execute', { address: CONTRACT, command, messageBody: body(specs), options: { sign: SIGN }, spends, password: PW });
+  const r = await zp('/wallet/contract/execute', { address: CONTRACT, command, messageBody: body(specs), options: { sign: SIGN, returnAddress: false }, spends, password: PW });
   if (typeof r !== 'string' || !/^"?[0-9a-f]{64}"?$/.test(r.trim())) throw new Error('execute ' + command + ': ' + JSON.stringify(r).slice(0, 200));
   return r.replace(/"/g, '').trim();
 }

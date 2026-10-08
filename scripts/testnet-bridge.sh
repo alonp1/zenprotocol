@@ -20,6 +20,8 @@ USER_ZP=$(curl -fs "$API/wallet/address" | tr -d '"'); echo "user ZP address $US
 mkdir -p /tmp/bridge && rm -rf /tmp/bridge/*
 EVM=0x1111111111111111111111111111111111111111
 echo "[{\"tx\":\"0xabc\",\"log\":0,\"from\":\"$EVM\",\"amount\":\"25000000\",\"block\":1}]" > /tmp/bridge/evm.json
+BASE=$(bal "$ID"); echo "zUSDC balance before: $BASE (same contract code and key as the instruments scenario, so it may not be zero)"
+WANT=$((BASE + 25000000))
 echo "== start the bridge (mock EVM)"
 BRIDGE_NODE=$API BRIDGE_CONTRACT=$ADDR BRIDGE_ASSET=$ID BRIDGE_PASSWORD=$PW BRIDGE_EVM=mock:/tmp/bridge/evm.json BRIDGE_DATA=/tmp/bridge/data BRIDGE_INTERVAL=5 \
   nohup node site/bridge/bridge.mjs > /tmp/bridge/log.txt 2>&1 &
@@ -28,8 +30,8 @@ echo "== the depositor links a ZP address (deposit waits until then)"
 sleep 8; curl -s http://127.0.0.1:8090/status; echo
 curl -s -X POST -d "{\"evm\":\"$EVM\",\"zp\":\"$USER_ZP\",\"message\":\"Link $EVM to $USER_ZP\",\"signature\":\"mock\"}" http://127.0.0.1:8090/link; echo
 echo "== wait for zUSDC to be issued"
-for i in $(seq 60); do [ "$(bal "$ID")" = "25000000" ] && break; sleep 5; done
+for i in $(seq 60); do [ "$(bal "$ID")" = "$WANT" ] && break; sleep 5; done
 echo "zUSDC balance: $(bal "$ID")"; tail -n 5 /tmp/bridge/log.txt
 curl -s http://127.0.0.1:8090/status; echo
-[ "$(bal "$ID")" = "25000000" ]
+[ "$(bal "$ID")" = "$WANT" ]
 echo "BRIDGE OK: deposit of 25 USDC issued 25,000,000 zUSDC units"
