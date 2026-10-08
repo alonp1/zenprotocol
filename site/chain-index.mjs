@@ -414,8 +414,8 @@ let blockSeconds = null;
   if (a && b && a.number > b.number && a.time > b.time) blockSeconds = Math.round((a.time - b.time) / 1000 / (a.number - b.number)); }
 // ---- community-votes.json: votes on protocol upgrades (Repo contract), by semester and phase -----------------------------------
 // Each semester has a Contestants phase and a Candidates phase. A phase is a window of 1,000 blocks: its Snapshot block is where the
-// weights are measured, its Tally block closes it. Semester n starts 105,000 blocks after semester n-1 (values read off the official explorer).
-const SEM = 105000, PHASE = 1000, CONT0 = 118000, CAND0 = 129000;
+// weights are measured, its Tally block closes it. Windows as shown by the official explorer.
+const PHASE = 1000, SEMESTERS = [{ sem: 1, cont: 117000, cand: 129000 }, { sem: 2, cont: 223000, cand: 234000 }];   // 1st semester Contestants inferred from a vote at block 117,758
 const issuanceZP = n => 20000000 + 50 * (n - 1);                     // ZP in existence at block n (first 800,000 blocks: 50 ZP per block, Chain.fs getCurrentZPIssuance)
 if (REPO_CONTRACT) {
   const txs = new Map();
@@ -423,10 +423,7 @@ if (REPO_CONTRACT) {
     const t = txs.get(v.tx) || { tx: v.tx, block: v.block, time: v.time, commit: v.commit_id, pks: [] }; txs.set(v.tx, t); t.pks.push(v.pk);
   }
   const phases = new Map(), stray = [];
-  const phaseOf = b => { const k = Math.floor((b - CONT0) / SEM) + 1;
-    for (const sem of [k, k + 1]) for (const [kind, base] of [['contestants', CONT0], ['candidates', CAND0]]) {
-      const snap = base + (sem - 1) * SEM; if (sem >= 1 && b >= snap && b < snap + PHASE) return { sem, kind, snap }; }
-    return null; };
+  const phaseOf = b => { for (const { sem, cont, cand } of SEMESTERS) for (const [kind, snap] of [['contestants', cont], ['candidates', cand]]) if (b >= snap && b < snap + PHASE) return { sem, kind, snap }; return null; };
   for (const t of txs.values()) {
     const ph = phaseOf(t.block); if (!ph) { stray.push(t.block); continue; }
     const key = ph.sem + ph.kind, P = phases.get(key) || { ...ph, seen: new Set(), votes: [] }; phases.set(key, P);
