@@ -119,7 +119,7 @@ Contracts can be activated and executed on the testnet with the node API (`/wall
 
 ## Moving or adding a seed
 
-Edit `testnetSeeds` in `network.json`; every node reads it at start. A seed is a node that stays online with its P2P port (29555) open: `EXTERNAL_IP=<public ip> docker compose -f docker-compose.testnet.yml up -d`. On a fresh server one command does it all (Docker, firewall, image, start): `curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-testnet-seed.sh | bash`; give a second seed the first one with `SEEDS=<first seed>`. The first public seed is planned on `zen.sealinkgps.com` (port 29555) and is not up yet.
+Edit `testnetSeeds` in `network.json`; every node reads it at start. A seed is a node that stays online with its P2P port (29555) open: `EXTERNAL_IP=<public ip> docker compose -f docker-compose.testnet.yml up -d`. On a fresh server one command does it all (Docker, firewall, image, start): `curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-testnet-seed.sh | bash`; give a second seed the first one with `SEEDS=<first seed>`. The first public seed is `91.98.3.17` (port 29555); it moves to a host name when the new domain is ready.
 
 ## Plan
 
