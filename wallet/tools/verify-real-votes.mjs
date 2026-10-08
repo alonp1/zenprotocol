@@ -9,7 +9,7 @@ import { sha3_256 } from '@noble/hashes/sha3.js';
 import { NodeClient } from '../src/node.js';
 import { deserializeTx, serializeTx, txHash, witnessesHash, hex, unhex } from '../src/serialize.js';
 import { verifyDigest } from '../src/tx.js';
-import { CGP_PARAMS, VOTING_CONTRACT, hashBallot, phaseAt } from '../src/cgp.js';
+import { CGP_PARAMS, VOTING_CONTRACT, hashBallot, hashBallotFor, phaseAt } from '../src/cgp.js';
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i < 0 ? d : process.argv[i + 1]; };
 const db = new DatabaseSync(arg('db', '/var/lib/zen-stats/chain-index.sqlite'), { readOnly: true });
@@ -41,9 +41,10 @@ for (const r of rows) {
         else {
           c.notOk++;
           // a wallet signs for the block it expects; a transaction mined later (another phase or interval) is ignored by the tally. Find the block it was signed for.
-          let signedFor = null;
-          for (let d = -400; d <= 400 && signedFor === null; d++) if (verifyDigest(s.v, hashBallot(CGP_PARAMS.main, r.block + d, ballot[1].v), unhex(pk))) signedFor = r.block + d;
-          bad.push(`${r.hash} (block ${r.block}, ${r.command}, phase ${phaseAt(CGP_PARAMS.main, r.block).phase}): signature does not verify for this block; ` + (signedFor === null ? 'no block within 400 matches' : `it was signed for block ${signedFor} (phase ${phaseAt(CGP_PARAMS.main, signedFor).phase}, interval ${phaseAt(CGP_PARAMS.main, signedFor).interval})`));
+          let signedFor = null;      // which interval and phase did the voter sign for?
+          for (let i = 1; i <= 400 && !signedFor; i++) for (const ph of ['Nomination', 'Vote'])
+            if (!signedFor && verifyDigest(s.v, hashBallotFor(i, ph, ballot[1].v), unhex(pk))) signedFor = { interval: i, phase: ph };
+          bad.push(`${r.hash} (block ${r.block}, ${r.command}, phase ${phaseAt(CGP_PARAMS.main, r.block).phase}): signature does not verify for this block; ` + (signedFor ? `it was signed for interval ${signedFor.interval}, ${signedFor.phase} phase (this block is interval ${phaseAt(CGP_PARAMS.main, r.block).interval}, ${phaseAt(CGP_PARAMS.main, r.block).phase})` : 'no interval/phase combination matches: the signed text is different'));
         }
       }
     }

@@ -82,8 +82,9 @@ function cmpAsset(a, b) {
 // --- what a voter signs ---------------------------------------------------------------------------
 const dataHex = d => { const w = new Writer(); Data.write(w, d); return hex(w.out()); };
 export function hashBallot(params, blockNumber, ballotHex) {
-  const interval = getInterval(params, blockNumber);
-  const phase = isNomineePhase(params, blockNumber) ? 'Nomination' : 'Vote';
+  return hashBallotFor(getInterval(params, blockNumber), isNomineePhase(params, blockNumber) ? 'Nomination' : 'Vote', ballotHex);
+}
+export function hashBallotFor(interval, phase, ballotHex) {
   const text = dataHex({ t: 'U32', v: interval }) + dataHex({ t: 'String', v: phase }) + dataHex({ t: 'String', v: ballotHex });
   return sha3_256(new TextEncoder().encode(text));
 }
