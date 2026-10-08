@@ -64,8 +64,14 @@
   .phase div { background: var(--grid); border-radius: 2px; position: relative; }
   .phase div.done { background: var(--series); }
   .phase div.now { background: linear-gradient(90deg, var(--series) var(--p), var(--grid) var(--p)); }
+  .phase div.s0.done { background: var(--faint); } .phase div.s1.done { background: var(--warn); }
+  .phase div.s0.now { background: linear-gradient(90deg, var(--faint) var(--p), var(--grid) var(--p)); }
+  .phase div.s1.now { background: linear-gradient(90deg, var(--warn) var(--p), var(--grid) var(--p)); }
   .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
   .phase-l span { position: absolute; top: 0; white-space: nowrap; }
+  .stage-l { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+  .stage-l .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--grid); }
+  .stage-l .s0 { background: var(--faint); } .stage-l .s1 { background: var(--warn); } .stage-l .s2 { background: var(--series); }
   footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 </style>
 <style>
@@ -129,6 +135,37 @@ const tallyHtml = votes => {
   return '<h3>Allocation vote: weight behind each percentage</h3><div class="scroll"><table><tr><th>CGP share</th><th>Miners share</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share of voted weight</th></tr>' +
     t.rows.map(r => { const sh = t.total ? r.weight / t.total * 100 : 0; return `<tr><td>${r.pct}%</td><td>${100 - r.pct}%</td><td class="r">${r.voters}</td><td class="r">${amt(Math.round(r.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('') + '</table></div>';
 };
+
+// the three stages of an interval: snapshot, nominations, voting. Widths follow the block counts; the one in progress is filled up to the tip.
+const stageBar = (i, tip) => {
+  const segs = [['Until snapshot', i.start, i.snapshot], ['Nominations', i.snapshot, i.nominationEnd], ['Voting', i.nominationEnd, i.end]];
+  const bar = segs.map(([n, a, b]) => {
+    const len = Math.max(1, b - a), p = Math.max(0, Math.min(1, (tip - a) / len));
+    const cls = tip >= b ? 'done' : tip > a ? 'now' : '';
+    return `<div class="${cls} s${segs.findIndex(x => x[0] === n)}" style="flex:${len};--p:${(p * 100).toFixed(1)}%" title="${n}: blocks ${fmt(a)}–${fmt(b)}"></div>`;
+  }).join('');
+  const labels = segs.map(([n, a, b], k) => `<span><i class="sw s${k}"></i><b>${n}</b> blocks ${fmt(a)}–${fmt(b)}</span>`).join('');
+  const cur = tip < i.start ? 'not started' : tip > i.end ? 'finished' : tip <= i.snapshot ? 'before the snapshot (vote weight is the balance at the snapshot block)' : tip <= i.nominationEnd ? 'nominations are open' : 'voting is open';
+  return `<div class="phase">${bar}</div><div class="stage-l">${labels}</div>
+    <div class="note" style="margin-top:6px">${tip >= i.start && tip <= i.end ? `Now: <b>${cur}</b> (block ${fmt(tip)} of ${fmt(i.end)})` : `Stage: ${cur}`}</div>`;
+};
+// how much vote weight stands behind each candidate (nominations and payout votes name a recipient and an amount)
+const candTally = votes => {
+  const m = new Map(); let total = 0;
+  for (const v of votes) if (v.counted && v.ballot && v.ballot.allocation == null && v.weight != null) {
+    const k = ballotText(v.ballot), r = m.get(k) || { k, weight: 0, voters: 0 }; r.weight += v.weight; r.voters++; m.set(k, r); total += v.weight;
+  }
+  const rows = [...m.values()].sort((a, b) => b.weight - a.weight);
+  if (!rows.length) return '';
+  return '<h3>Weight behind each candidate</h3><div class="scroll"><table><tr><th>Candidate</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share of voted weight</th></tr>' +
+    rows.map(r => { const sh = total ? r.weight / total * 100 : 0; return `<tr><td class="addr">${r.k}</td><td class="r">${r.voters}</td><td class="r">${amt(Math.round(r.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('') + '</table></div>';
+};
+const ballotsTable = (list, empty) => list.length ?
+  '<div class="scroll"><table><tr><th>Wallet (voter)</th><th>Voted for</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>' +
+  list.map(v => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}" title="All transactions of this wallet">${esc(v.voter)}</a></td><td>${ballotText(v.ballot)}</td>
+    <td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
+    <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="outside this stage\'s window, or a repeated ballot">not counted</span>'}</td></tr>`).join('') + '</table></div>'
+  : `<div class="note">${empty}</div>`;
 fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
   const ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
@@ -142,13 +179,14 @@ fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => 
       <div><div class="k">Voters · weight</div><div class="v">${i.voters} · ${amt(Math.round(i.weightVoted))} ZP</div></div>
       <div><div class="k">Payout</div><div class="v n">${pay}</div></div></summary>
       <div class="in">
-        <div class="note" style="margin-top:0">Snapshot block ${fmt(i.snapshot)} · nominations to block ${fmt(i.nominationEnd)} · voting to block ${fmt(i.end)}</div>
-        ${tallyHtml(i.votes)}
-        <h3>Ballots (${i.votes.length})</h3>
-        ${i.votes.length ? '<div class="scroll"><table><tr><th>Wallet (voter)</th><th>Type</th><th>Voted for</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>' +
-          i.votes.map(v => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}" title="All transactions of this wallet">${esc(v.voter)}</a></td><td>${esc(v.command)}</td><td>${ballotText(v.ballot)}</td>
-            <td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
-            <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="outside the voting window, or a repeated ballot">not counted</span>'}</td></tr>`).join('') + '</table></div>' : '<div class="note">No ballots.</div>'}
+        ${stageBar(i, d.tip)}
+        <h2 style="margin-top:18px">Stage 1 · Nominations <span class="sub">(${i.votes.filter(v => v.command === 'Nomination').length} ballots)</span></h2>
+        ${candTally(i.votes.filter(v => v.command === 'Nomination'))}
+        ${ballotsTable(i.votes.filter(v => v.command === 'Nomination'), 'No nomination ballots in this interval.')}
+        <h2 style="margin-top:18px">Stage 2 · Voting <span class="sub">(${i.votes.filter(v => v.command !== 'Nomination').length} ballots)</span></h2>
+        ${tallyHtml(i.votes.filter(v => v.command === 'Allocation'))}
+        ${candTally(i.votes.filter(v => v.command === 'Payout'))}
+        ${ballotsTable(i.votes.filter(v => v.command !== 'Nomination'), 'No voting ballots in this interval.')}
         ${i.payouts.length ? '<h3>Payout transactions</h3><div class="scroll"><table><tr><th>Recipient</th><th class="r">Amount</th><th class="r">Block</th><th>Transaction</th></tr>' +
           i.payouts.map(p => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(p.recipient)}" title="${esc(p.recipient)}">${esc(p.recipientName ? p.recipientName + ' · ' + p.recipient : p.recipient)}</a></td><td class="r">${amt(p.amount)} ${p.asset === '00' ? 'ZP' : ''}</td><td class="r">${fmt(p.block)}</td><td class="mono" title="${esc(p.tx)}">${esc(short(p.tx))}</td></tr>`).join('') + '</table></div>' : ''}
       </div></details>`;
