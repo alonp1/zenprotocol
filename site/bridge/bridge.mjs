@@ -114,8 +114,8 @@ async function withdraw(zpTx, evmTo) {
   const paid = t.outputs.filter(o => o[0] === bridgeZp && o[1] === ASSET).reduce((s, o) => s + BigInt(o[2]), 0n);
   if (paid <= 0n) throw new Error('the transaction pays no zUSDC to the bridge address');
   const senders = new Set(t.inputs.map(i => i[0]).filter(Boolean));
-  const owner = Object.entries(links).find(([, l]) => senders.has(l.zp));
-  if (!owner || owner[0] !== evmTo.toLowerCase()) throw new Error('the paying ZP address is not linked to that EVM address');
+  const link = links[evmTo.toLowerCase()];      // one ZP address may be linked to several EVM addresses: check the one asked for
+  if (!link || !senders.has(link.zp)) throw new Error('the paying ZP address is not linked to that EVM address');
   const burn = await destroy(paid);
   const out = await evmSend(evmTo, paid);
   done[key] = { evmTx: out, burn, amount: String(paid), to: evmTo }; save('done.json', done);
