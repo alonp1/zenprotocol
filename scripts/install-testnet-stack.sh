@@ -9,7 +9,9 @@
 #   MINER_THREADS=1     CPU threads the node mines with (the testnet needs a miner; difficulty is low). 0 = do not mine.
 #   SEEDS=...           other testnet seeds to connect to (comma separated)
 #   ORACLE_PROVIDER=mock|frankfurter|coingecko|auto   price source (default auto: currencies from Frankfurter, crypto from CoinGecko; free, no key)
-#   ORACLE_TICKERS=EUR,GBP,CHF,AUD,BTC          what to publish (at most 4 characters each)
+#   ORACLE_TICKERS=...  what to publish (at most 4 characters each; default EUR,GBP,JPY,CHF,AUD,BTC,ETH,SPY,AAPL,MSFT,XAU)
+#   TWELVEDATA_KEY=...  free key from twelvedata.com: the second source for stock closes (SPY, AAPL, MSFT) and gold.
+#                       Without it those tickers are skipped (never published from one source); the rest works without any key.
 #   DIR=...             install folder (default ~/zenprotocol-testnet)
 # Re-running it updates the code and restarts the services; contracts that are already recorded in
 # testnet-stack.env are kept. Nothing here uses real money: the wallet phrase is the public test phrase.
@@ -70,7 +72,10 @@ put MM_DEX "$(get DEX_ADDRESS)"; put MM_ASSET "$(get BRIDGE_ID)"
 [ -n "$(get MM_PRICE)" ] || put MM_PRICE 0.10
 [ -n "$(get ORACLE_PROVIDER)" ] || put ORACLE_PROVIDER "${ORACLE_PROVIDER:-auto}"
 [ "$(get ORACLE_PROVIDER)" = frankfurter ] && echo "$(get ORACLE_TICKERS)" | grep -q BTC && put ORACLE_PROVIDER auto   # frankfurter has no BTC
-[ -n "$(get ORACLE_TICKERS)" ] || put ORACLE_TICKERS "${ORACLE_TICKERS:-EUR,GBP,CHF,AUD,BTC}"
+[ -n "$(get ORACLE_TICKERS)" ] || put ORACLE_TICKERS "${ORACLE_TICKERS:-EUR,GBP,JPY,CHF,AUD,BTC,ETH,SPY,AAPL,MSFT,XAU}"
+[ -n "$(get ORACLE_SOURCES_FILE)" ] || put ORACLE_SOURCES_FILE /r/site/oracle-sources.json   # several sources must agree (docs/ORACLE.md)
+[ -z "${TWELVEDATA_KEY:-}" ] || put TWELVEDATA_KEY "$TWELVEDATA_KEY"
+[ -n "$(get TWELVEDATA_KEY)" ] || echo "NOTE: TWELVEDATA_KEY is not set: SPY, AAPL, MSFT and XAU are skipped until it is (free key at twelvedata.com; then re-run with TWELVEDATA_KEY=...)"
 [ -n "$(get ORACLE_QUOTE)" ] || put ORACLE_QUOTE USD
 [ -n "$(get BRIDGE_EVM)" ] || put BRIDGE_EVM "mock:/data/evm.json"
 chmod 600 testnet-stack.env
@@ -82,6 +87,8 @@ $D compose -f docker-compose.testnet.yml -f docker-compose.testnet-stack.yml up 
 echo "== 6/6 Check"
 sleep 20
 curl -s http://127.0.0.1:8085/health; echo
+echo "-- every oracle source, asked once (a FAIL line names the source that must be replaced in site/oracle-sources.json)"
+$D run --rm --network host --env-file testnet-stack.env -v "$DIR:/r:ro" zen-tools dotnet /app/zen-oracle.dll probe || true
 curl -s http://127.0.0.1:8090/status; echo
 curl -s http://127.0.0.1:11581/explorer/api/dex/orders | head -c 200; echo
 cat <<MSG

@@ -13,10 +13,12 @@ The aim: a fresh Ubuntu 24.04 x86 server (8 GB RAM) becomes a working testnet no
 | index catches up | `docker compose ... logs --tail 3 index` | `block N of M (synced)`, trails the node by ~10 blocks |
 | Dex | `curl -s 127.0.0.1:11581/explorer/api/dex/orders` | `dex` is the contract id; orders appear ~10 blocks after a Make |
 | bridge | `curl -s 127.0.0.1:8090/status` | `contract` and `asset` set, `evm: mock` |
+| oracle sources | `docker run --rm --network host --env-file testnet-stack.env -v "$PWD:/r:ro" zen-tools dotnet /app/zen-oracle.dll probe` | every ticker `ok` with 2-3 sources listed (stocks need `TWELVEDATA_KEY`) |
 | market maker | `docker compose ... logs --tail 5 marketmaker` | `make ask` / `make bid` once, then quiet |
-| env | `grep -E '^(MM_|DEX_|BRIDGE_|ORACLE_)' testnet-stack.env` | MM_DEX, MM_ASSET, MM_PRICE all set |
+| env | `grep -E '^(MM_|DEX_|BRIDGE_|ORACLE_)' testnet-stack.env` | MM_DEX, MM_ASSET, MM_PRICE, ORACLE_SOURCES_FILE all set (the key is in `TWELVEDATA_KEY`, never print it) |
 
 ## Known manual steps that the script must absorb (check them in the rehearsal)
+- Oracle sources: the installer now sets `ORACLE_SOURCES_FILE=/r/site/oracle-sources.json` and the ticker list and takes `TWELVEDATA_KEY` from its environment (`TWELVEDATA_KEY=... bash install-testnet-stack.sh`). Free sources change: the install runs `probe` at the end, a `FAIL` line names what to replace. Stooq was dropped (JavaScript check); WTI waits for a second source.
 - `MM_DEX` / `MM_ASSET` / `MM_PRICE` were empty after the first update run: the installer must write them whenever they are missing.
 - The index database changed shape (Dex table): a fresh install is fine; an update needs the old `index.sqlite` removed (`docker run --rm -v <project>_stack-data:/d alpine rm -f /d/index.sqlite*`). A schema check at start would remove the need.
 - The bridge reads its mock deposits from `/data/evm.json` **inside the bridge-data volume**, not from the host folder.
