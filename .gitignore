@@ -343,3 +343,4 @@ package/*.tgz
 src/Consensus.Features.Tests/*.cs
 src/Consensus.Features.Tests/test-contracts/*
 zen-data/
+wallet/tools/sim-wallets.json
