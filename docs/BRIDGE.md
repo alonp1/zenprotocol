@@ -37,3 +37,10 @@ The EVM test key needs a little test ETH for withdrawals. The default USDC addre
 - Written but not yet tested end to end: withdrawal (needs the explorer index to read the paying transaction) and the real EVM connection.
 - Custody: one key holds the reserves and the issuing key. The plan is to move both to a community vote (multi-signature) before any real use. Real money, regulation and an independent audit come before that.
 - Needed next: a deposit/withdraw page on the site, proof-of-reserves page (EVM balance versus zUSDC outstanding), pause switch, limits per user.
+
+## Trying it on Base Sepolia (test network, test keys only)
+1. Make two keys: `node site/bridge/evm-tools.mjs newkey` twice (the bridge's key and a depositor's key).
+2. Faucets (free): the depositor needs test USDC (faucet.circle.com, network Base Sepolia) and a little test ETH; the bridge key needs a little test ETH for the gas of withdrawals (any Base Sepolia ETH faucet).
+3. In `testnet-stack.env` set `BRIDGE_EVM=https://sepolia.base.org` and `BRIDGE_EVM_KEY=<bridge private key>`, then recreate the `bridge` service. `/bridge/status` then shows `bridgeEvm` (the address to send USDC to).
+4. Link: `node site/bridge/evm-tools.mjs link <depositor key> <your ZP address>` and POST the printed JSON to `/link`.
+5. Send USDC: `node site/bridge/evm-tools.mjs send <depositor key> <bridge address> 5`. After the confirmations the bridge issues the zUSDC to the linked ZP address.
