@@ -18,9 +18,9 @@ module B = Zen.Bitcoin
 module C = Zen.Cost
 
 // the 32 bytes of two hashes are equal (pure, unrolled: no recursion in a contract)
-val hashEq: hash -> hash -> bool `cost` 254
+val hashEq: hash -> hash -> bool `cost` 256
 let hashEq a b =
-    incRet 254 (
+    ret (
     A.item 0 a = A.item 0 b &&
     A.item 1 a = A.item 1 b &&
     A.item 2 a = A.item 2 b &&
@@ -89,6 +89,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     RT.autoFailw "header1 and header2 are required (160 hex characters each)"
 
 let cf _ _ _ _ _ wallet _ =
-    (4 + 64 + 2 + 120 + (4 + 64 + 2 + 120 + (500 + 500 + 4 + 4 + 4 + 700 + 700 + 254 + 3)))
+    (4 + 64 + 2 + 120 + (4 + 64 + 2 + 120 + (500 + 500 + 4 + 4 + 4 + 700 + 700 + 256 + 3))) + 62
     |> cast nat
     |> C.ret
