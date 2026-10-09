@@ -181,17 +181,21 @@ const ballotsTable = (list, empty) => list.length ?
 fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
   const cur = d.intervals[0];
-  if (cur) {
-    $('ivlen').textContent = fmt(cur.end - cur.start + 1);
-    const last = cur.allocationInForce;
-    if (last != null) {   // PROTOCOL.md 7.4: the miners' share (100 - allocation) may move by at most 15% of itself per interval, never below 10%
-      const L = 100 - last, lo = Math.max(10, Math.floor(L * 85 / 100)), hi = Math.min(100, Math.floor(L * 100 / 85));
-      const a = 100 - hi, b = 100 - lo;
-      $('range').innerHTML = `<div class="note" style="margin-top:0;margin-bottom:12px"><b>What can be voted for in the allocation vote</b> (interval ${cur.communityInterval >= 1 ? cur.communityInterval : cur.interval}, blocks ${fmt(cur.start)}–${fmt(cur.end)}):<br>
-        Now in force: CGP ${last}% · miners ${100 - last}%.<br>
-        Allowed for the next interval: CGP <b>${a}%–${b}%</b> (miners <b>${100 - b}%–${100 - a}%</b>) — ${a === b ? 'a single value' : 'any whole percent in that range'}. A ballot outside the range is rejected.</div>`;
-    }
-  }
+  if (cur) $('ivlen').textContent = fmt(cur.end - cur.start + 1);
+  // What was decided and what may be voted next: the node's own CGP state (live), else the index
+  fetch('/node/blockchain/cgp', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null).then(live => {
+    const last = live && Number.isInteger(live.allocation) ? live.allocation : cur && cur.allocationInForce;
+    if (last == null || last === undefined || !cur) return;
+    const len = cur.end - cur.start + 1, maturity = len === 100 ? 10 : 100;
+    const ivn = live && live.interval ? live.interval : cur.interval, ivStart = (ivn - 1) * len + 1;
+    const L = 100 - last, lo = Math.max(10, Math.floor(L * 85 / 100)), hi = Math.min(100, Math.floor(L * 100 / 85));   // PROTOCOL.md 7.4: the miners' share may move by at most 15% of itself per interval, never below 10%
+    const a = 100 - hi, b = 100 - lo;
+    const p = live && live.payout;
+    const win = p && p.recipient ? `Winner of the payout vote: <span class="mono">${esc(p.recipient)}</span> gets ${(p.spendlist || []).map(x => (x.asset === '00' ? amt(Number(x.amount) / 1e8) + ' ZP' : esc(x.amount) + ' ' + esc(short(x.asset)))).join(', ')} from the CGP fund, paid at block ${fmt(ivStart + maturity - 1)} of interval ${ivn}.` : 'No payout winner for this interval (the CGP fund was empty or nobody was nominated).';
+    $('range').innerHTML = `<div class="note" style="margin-top:0;margin-bottom:12px"><b>Decided by the last vote, in force in interval ${ivn}</b> (blocks ${fmt(ivStart)}–${fmt(ivStart + len - 1)}):<br>
+      Block reward split: CGP <b>${last}%</b> · miners <b>${100 - last}%</b>.<br>${win}<br><br>
+      <b>What can be voted for in this interval's allocation vote:</b> CGP <b>${a}%–${b}%</b> (miners <b>${100 - b}%–${100 - a}%</b>) — ${a === b ? 'a single value' : 'any whole percent in that range'}. A ballot outside the range is not accepted.</div>`;
+  });
   let ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
   if (!ivs.length) ivs = d.intervals.slice(0, 1);   // a chain with no community numbering (testnet): show the current interval
   $('list').innerHTML = ivs.map((i, n) => {
