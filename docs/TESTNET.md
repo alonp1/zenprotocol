@@ -31,7 +31,9 @@ Defined in `src/Consensus/Chain.fs` (`testParameters`):
 | CGP interval | 100 blocks (10,000 on mainnet) |
 | Seeds | `testnetSeeds` in `network.json`, read at every start |
 
-Not yet on the testnet: the CGP and voting contracts are not activated in the genesis block, so CGP voting cannot be tried there yet. The ids in the parameters are the old testnet's. Activating the contracts is the next step (see the plan at the end).
+The CGP and voting contracts are activated by `scripts/testnet-cgp-contracts.sh`, and a whole CGP cycle (allocation vote, nominations, payout vote, payout) has been run on the testnet.
+
+**The CGP payout needs a transaction from you.** In the block that pays the winner (block number % interval = coinbase maturity: the 10th block of an interval on the testnet, the 100th on mainnet) the block must contain a transaction that executes the CGP contract (`Payout`). The node does not create it: the block template logs `You should create your own contract execution`, and every mined block is rejected with `No payout Tx` until one is sent, so the chain waits. Send it with `bash scripts/cgp-payout.sh` (it calls `POST /wallet/contract/cgp` of a node wallet) shortly before the payout block, on a node that mines or on any node whose wallet has a little ZP.
 
 ## Run a testnet node
 
