@@ -137,6 +137,16 @@ test('contract page: executions of one contract', async () => {
   w.prepare('INSERT INTO extensions VALUES (?,?,?,?,?,?)').run('f'.repeat(64), 1, 50, 1700000000000, cid, '40000000'); w.close();
   const e = (await get('/contract/' + cid)).body.extensions;
   assert.equal(e.count, 1); assert.equal(e.totalKalapas, '40000000'); assert.equal(e.lastBlock, 50); assert.equal(e.recent[0].kalapas, '40000000'); assert.equal(e.recent[0].hash, 'f'.repeat(64));
+  // what the contract holds: unspent outputs locked to its address, summed per asset
+  const { encodeAddress } = await import('../../wallet/src/keys.js');
+  const caddr = encodeAddress(Uint8Array.from(Buffer.from(cid, 'hex')), 'main', true);
+  const w2 = new DatabaseSync(DB);
+  for (const [o, amount] of [['aa:0', '100000000'], ['aa:1', '250000000']]) w2.prepare('INSERT OR REPLACE INTO utxo VALUES (?,?,?,?)').run(o, '00', caddr, amount);
+  w2.prepare('INSERT OR REPLACE INTO utxo VALUES (?,?,?,?)').run('aa:2', cid + 'ff'.repeat(32), caddr, '7'); w2.close();
+  const hd = (await get('/contract/' + cid)).body.holds;
+  assert.equal(hd.address, caddr); assert.equal(hd.total, 2);
+  assert.deepEqual(hd.assets[0], { asset: '00', amount: '350000000', outputs: 2 }); assert.equal(hd.assets[1].amount, '7');
+  assert.deepEqual((await get('/contract/' + '1'.repeat(8) + 'cd'.repeat(32))).body.holds.assets, []);
   assert.equal((await get('/contract/zz')).status, 404);
 });
 

@@ -121,6 +121,14 @@ const INFO = {
   CGP: ['CGP', 'Holds the CGP fund: the share of every block reward that the allocation vote sets aside. In the payout block it pays the winner of the payout vote.'],
   VCGP: ['CGP voting contract', 'Records the community ballots of each CGP interval: the allocation vote, nominations and the payout vote. Voting power is the ZP held at the snapshot block.'],
   'DEX-V2': ['ZenDex v2', 'Order-book exchange contract: makers lock an asset in an order, takers fill or cancel it.'],
+  FPC: ['Fixed Payout Contract', 'Bets on a value that an oracle publishes (for example a price on a date). Issue locks collateral and creates a Bull and a Bear token; after the oracle attests the value, Redeem pays the collateral to the winning side.'],
+};
+// what each command of the well-known contracts does (the page shows what the chain has: a command is just a text sent to the contract)
+const CMD = {
+  CGP: { Payout: 'Pays the fund to the winner of the payout vote (created by the miner in the payout block)' },
+  VCGP: { Allocation: 'A ballot for the share of block rewards that goes to the fund', Nomination: 'A proposal: who gets paid and how much', Payout: 'A ballot for one of the nominations' },
+  'DEX-V2': { Make: 'Place an order: lock an asset and name the price', Take: 'Fill an order, fully or partly', Cancel: 'Withdraw your own order' },
+  FPC: { Issue: 'Lock collateral and receive the Bull and Bear tokens of an event', Redeem: 'After the oracle attests the value, turn the winning token into collateral', Cancel: 'Take the collateral back by returning matching tokens' },
 };
 const params = new URLSearchParams(location.search), id = (params.get('id') || '').trim().toLowerCase();
 const row = (k, v) => `<div>${k}</div><div>${v}</div>`;
@@ -129,7 +137,8 @@ const copy = t => `<button class="copy" data-copy="${esc(t)}" type="button">Copy
 async function main() {
   if (!/^[0-9a-f]{72}$/.test(id)) { $('lead').innerHTML = 'No contract chosen. Pick one from the table on <a href="/stats.html">Stats</a>.'; return; }
   const get = (u, ms = 20000) => fetch(u, { cache: 'no-cache', signal: AbortSignal.timeout(ms) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  const [stats, ex, active] = await Promise.all([get('/stats.json').catch(() => null), get('/explorer/api/contract/' + id).catch(() => null), get('/node/contract/active', 60000).catch(() => null)]);
+  const [stats, ex, active, assetsDoc] = await Promise.all([get('/stats.json').catch(() => null), get('/explorer/api/contract/' + id).catch(() => null), get('/node/contract/active', 60000).catch(() => null), get('/assets.json').catch(() => null)]);
+  const assetList = assetsDoc?.assets || [], assetInfo = new Map(assetList.map(x => [x.asset, x]));
   const k = (stats?.contracts || []).find(c => c.id === id);
   const a = Array.isArray(active) ? active.find(c => c.contractId === id) : null;
   const expire = k ? k.expire : a ? Number(a.expire) : null;
@@ -165,8 +174,18 @@ async function main() {
     ${row('Code size', a?.code ? fmt(a.code.length) + ' characters' : '–')}
     ${row('First call', ex?.firstBlock ? `block ${fmt(ex.firstBlock)} · ${dt(ex.firstTime)}` : '–')}
   </div></section>`;
-  if (ex?.commands?.length) h += `<section><h2>Commands</h2><div class="scroll"><table><tr><th>Command</th><th class="r">Calls</th><th class="r">Last block</th><th>Last time</th></tr>${ex.commands.map(c =>
-    `<tr><td class="mono">${esc(c.command ? (c.command.length > 44 ? short(c.command) : c.command) : '(none)')}</td><td class="r">${fmt(c.count)}</td><td class="r">${fmt(c.lastBlock)}</td><td>${dt(c.lastTime)}</td></tr>`).join('')}</table></div></section>`;
+  const assetName = a => a === '00' ? 'ZP' : assetInfo.get(a)?.name || short(a);
+  const assetCell = a => `<a href="/assets.html?q=${esc(a === '00' ? 'ZP' : a)}" title="${esc(a)}">${esc(assetName(a))}</a>${a !== '00' ? ` <span class="muted mono">${esc(short(a))}</span>` : ''}`;
+  if (ex?.holds) h += `<section><h2>What it holds now</h2>${ex.holds.assets.length ? `<div class="scroll"><table><tr><th>Asset</th><th class="r">Amount</th><th class="r">Outputs</th></tr>${ex.holds.assets.map(r =>
+    `<tr><td>${assetCell(r.asset)}</td><td class="r">${zpf(r.amount)}</td><td class="r">${fmt(r.outputs)}</td></tr>`).join('')}</table></div>${ex.holds.total > ex.holds.assets.length ? `<div class="note">The ${ex.holds.assets.length} largest of ${fmt(ex.holds.total)} assets.</div>` : ''}` : '<p class="note">Nothing: no unspent output is locked to this contract.</p>'}
+    <div class="note">Unspent outputs locked to the contract address (collateral, orders, the fund). Amounts with 8 decimals.</div></section>`;
+  const issued = assetList.filter(x => x.contract === id);
+  if (issued.length) h += `<section><h2>Assets issued through it (${fmt(issued.length)})</h2><div class="scroll"><table><tr><th>Asset</th><th class="r">Outstanding</th><th class="r">Issued</th><th class="r">Destroyed</th><th class="r">Holders</th><th class="r">Transactions</th></tr>${issued.slice(0, 50).map(x =>
+    `<tr><td>${assetCell(x.asset)}</td><td class="r">${fmt(x.outstanding)}</td><td class="r">${fmt(x.minted)}</td><td class="r">${fmt(x.destroyed)}</td><td class="r">${fmt(x.holders)}</td><td class="r">${fmt(x.txs)}</td></tr>`).join('')}</table></div>
+    ${issued.length > 50 ? `<div class="note">The 50 most used of ${fmt(issued.length)}. All of them are on the <a href="/assets.html">Assets</a> page.</div>` : '<div class="note">Tokens whose minting was done by this contract. Outstanding = issued minus destroyed, as held in unspent outputs.</div>'}</section>`;
+  const cmdInfo = CMD[k?.name] || {};
+  if (ex?.commands?.length) h += `<section><h2>Commands</h2><div class="scroll"><table><tr><th>Command</th>${Object.keys(cmdInfo).length ? '<th>What it does</th>' : ''}<th class="r">Calls</th><th class="r">Last block</th><th>Last time</th></tr>${ex.commands.map(c =>
+    `<tr><td class="mono">${esc(c.command ? (c.command.length > 44 ? short(c.command) : c.command) : '(none)')}</td>${Object.keys(cmdInfo).length ? `<td style="white-space:normal;min-width:15em">${esc(cmdInfo[c.command] || '')}</td>` : ''}<td class="r">${fmt(c.count)}</td><td class="r">${fmt(c.lastBlock)}</td><td>${dt(c.lastTime)}</td></tr>`).join('')}</table></div></section>`;
   if (xt?.recent?.length) h += `<section><h2>Extensions</h2><div class="scroll"><table><tr><th>Time</th><th class="r">Block</th><th class="r">Paid (ZP)</th><th class="r">+Blocks</th></tr>${xt.recent.map(r =>
     `<tr><td><a href="/explorer.html?tx=${esc(r.hash)}" title="Open the transaction">${dt(r.time)}</a></td><td class="r"><a href="/explorer.html?block=${r.block}">${fmt(r.block)}</a></td><td class="r">${zpf(r.kalapas)}</td><td class="r">${blocksOf(r.kalapas) == null ? '–' : fmt(blocksOf(r.kalapas))}</td></tr>`).join('')}</table></div>
     <div class="note">Anyone can extend a contract by paying ZP to it: one block costs 1 kalapa per character of its code.</div></section>`;

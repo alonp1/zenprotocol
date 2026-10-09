@@ -116,6 +116,7 @@ function draw() {
       <td class="mono" title="${esc(a.contractAddress || '')}">${a.contractAddress ? esc(a.contractName || short(a.contractAddress)) : '–'}</td>
       <td class="r">${amt(a.outstanding)}</td><td class="r">${fmt(a.holders)}</td><td class="r">${fmt(a.txs)}</td><td class="r">${fmt(a.firstBlock)}</td></tr>`).join('') + '</table>';
 }
+{ const qp = new URLSearchParams(location.search).get('q'); if (qp) $('q').value = qp; }   // /assets.html?q=<name or asset id> opens the list filtered
 fetch('/assets.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
   data = d;
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip) + ' · ' + d.assets.length + ' assets';

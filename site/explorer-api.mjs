@@ -4,7 +4,7 @@
 //   GET /explorer/api/blocks?before=<n>&take=<1..100>   latest blocks (summary rows)
 //   GET /explorer/api/block/<number|hash>               block summary + its transactions
 //   GET /explorer/api/tx/<hash>                         one transaction
-//   GET /explorer/api/contract/<contract id>           executions of a contract: count, first/last, per command, the latest 20
+//   GET /explorer/api/contract/<contract id>           a contract: calls (count, first/last, per command, the latest 20), extensions and what it holds now
 //   GET /explorer/api/search/<text>                     where a number, hash or address leads
 //   GET /explorer/api/address/<address>?page=&take=&from=&to=&minZp=&maxZp=
 //                                                       live balances (node address index) + the address's transactions
@@ -210,7 +210,17 @@ async function handle(p, query) {
         recent: db.prepare('SELECT tx, block, time, amount FROM extensions WHERE contract = ? ORDER BY block DESC, idx DESC LIMIT 10').all(id).map(r => ({ hash: r.tx, block: r.block, time: r.time, kalapas: r.amount })),
         complete: q.mig2.get()?.v === 'done' };
     } catch { /* no extensions table yet */ }
-    return { tip: t, indexedTo: indexed, contract: id, executions: sum.n, extensions, firstBlock: sum.fb, firstTime: timeOf(sum.fb), lastBlock: sum.lb, lastTime: timeOf(sum.lb), commands, recent };
+    // what the contract holds now: the unspent outputs locked to its address, per asset
+    let holds = null;
+    try {
+      const address = encodeAddress(Uint8Array.from(Buffer.from(id, 'hex')), arg('net', process.env.ZEN_NET || 'main'), true), by = new Map();
+      for (const r of db.prepare('SELECT asset, amount FROM utxo WHERE address = ?').all(address)) {
+        const e = by.get(r.asset) || by.set(r.asset, { asset: r.asset, amount: 0n, outputs: 0 }).get(r.asset);
+        e.amount += BigInt(r.amount); e.outputs++;
+      }
+      holds = { address, assets: [...by.values()].sort((x, y) => (x.asset !== '00') - (y.asset !== '00') || (y.amount > x.amount ? 1 : -1)).slice(0, 50).map(e => ({ asset: e.asset, amount: String(e.amount), outputs: e.outputs })), total: by.size };
+    } catch { /* no utxo table yet */ }
+    return { tip: t, indexedTo: indexed, contract: id, executions: sum.n, extensions, holds, firstBlock: sum.fb, firstTime: timeOf(sum.fb), lastBlock: sum.lb, lastTime: timeOf(sum.lb), commands, recent };
   }
   if ((m = p.match(/^\/address\/([0-9a-z]{10,120})$/))) {
     if (!ready()) throw Object.assign(new Error('the address index is being built'), { status: 503 });
