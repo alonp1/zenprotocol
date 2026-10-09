@@ -18,7 +18,8 @@ module B = Zen.Bitcoin
 module C = Zen.Cost
 
 // the 32 bytes of two hashes are equal (pure, unrolled: no recursion in a contract)
-let hashEq (a:hash) (b:hash) : bool =
+val hashEq: hash -> hash -> bool `cost` 254
+let hashEq a b =
     A.item 0 a = A.item 0 b &&
     A.item 1 a = A.item 1 b &&
     A.item 2 a = A.item 2 b &&
@@ -78,7 +79,8 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     let! nbits2 = B.nbits h2 in
     let! pow1 = B.checkProofOfWork hash1 nbits1 in
     let! pow2 = B.checkProofOfWork hash2 nbits2 in
-    if hashEq hash1 parent2 && pow1 && pow2 then
+    let! same = hashEq hash1 parent2 in
+    if same && pow1 && pow2 then
       CR.ofTxSkel txSkeleton
     else
       RT.autoFailw "the headers are not a valid chain of two Bitcoin blocks"
@@ -86,6 +88,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     RT.autoFailw "header1 and header2 are required (160 hex characters each)"
 
 let cf _ _ _ _ _ wallet _ =
-    (4 + 64 + 2 + 120 + (4 + 64 + 2 + 120 + (500 + 500 + 4 + 4 + 4 + 700 + 700 + 3)))
+    (4 + 64 + 2 + 120 + (4 + 64 + 2 + 120 + (500 + 500 + 4 + 4 + 4 + 700 + 700 + 254 + 3)))
     |> cast nat
     |> C.ret
