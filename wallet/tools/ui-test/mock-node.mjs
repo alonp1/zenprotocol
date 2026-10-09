@@ -11,7 +11,7 @@ import { Reader, VarInt, Output, Outpoint, Data, serializeTx, deserializeTx, txH
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i < 0 ? d : process.argv[i + 1]; };
 const NET = arg('net', 'test'), PORT = Number(arg('port', 8082));
-const st = { tip: Number(arg('tip', 95)), alloc: Number(arg('alloc', 0)), zp: BigInt(arg('zp', '5000')) * 100000000n, cands: true, published: [] };
+const st = { tip: Number(arg('tip', 95)), alloc: Number(arg('alloc', 0)), zp: BigInt(arg('zp', '5000')) * 100000000n, cands: true, published: [], asked: {} };
 const VOTING = VOTING_CONTRACT[NET];
 const w = openWallet({ id: 'm', name: 'm', network: NET, kind: 'mnemonic' }, Array(23).fill('abandon').concat('art').join(' '));
 const key0 = deriveKey(w.account, 0, 0), addr0 = encodeAddress(key0.pkHash, NET);
@@ -26,7 +26,7 @@ http.createServer((req, res) => {
     try {
       if (req.method === 'OPTIONS') return send(res, 204, '');
       switch (u.pathname) {
-        case '/__set': for (const [k, v] of u.searchParams) { if (k === 'tip') st.tip = +v; if (k === 'alloc') st.alloc = +v; if (k === 'zp') st.zp = BigInt(v) * 100000000n; if (k === 'cands') st.cands = v === '1'; if (k === 'reset') st.published = []; } return send(res, 200, { tip: st.tip, alloc: st.alloc });
+        case '/__set': for (const [k, v] of u.searchParams) { if (k === 'tip') st.tip = +v; if (k === 'alloc') st.alloc = +v; if (k === 'zp') st.zp = BigInt(v) * 100000000n; if (k === 'cands') st.cands = v === '1'; if (k === 'reset') { st.published = []; st.asked = {}; } } return send(res, 200, { tip: st.tip, alloc: st.alloc });
         case '/__addr': return send(res, 200, { wallet: addr0, other });
         case '/__published': return send(res, 200, st.published);
         case '/blockchain/info': return send(res, 200, { chain: NET === 'main' ? 'main' : 'testnet', blocks: st.tip, headers: st.tip, difficulty: 0.1, medianTime: Date.now() });
@@ -47,6 +47,12 @@ http.createServer((req, res) => {
           const tx = { version: 0, inputs, outputs, contract: null, witnesses: [{ type: 'Contract', contractId: { version: 0, hash: unhex(VOTING.slice(8)) }, command: body.command,
             messageBody: msg, stateCommitment: { type: 'NotCommitted' }, beginInputs: inputs.length, beginOutputs: outputs.length, inputsLength: 0, outputsLength: 0, signature: null, cost: 5n }] };
           return send(res, 200, hex(serializeTx(tx)), 'text/plain');
+        }
+        case '/blockchain/transaction': {   // a published transaction: first asked it is in the mempool, then in a block
+          const h = u.searchParams.get('hash'), known = st.published.find(x => hex(txHash(deserializeTx(unhex(x)))) === h);
+          if (!known) return send(res, 404, 'not found', 'text/plain');
+          st.asked[h] = (st.asked[h] || 0) + 1;
+          return send(res, 200, st.asked[h] <= 1 ? { hash: h, confirmations: 0 } : { hash: h, blockNumber: st.tip + 1, confirmations: 1 });
         }
         case '/blockchain/publishtransaction': { st.published.push(body.tx); return send(res, 200, hex(txHash(deserializeTx(unhex(body.tx))))); }
         default: return send(res, 404, 'not found', 'text/plain');

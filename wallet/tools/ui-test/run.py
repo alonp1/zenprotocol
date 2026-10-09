@@ -50,16 +50,26 @@ with sync_playwright() as p:
     LAST = 0 if NET == 'test' else 90
     reload_vote(VOTE_TIP, LAST)
     pg.screenshot(path=f'{OUT}/3-vote-phase.png', full_page=True)
-    # out of range, then in range
-    pg.fill('input[name=pct]', '40'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_timeout(600)
-    t = pg.inner_text('body'); ok('Confirm allocation vote' not in t, 'a value out of range (40 with 0% in force) does not open the review'); print('     message:', re.findall(r'[^\n]*(?:range|between|valid)[^\n]*', t)[-1:] )
+    # choosing: chips, preview, keep/lowest/highest
+    chips = pg.query_selector_all('button[data-act=alloc-pick]'); ok(len(chips) >= 2, f'{len(chips)} value chips ({[c.inner_text().replace(chr(10), " ") for c in chips]})')
+    chips[-1].click(); v = pg.input_value('input[name=pct]'); ok(v == chips[-1].get_attribute('data-v'), f'clicking the last chip sets the field ({v})')
+    ok('CGP ' + v + '%' in pg.inner_text('#alloc-v') and 'miners' in pg.inner_text('#alloc-m'), 'the preview shows the CGP and miners share of the choice')
+    pg.screenshot(path=f'{OUT}/3b-chosen.png', full_page=True)
+    pg.fill('input[name=pct]', '77'); ok(pg.is_disabled('#alloc-go'), 'a value outside the range disables Review and the note says so: ' + pg.inner_text('#alloc-note'))
     pg.screenshot(path=f'{OUT}/4-alloc-out-of-range.png', full_page=True)
+    # in range
     pg.fill('input[name=pct]', '10' if NET == 'test' else '89'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_selector('.modal'); pg.wait_for_timeout(400)
     pg.screenshot(path=f'{OUT}/5-alloc-review.png')
     ok('Confirm allocation vote' in pg.inner_text('.modal'), 'in-range value opens the review')
     pg.click('button[data-act=confirm-vote]'); pg.wait_for_selector('.modal h2.ok'); pg.screenshot(path=f'{OUT}/6-alloc-sent.png')
     pub = published(); ok(len(pub) == 1, f'one transaction published ({len(pub)})')
+    ok('Broadcast successfully' in pg.inner_text('.modal'), 'sent modal says "Broadcast successfully"')
     pg.click('button[data-act=close]')
+    pg.wait_for_timeout(6500)
+    t = pg.inner_text('body'); ok('Your ballots' in t and 'waiting for a block' in t, 'Your ballots lists the vote, accepted and waiting for a block')
+    pg.screenshot(path=f'{OUT}/6b-your-ballots.png', full_page=True)
+    pg.click('nav.nav button[data-go=home]'); pg.wait_for_timeout(500); pg.click('nav.nav button[data-go=vote]'); pg.wait_for_timeout(1500)
+    ok('In a block' in pg.inner_text('body'), 'after the node has it in a block the status says so')
     # candidates and payout vote
     mock(tip=VOTE_TIP)
     pg.click('button[data-act=load-cands]'); pg.wait_for_timeout(600); pg.screenshot(path=f'{OUT}/7-candidates.png', full_page=True)
@@ -71,10 +81,19 @@ with sync_playwright() as p:
         pg.screenshot(path=f'{OUT}/8-payout-review.png')
     # nomination phase
     reload_vote(91 if NET == 'test' else 1059100, 0 if NET == 'test' else 90)   # mainnet: nomination phase
+    pg.fill('input[name=to]', ADDR['other'][:-3] + 'xyz'); ok('✗' in pg.inner_text('#to-note'), 'a broken address is flagged: ' + pg.inner_text('#to-note'))
+    pg.fill('input[name=to]', ADDR['other'].replace('tzn', 'zen') if NET == 'test' else ADDR['other'].replace('zen', 'tzn')); ok('✗' in pg.inner_text('#to-note'), 'an address of the other network is flagged: ' + pg.inner_text('#to-note'))
+    pg.fill('input[name=to]', '  ' + ADDR['other'] + ' \n'); ok('✓ Valid' in pg.inner_text('#to-note'), 'a valid address (with stray spaces) is accepted: ' + pg.inner_text('#to-note'))
+    pg.fill('input[name=to]', '')
+    ctx.grant_permissions(['clipboard-read', 'clipboard-write']); pg.evaluate("t => navigator.clipboard.writeText(t)", ADDR['other'])
+    pg.click('button[data-act=paste-to]'); pg.wait_for_timeout(300); ok(pg.input_value('input[name=to]') == ADDR['other'] and '✓' in pg.inner_text('#to-note'), 'Paste fills the field and validates it')
+    pg.fill('input[name=to]', ''); pg.click('button[data-act=use-addr]'); ok(pg.input_value('input[name=to]').startswith(('tzn1', 'zen1')) and 'your wallet' in pg.inner_text('#to-note'), 'a wallet button fills the address: ' + pg.inner_text('#to-note'))
+    pg.fill('input[name=amount]', 'abc'); ok('✗' not in pg.inner_text('#amt-note') and 'positive' in pg.inner_text('#amt-note'), 'a bad amount is explained')
     pg.fill('input[name=to]', ADDR['other'])
     pg.fill('input[name=amount]', '1.5'); pg.screenshot(path=f'{OUT}/9-nomination.png', full_page=True)
     pg.click('form[data-form=vote-nom] button.primary'); pg.wait_for_timeout(1500)
     t = pg.inner_text('body'); print('     nomination result:', 'review opened' if 'Confirm nomination' in t else t[-300:].replace('\n', ' | '))
+    ok(ADDR['other'] in pg.inner_text('.modal'), 'the nomination review shows the full recipient address')
     pg.screenshot(path=f'{OUT}/10-nomination-review.png')
     ok(len(errors) == 0, 'no console errors: ' + '; '.join(errors[:5]))
     # a wallet with no ZP, and a node that does not answer: clear messages, no blank screen

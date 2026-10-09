@@ -53,7 +53,7 @@ const voteWeight = () => voters().reduce((s, w) => s + zpOf(w.id), 0n);
 const nameOf = (id, addr) => contractNames[addr] || contractNames[id] || null;
 const zpStr = v => Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '–';
 
-function go(screen, extra = {}) { freshScreen = true; Object.assign(S, { screen, error: '', modal: null }, extra); if (screen === 'vote') S.cands = null; /* the candidate list belongs to one interval: ask the node again */ render(); window.scrollTo(0, 0); if (screen === 'markets') loadMarkets(); }
+function go(screen, extra = {}) { freshScreen = true; Object.assign(S, { screen, error: '', modal: null }, extra); if (screen === 'vote') S.cands = null; /* the candidate list belongs to one interval: ask the node again */ render(); if (screen === 'vote') refreshVotes(); window.scrollTo(0, 0); if (screen === 'markets') loadMarkets(); }
 // the site that serves this node (oracle, explorer API and index files sit next to /node/)
 const siteBase = () => { try { const u = new URL(S.settings.nodes[net()]); return /\/node$/.test(u.pathname) ? u.origin : ''; } catch { return ''; } };
 async function loadMarkets() {
@@ -197,7 +197,7 @@ const views = {
           <span class="amt" data-s="fixed">${formatZP(zpOf(w.id))} ZP</span></button>`).join('') || '<p class="muted small">Add a wallet with its 24 words or key to vote. Watch-only wallets cannot sign a ballot.</p>'}</div>
         ${signers.length > 1 ? `<div class="row" data-s="mt10"><button class="btn" data-act="vote-all">All</button><button class="btn" data-act="vote-none">None</button></div>` : ''}
         <div class="kv" data-s="mt10"><span>Vote weight now</span><span class="amt">${formatZP(voteWeight())} ZP</span></div></div>
-      ${ballotsCard(c)}
+      ${ballotsCard(c)}${sentCard(c)}
       <div class="card"><h2>Protocol upgrade vote</h2><p class="muted small">Inactive: the Repo voting contract has been inactive since block 233,874.</p></div></div>${nav('vote')}`;
   },
 
@@ -272,14 +272,28 @@ function ballotsCard(c) {
   const ph = phaseAt(CGP_PARAMS[net()], (S.tip || 0) + 1), none = !voters().length;
   const note = none ? '<p class="muted small">Select at least one wallet that can sign above.</p>' : '';
   if (ph.phase === 'before') return `<div class="card"><h2>Casting ballots</h2><p class="muted small">Ballots open after the snapshot block (${c.snapshot.toLocaleString('en-US')}). Your balance at that block is your weight for this interval.</p></div>`;
+  const cur = alloc(), r = allocationRange(CGP_PARAMS[net()], cur), many = r.max - r.min > 5;
+  const values = many ? [...new Set([r.min, cur, r.max])] : Array.from({ length: r.max - r.min + 1 }, (_, i) => r.min + i);
+  const pct0 = S.draft.pct || String(cur);
   const allocForm = `<form data-form="vote-alloc" class="screen" data-s="flush"><h2>Allocation vote</h2>
-      <p class="muted small">Share of each block reward paid to the CGP fund (now ${alloc()}%). Counted in the voting phase. With ${alloc()}% in force the valid votes are ${allocationRange(CGP_PARAMS[net()], alloc()).min}% to ${allocationRange(CGP_PARAMS[net()], alloc()).max}%: anything else is ignored.</p>
-      <label class="field">Allocation (%)<input name="pct" inputmode="numeric" autocomplete="off" value="${esc(S.draft.pct || '')}" required></label>
-      ${ph.phase === 'Vote' ? `<button class="btn primary" ${none ? 'disabled' : ''}>Review</button>` : '<p class="muted small">Opens with the voting phase.</p>'}</form>`;
+      <p class="muted small">Share of each block reward paid to the CGP fund; the miners get the rest. Counted in the voting phase. With ${cur}% in force the valid votes are ${r.min}% to ${r.max}%: anything else is ignored.</p>
+      <div class="cmp"><div><div class="k">Now in force</div><div class="v">CGP ${cur}%</div><div class="muted small">miners ${100 - cur}%</div></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div><div class="k">Your vote</div><div class="v" id="alloc-v">CGP ${esc(pct0)}%</div><div class="muted small" id="alloc-m"></div></div></div>
+      <div class="tabs3" role="group" aria-label="Choose a value">${values.map(v => `<button type="button" class="chip ${String(v) === pct0 ? 'on' : ''}" data-act="alloc-pick" data-v="${v}">${v}%${v === cur ? '<br><span class="muted small">keep</span>' : ''}</button>`).join('')}</div>
+      ${many ? `<input type="range" class="slider" name="pctr" min="${r.min}" max="${r.max}" step="1" value="${esc(pct0)}" aria-label="Allocation (%)">` : ''}
+      <label class="field">Allocation (%)<input name="pct" inputmode="numeric" autocomplete="off" value="${esc(pct0)}" data-min="${r.min}" data-max="${r.max}" data-cur="${cur}" required></label>
+      <div class="small" id="alloc-note" aria-live="polite"></div>
+      ${ph.phase === 'Vote' ? `<button class="btn primary" id="alloc-go" ${none ? 'disabled' : ''}>Review</button>` : '<p class="muted small">Opens with the voting phase.</p>'}</form>`;
+  const fundZp = S.stats?.cgp?.balance && Number.isFinite(S.stats.cgp.balance.zp) ? S.stats.cgp.balance.zp : null;
+  const mine = walletsHere().map(w => ({ name: w.name, addr: receiveAddress(S.open.get(w.id)) })).filter(x => x.addr);
   const nom = `<form data-form="vote-nom" class="screen" data-s="flush"><h2>Payout nomination</h2>
       <p class="muted small">Propose that the CGP fund pays an amount of ZP to an address. Needs 3% of all ZP behind it to become a candidate.</p>
-      <label class="field">Recipient address<input name="to" class="mono" autocomplete="off" spellcheck="false" value="${esc(S.draft.nto || '')}" required></label>
-      <label class="field">Amount (ZP)<input name="amount" inputmode="decimal" autocomplete="off" value="${esc(S.draft.namount || '')}" required></label>
+      <label class="field">Recipient address<input name="to" class="mono" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${net() === 'main' ? 'zen1q…' : 'tzn1q…'}" value="${esc(S.draft.nto || '')}" required></label>
+      <div class="row wrapchips"><button type="button" class="chip" data-act="paste-to">Paste</button>${mine.map(x => `<button type="button" class="chip" data-act="use-addr" data-addr="${esc(x.addr)}" title="${esc(x.addr)}">${esc(x.name)}</button>`).join('')}</div>
+      <div class="small" id="to-note" aria-live="polite"></div>
+      <label class="field">Amount (ZP)<input name="amount" inputmode="decimal" autocomplete="off" value="${esc(S.draft.namount || '')}" data-fund="${fundZp === null ? '' : fundZp}" required></label>
+      <div class="small muted" id="amt-note" aria-live="polite">${fundZp === null ? '' : `The CGP fund holds ${zpStr(fundZp)} ZP: a larger request cannot be paid.`}</div>
       ${ph.phase === 'Nomination' ? `<button class="btn primary" ${none ? 'disabled' : ''}>Review</button>` : '<p class="muted small">Opens in the nomination phase.</p>'}</form>`;
   const cands = S.cands ? (S.cands.length ? S.cands.map((x, i) => `<button class="item" data-act="vote-cand" data-i="${i}" data-s="plain" ${ph.phase === 'Vote' && !none ? '' : 'disabled'}>
       <span class="mono small" data-s="wrap">${esc(x.recipient)}</span><span class="amt">${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset ' + esc(s.asset.slice(0, 8)) + '…').join(' + ')}</span></button>`).join('') : '<p class="muted small">No candidates in this interval.</p>')
@@ -289,7 +303,7 @@ function ballotsCard(c) {
     <div class="card">${allocForm}</div><div class="card">${nom}</div>
     <div class="card"><h2>Payout vote</h2><p class="muted small">Pick a candidate. Counted in the voting phase.</p><div class="list">${cands}</div></div>${errBox()}</div>`;
 }
-async function reviewVote(kind, command, ballotHex, label) {
+async function reviewVote(kind, command, ballotHex, label, rows = []) {
   const sel = voters(); if (!sel.length) throw new Error('Select at least one wallet that can sign');
   const funder = S.open.get(active().id) && canSpend(S.open.get(active().id)) && sel.some(w => w.id === active().id) ? active() : sel[0];
   await refreshWallet(funder.id);
@@ -305,7 +319,7 @@ async function reviewVote(kind, command, ballotHex, label) {
     if (exclude.length && /little ZP/.test(e.message)) throw new Error('Your last vote is still waiting for its block (about 4 minutes). Wait for it, then send the next one.');
     throw e;
   }
-  S.modal = { type: 'confirm-vote', kind, label, prepared, weight: voteWeight() }; S.error = ''; render();
+  S.modal = { type: 'confirm-vote', kind, label, rows, prepared, weight: voteWeight() }; S.error = ''; render();
 }
 
 // ---------------------------------------------------------------- modal
@@ -320,13 +334,15 @@ function modalHtml() {
     <div class="row"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-send" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Sign and send'}</button></div></div></div>`;
   if (m.type === 'confirm-vote') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>Confirm ${esc(m.kind)}</h2>
     <div class="card"><div class="kv"><span class="muted">Ballot</span><span>${esc(m.label)}</span></div>
+    ${(m.rows || []).map(([k, v, mono]) => `<div class="kv"><span class="muted">${esc(k)}</span><span class="${mono ? 'mono small' : ''}">${esc(v)}</span></div>`).join('')}
     <div class="kv"><span class="muted">Signing keys</span><span>${m.prepared.signers}</span></div>
     <div class="kv"><span class="muted">Weight (balance at snapshot)</span><span>about ${formatZP(m.weight)} ZP</span></div>
     <div class="kv"><span class="muted">Fee</span><span>1 kalapa</span></div></div>
     <p class="muted small">Interval ${m.prepared.phase.interval}, ${esc(m.prepared.phase.phase)} phase. A vote cannot be changed after it is sent.</p>${errBox()}
     <div class="row"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-vote" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Sign and send'}</button></div></div></div>`;
-  if (m.type === 'voted') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">Vote sent</h2>
-    <p>It counts once it is in a block of this phase (about 4 minutes).</p>
+  if (m.type === 'voted') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">✓ Broadcast successfully</h2>
+    <p>The node accepted your ${esc(m.kind)}: <b>${esc(m.label)}</b>.</p>
+    <p class="muted small">It counts once it is in a block of this phase (about 4 minutes). Its status is under “Your ballots” on this screen.</p>
     <div class="card small"><div class="muted">Transaction</div><div class="mono" data-s="wrap">${esc(m.hash)}</div></div>
     <button class="btn primary big" data-act="close">Done</button></div></div>`;
   if (m.type === 'sent') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">Sent</h2>
@@ -357,6 +373,7 @@ function render() {
   const v = views[S.screen] || views.welcome;
   $app.innerHTML = v() + modalHtml();
   const f = $app.querySelector('[autofocus]'); if (f) f.focus();
+  if (S.screen === 'vote') { const p = $app.querySelector('input[name=pct]'); if (p) syncAlloc(p.value, 'field'); syncTo(); syncAmt(); }
   if (S.screen === 'vote' && S.error && !S.modal) $app.querySelector('.err')?.scrollIntoView({ block: 'center' });   // the message sits below three forms: a phone screen would not show it
   for (const s of saved) {
     const el = [...$app.querySelectorAll('form[data-form] input, form[data-form] textarea')].find(e => e.name && fieldKey(e) === s.key);
@@ -434,6 +451,74 @@ function lock() {
   for (const w of S.open.values()) { for (const k of w.keys.values()) k.privateKey?.fill?.(0); w.account?.wipePrivateData?.(); }
   S.key = null; S.draft = {}; S.open.clear(); S.data.clear(); S.modal = null; go('unlock'); }
 
+// ---------------------------------------------------------------- ballots sent from this browser, and the live parts of the vote forms
+const VOTES_KEY = 'zp-wallet.votes.v1';
+function loadVotes() {
+  try { const v = JSON.parse(localStorage.getItem(VOTES_KEY)); return Array.isArray(v) ? v.filter(x => x && /^[0-9a-f]{64}$/.test(x.hash)).slice(-40) : []; } catch { return []; }
+}
+const saveVotes = () => { try { localStorage.setItem(VOTES_KEY, JSON.stringify((S.myVotes || []).slice(-40))); } catch { /* private mode */ } };
+function rememberVote(v) { (S.myVotes ||= loadVotes()).push({ ...v, net: net(), at: Date.now(), state: 'pending' }); saveVotes(); }
+// ask the node where each ballot of this browser is: not found yet, in the mempool, or in a block
+async function refreshVotes() {
+  const n = node(); if (!n || S.screen !== 'vote') return;
+  let changed = false;
+  for (const v of (S.myVotes ||= loadVotes()).filter(x => x.net === net() && x.state !== 'block')) {
+    try {
+      const t = await n.request('/blockchain/transaction?hash=' + v.hash), bn = t && (t.blockNumber ?? t.block);
+      const st = (t && Number.isSafeInteger(t.confirmations) && t.confirmations > 0) || Number.isSafeInteger(bn) ? 'block' : 'mempool';
+      if (st !== v.state) { v.state = st; if (Number.isSafeInteger(bn)) v.block = bn; changed = true; }
+    } catch { /* not known to the node (yet) */ }
+  }
+  if (changed) { saveVotes(); if (!S.modal && !document.activeElement?.closest?.('form[data-form]')) render(); }
+}
+function sentCard(c) {
+  const list = (S.myVotes ||= loadVotes()).filter(v => v.net === net() && c && v.interval === c.interval).reverse();
+  if (!list.length) return '';
+  const badge = v => v.state === 'block' ? `<span class="ok nb">✓ In a block${v.block ? ' (' + Number(v.block).toLocaleString('en-US') + ')' : ''}</span>`
+    : v.state === 'mempool' ? '<span class="warnc">Accepted, waiting for a block</span>' : '<span class="muted">Sent, waiting for the node</span>';
+  return `<div class="card"><h2>Your ballots</h2><p class="muted small">Sent from this browser in interval ${c.community}. A ballot counts once it is in a block of its phase.</p>
+    ${list.map(v => `<div class="kv"><span>${esc(v.kind)}: ${esc(v.label)}${v.to ? `<br><span class="mono small muted">${esc(shortAddr(v.to))}</span>` : ''}</span><span>${badge(v)}</span></div>`).join('')}</div>`;
+}
+// these parts change while typing: they are updated in place (a re-render would put the old field values back)
+function syncAlloc(raw, from) {
+  const inp = $app.querySelector('input[name=pct]'); if (!inp) return;
+  const min = +inp.dataset.min, max = +inp.dataset.max, cur = +inp.dataset.cur, t = String(raw).trim(), n = Number(t);
+  if (from !== 'field') inp.value = t;
+  const okv = /^\d{1,3}$/.test(t) && n >= min && n <= max;
+  const slider = $app.querySelector('input[name=pctr]'); if (slider && okv) slider.value = n;
+  $app.querySelectorAll('[data-act=alloc-pick]').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+  const v = $app.querySelector('#alloc-v'), m = $app.querySelector('#alloc-m'), note = $app.querySelector('#alloc-note'), go = $app.querySelector('#alloc-go');
+  if (v) v.textContent = okv ? `CGP ${n}%` : 'CGP ?';
+  if (m) m.textContent = okv ? `miners ${100 - n}%` : '';
+  if (note) {
+    note.className = 'small ' + (okv || !t ? 'muted' : 'bad');
+    const d = Math.abs(n - cur);
+    note.textContent = !t ? '' : !okv ? `Only ${min}% to ${max}% counts` : n === cur ? 'Same as now: you vote to keep the split' : `${n > cur ? 'Raises' : 'Lowers'} the CGP share by ${d} point${d === 1 ? '' : 's'} (miners ${n > cur ? 'lose' : 'gain'} ${d})`;
+  }
+  if (go) go.disabled = !okv || !voters().length;
+}
+function syncTo() {
+  const inp = $app.querySelector('input[name=to]'), note = $app.querySelector('#to-note'); if (!inp || !note) return;
+  const a = inp.value.replace(/\s+/g, ''); if (a !== inp.value) inp.value = a;
+  if (!a) { note.textContent = ''; note.className = 'small'; return; }
+  let msg, good = false;
+  try {
+    const d = decodeAddress(a), name = d.chain === 'main' ? 'mainnet' : 'testnet';
+    if (d.chain !== net()) msg = `✗ This is a ${name} address, but this wallet is on ${net() === 'main' ? 'mainnet' : 'testnet'}`;
+    else { good = true; const own = walletsHere().find(w => receiveAddress(S.open.get(w.id)) === a); msg = `✓ Valid ${name} ${d.contract ? 'contract ' : ''}address${own ? ` (your wallet “${own.name}”)` : ''}`; }
+  } catch { msg = '✗ Not a valid address: check that every character was copied'; }
+  note.textContent = msg; note.className = 'small ' + (good ? 'ok' : 'bad');
+}
+function syncAmt() {
+  const inp = $app.querySelector('input[name=amount]'), note = $app.querySelector('#amt-note'); if (!inp || !note || !inp.closest('[data-form=vote-nom]')) return;
+  const fund = inp.dataset.fund === '' ? null : Number(inp.dataset.fund), raw = inp.value.trim(); if (!raw) return;
+  let amt = null; try { amt = parseZP(raw); } catch { /* invalid */ }
+  const fundText = fund === null ? '' : `The CGP fund holds ${zpStr(fund)} ZP`;
+  if (amt === null || amt <= 0n) { note.className = 'small bad'; note.textContent = 'Enter a positive amount, for example 1.5'; }
+  else if (fund !== null && Number(amt) / 1e8 > fund) { note.className = 'small bad'; note.textContent = `${fundText}: ask for less`; }
+  else { note.className = 'small muted'; note.textContent = fundText; }
+}
+
 // ---------------------------------------------------------------- events
 $app.addEventListener('click', async e => {
   S.lastActivity = Date.now();
@@ -456,6 +541,14 @@ $app.addEventListener('click', async e => {
       else sel = sel.includes(t.dataset.id) ? sel.filter(x => x !== t.dataset.id) : [...sel, t.dataset.id];
       S.settings.voteWallets[net()] = sel.length === all.length ? null : sel; saveSettings(); return render();
     }
+    if (act === 'alloc-pick') return syncAlloc(t.dataset.v);
+    if (act === 'use-addr') { const i = $app.querySelector('input[name=to]'); i.value = t.dataset.addr; return syncTo(); }
+    if (act === 'paste-to') {
+      const i = $app.querySelector('input[name=to]'), note = $app.querySelector('#to-note');
+      try { i.value = (await navigator.clipboard.readText()).trim(); syncTo(); }
+      catch { note.className = 'small bad'; note.textContent = 'This browser did not allow reading the clipboard: press and hold in the field, then choose Paste'; }
+      return;
+    }
     if (act === 'close') { S.modal = null; S.error = ''; return render(); }
     if (act === 'lock') return lock();
     if (act === 'toggle-pw') { const inp = t.parentElement.querySelector('input'), show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; t.textContent = show ? 'Hide' : 'Show'; t.setAttribute('aria-pressed', String(show)); t.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
@@ -468,12 +561,13 @@ $app.addEventListener('click', async e => {
     if (act === 'reset') { S.modal = { type: 'confirm', title: 'Remove all wallets from this browser?', text: 'Only do this if you have the 24 words or keys of every wallet. Then add them again with a new password.', ok: 'Remove all', act: 'do-reset' }; return render(); }
     if (act === 'do-reset') { storage.clear(); S.vault = null; S.modal = null; return go('welcome'); }
     if (act === 'load-cands') { S.cands = await node().candidates(); if (!Array.isArray(S.cands)) S.cands = []; return render(); }
-    if (act === 'vote-cand') { const x = S.cands[+t.dataset.i]; return await reviewVote('payout vote', 'Payout', candidateBallot(x), `Pay ${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset').join(' + ')} to ${shortAddr(x.recipient)}`); }
+    if (act === 'vote-cand') { const x = S.cands[+t.dataset.i]; return await reviewVote('payout vote', 'Payout', candidateBallot(x), `Pay ${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset').join(' + ')}`, [['To', x.recipient, true]]); }
     if (act === 'confirm-vote') {
       S.busy = true; render();
       const m = S.modal, hash = await publish(node(), m.prepared);
       (S.pendingVotes ||= []).push({ spent: m.prepared.spent, at: Date.now() });
-      S.busy = false; S.modal = { type: 'voted', hash }; render(); return;
+      rememberVote({ hash, kind: m.kind, label: m.label, to: (m.rows || []).find(r => r[0] === 'To')?.[1] || '', interval: m.prepared.phase.interval, phase: m.prepared.phase.phase });
+      S.busy = false; S.modal = { type: 'voted', hash, kind: m.kind, label: m.label }; render(); setTimeout(refreshVotes, 5000); return;
     }
     if (act === 'confirm-send') {
       S.busy = true; render();
@@ -482,6 +576,14 @@ $app.addEventListener('click', async e => {
       S.screen = 'home'; render(); setTimeout(() => refreshAll(), 1500); return;
     }
   } catch (err) { fail(err); }
+});
+
+$app.addEventListener('input', e => {
+  const t = e.target; S.lastActivity = Date.now();
+  if (t.name === 'pct') syncAlloc(t.value, 'field');
+  else if (t.name === 'pctr') syncAlloc(t.value, 'slider');
+  else if (t.name === 'to' && t.closest('[data-form=vote-nom]')) syncTo();
+  else if (t.name === 'amount') syncAmt();
 });
 
 $app.addEventListener('submit', async e => {
@@ -529,14 +631,15 @@ $app.addEventListener('submit', async e => {
         S.draft.pct = v.pct; const pct = Number(v.pct.trim());
         const r = allocationRange(CGP_PARAMS[net()], alloc());
         if (!(pct >= r.min && pct <= r.max)) throw new Error(`With ${alloc()}% in force, only ${r.min}% to ${r.max}% counts`);
-        return await reviewVote('allocation vote', 'Allocation', allocationBallot(pct), `${pct}% of block rewards to the CGP`);
+        return await reviewVote('allocation vote', 'Allocation', allocationBallot(pct), `${pct}% of block rewards to the CGP`, [['Now in force', `${alloc()}%`]]);
       }
       case 'vote-nom': {
         S.draft.nto = v.to; S.draft.namount = v.amount;
         const to = v.to.trim(); let ok = false; try { ok = decodeAddress(to).chain === net(); } catch { /* invalid */ }
         if (!ok) throw new Error('Not a valid address for this network');
         const amount = parseZP(v.amount.trim()); if (amount <= 0n) throw new Error('Enter an amount');
-        return await reviewVote('nomination', 'Nomination', payoutBallot(to, [{ asset: ZP, amount }]), `Pay ${formatZP(amount)} ZP to ${shortAddr(to)}`);
+        const fund = S.stats?.cgp?.balance?.zp; if (Number.isFinite(fund) && Number(amount) / 1e8 > fund) throw new Error(`The CGP fund holds ${zpStr(fund)} ZP: ask for less`);
+        return await reviewVote('nomination', 'Nomination', payoutBallot(to, [{ asset: ZP, amount }]), `Pay ${formatZP(amount)} ZP`, [['To', to, true]]);
       }
       case 'node': {
         const url = v.url.trim().replace(/\/+$/, '');
@@ -559,6 +662,7 @@ $app.addEventListener('submit', async e => {
 // auto-lock after inactivity; refresh balances every 2 minutes
 setInterval(() => { if (S.key && Date.now() - S.lastActivity > LOCK_AFTER_MS) lock(); }, 30000);
 setInterval(() => { if (S.key && S.screen === 'home' && !S.modal) refreshAll(); }, 120000);
+setInterval(() => { if (S.key && S.screen === 'vote' && !S.modal) refreshVotes(); }, 20000);
 ['keydown', 'pointerdown'].forEach(ev => addEventListener(ev, () => { S.lastActivity = Date.now(); }, { passive: true }));
 
 (async () => {
