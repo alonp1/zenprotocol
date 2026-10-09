@@ -105,9 +105,10 @@
   <h1>CGP voting history</h1>
   <p class="lead" id="updated">Loading…</p>
   <section>
-    <div class="note" style="margin-top:0">Each interval is 10,000 blocks. The balance at the snapshot block is the vote weight; nominations follow the snapshot,
+    <div id="range"></div>
+    <div class="note" style="margin-top:0">Each interval is <span id="ivlen">10,000</span> blocks. The balance at the snapshot block is the vote weight; nominations follow the snapshot,
     then the allocation and payout vote. The allocation (the CGP share of every block reward; miners get the rest) decided in an interval applies to the next one. Interval numbers as in the community wallets
-    (the node counts 24 more). A ballot is counted if it is the first of its key and type inside its voting window.</div>
+    (on mainnet the node counts 24 more). A ballot is counted if it is the first of its key and type inside its voting window.</div>
   </section>
   <div id="list"></div>
   <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
@@ -179,6 +180,18 @@ const ballotsTable = (list, empty) => list.length ?
   : `<div class="note">${empty}</div>`;
 fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
   $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
+  const cur = d.intervals[0];
+  if (cur) {
+    $('ivlen').textContent = fmt(cur.end - cur.start + 1);
+    const last = cur.allocationInForce;
+    if (last != null) {   // PROTOCOL.md 7.4: the miners' share (100 - allocation) may move by at most 15% of itself per interval, never below 10%
+      const L = 100 - last, lo = Math.max(10, Math.floor(L * 85 / 100)), hi = Math.min(100, Math.floor(L * 100 / 85));
+      const a = 100 - hi, b = 100 - lo;
+      $('range').innerHTML = `<div class="note" style="margin-top:0;margin-bottom:12px"><b>What can be voted for in the allocation vote</b> (interval ${cur.communityInterval >= 1 ? cur.communityInterval : cur.interval}, blocks ${fmt(cur.start)}–${fmt(cur.end)}):<br>
+        Now in force: CGP ${last}% · miners ${100 - last}%.<br>
+        Allowed for the next interval: CGP <b>${a}%–${b}%</b> (miners <b>${100 - b}%–${100 - a}%</b>) — ${a === b ? 'a single value' : 'any whole percent in that range'}. A ballot outside the range is rejected.</div>`;
+    }
+  }
   let ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
   if (!ivs.length) ivs = d.intervals.slice(0, 1);   // a chain with no community numbering (testnet): show the current interval
   $('list').innerHTML = ivs.map((i, n) => {
