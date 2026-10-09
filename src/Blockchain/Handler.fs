@@ -147,31 +147,6 @@ let handleRequest chain (requestId:RequestId) request session timestamp state =
                 {state with cgp = cgp}
             else
                 state
-        // In a payout block with a real winner the miner creates the CGP "Payout" execution itself when nobody else did
-        // (otherwise the block is rejected with "No payout Tx" and the chain stalls until someone sends it by hand).
-        let state =
-            let nextBlockNumber = state.tipState.tip.header.blockNumber + 1ul
-            match state.cgp.payout with
-            | Some payout when CGP.isPayoutBlock chain nextBlockNumber ->
-                let hasPayoutTx =
-                    MemPool.toList state.memoryState.mempool
-                    |> List.exists (CGP.Connection.isPayoutTransaction chain)
-                if hasPayoutTx then state
-                else
-                    let msgBody = CGP.Contract.createPayoutMsgBody (CGP.internalizeRecipient payout)
-                    match TransactionHandler.executeContract session TxSkeleton.empty timestamp chain.cgpContractId "Payout" None msgBody state false with
-                    | Ok tx ->
-                        let ex = Transaction.toExtended tx
-                        eventX "Miner created the CGP payout transaction {hash}"
-                        >> setField "hash" (Hash.toString ex.txHash)
-                        |> Log.warning
-                        { state with memoryState = { state.memoryState with mempool = MemPool.add ex state.memoryState.mempool } }
-                    | Error e ->
-                        eventX "Could not create the CGP payout transaction: {error}"
-                        >> setField "error" e
-                        |> Log.error
-                        state
-            | _ -> state
         BlockTemplateBuilder.makeTransactionList chain session state timestamp
         <@> fun (memState, validatedTransactions) ->
             Block.createTemplate chain state.tipState.tip.header timestamp state.tipState.ema memState.activeContractSet state.cgp validatedTransactions pkHash
