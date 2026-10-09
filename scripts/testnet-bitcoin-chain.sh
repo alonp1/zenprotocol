@@ -49,7 +49,7 @@ RC=0; I=0; T0=$(date +%s)
 while read -r H; do
   I=$((I+1)); S=$(date +%s)
   if ! add "$H"; then echo "FAIL header $I"; RC=1; break; fi
-  T=$(tip); for k in $(seq 60); do sleep 2; [ "$(tip)" -gt "$T" ] && break; done
+  T=$(tip); for k in $(seq 120); do sleep 1; [ "$(tip)" -gt $((T+1)) ] && break; done
   if [ $I -le 3 ] || [ $((I % 10)) -eq 0 ]; then echo "  header $I accepted, $(( $(date +%s) - S )) s"; fi
 done < /tmp/good.txt
 echo "added $I headers in $(( $(date +%s) - T0 )) s"

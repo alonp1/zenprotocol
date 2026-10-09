@@ -6,7 +6,7 @@ on:
     branches: [node-upgrade-script]
     paths: ['src/ContractExamples/BitcoinHeaderChain.fst', 'scripts/testnet-bitcoin-chain.sh', '.github/workflows/bitcoin-chain.yml']
 
-permissions: { contents: read, packages: read }
+permissions: { contents: read }
 
 jobs:
   bitcoin:
@@ -16,30 +16,27 @@ jobs:
       MN: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with: { registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' }
-      - name: Node image
-        run: docker pull ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/zen-node:net10 && docker tag ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/zen-node:net10 zen-testnet
-      - name: Start a mining testnet node
+      - name: Build the devnet image (local chain: blocks come fast, so adding one header per block is quick)
+        run: docker build -f Docker/Dockerfile.devnet -t zen-devnet . 2>&1 | tail -n 15
+      - name: Start one devnet node with a miner
         run: |
-          docker run -d --name zt-a -p 127.0.0.1:31567:31567 -e NETWORK=test -e NETWORK_URL=off -e SEEDS= -e MINER_THREADS=2 -e WALLET_API=1 -e TESTNET_MNEMONIC="$MN" zen-testnet
-          tip() { curl -fs http://127.0.0.1:31567/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'; }
-          for i in $(seq 120); do sleep 10; T=$(tip || true); echo "tip: $T"; [ -n "$T" ] && [ "$T" -ge 14 ] && break; done
-          [ -n "$T" ] && [ "$T" -ge 14 ]
+          docker run -d --name zt-a -p 127.0.0.1:20000:20000 -e NODES=1 -e MINER_THREADS=1 zen-devnet
+          for i in $(seq 120); do sleep 5; T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p' || true); [ -n "$T" ] && [ "$T" -ge 20 ] && break; done
+          echo "tip $T"; [ -n "$T" ] && [ "$T" -ge 20 ]
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '10.0.x' }
       - name: Build the oracle tool (its body command builds message bodies)
         run: |
           dotnet restore src/Oracle/Oracle.fsproj -v q >/dev/null 2>&1
           dotnet build src/Oracle/Oracle.fsproj -c Release --no-restore -v q 2>&1 | tail -n 3
-      - name: BitcoinHeaderChain on the testnet
+      - name: BitcoinHeaderChain on the devnet
         run: |
           set +e
-          bash scripts/testnet-bitcoin-chain.sh http://127.0.0.1:31567 testnet > /tmp/bitcoin-chain.txt 2>&1
-          RC=$?
+          bash scripts/testnet-bitcoin-chain.sh http://127.0.0.1:20000 devnet 2>&1 | tee /tmp/bitcoin-chain.txt | while IFS= read -r l; do case "$l" in *PASS*|*FAIL*|*RESULT*|*added*|*ACTIVATED*) echo "::notice title=t3::$l";; esac; done
+          RC=${PIPESTATUS[0]}
           cat /tmp/bitcoin-chain.txt | tail -n 60
           head -c 7000 /tmp/bitcoin-chain.txt | python3 -c "import sys;print('::notice title=bitcoin chain output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
       - name: Node log
         if: always()
-        run: docker logs zt-a 2>&1 | grep -i -E "contract|error|fail|fstar|verif" | tail -n 40
+        run: docker exec zt-a sh -c 'cat /data/logs/node0.log' 2>&1 | grep -i -E "contract|error|fail|fstar|verif" | tail -n 40
