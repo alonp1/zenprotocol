@@ -20,6 +20,7 @@ module C = Zen.Cost
 // the 32 bytes of two hashes are equal (pure, unrolled: no recursion in a contract)
 val hashEq: hash -> hash -> bool `cost` 254
 let hashEq a b =
+    incRet 254 (
     A.item 0 a = A.item 0 b &&
     A.item 1 a = A.item 1 b &&
     A.item 2 a = A.item 2 b &&
@@ -51,7 +52,7 @@ let hashEq a b =
     A.item 28 a = A.item 28 b &&
     A.item 29 a = A.item 29 b &&
     A.item 30 a = A.item 30 b &&
-    A.item 31 a = A.item 31 b
+    A.item 31 a = A.item 31 b)
 
 let main txSkeleton _ contractId command sender messageBody wallet state =
   let dict = messageBody >!= tryDict in
