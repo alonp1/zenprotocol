@@ -19,7 +19,7 @@ if [ -n "$VOL" ]; then
 CRON
   for f in stats assets cgp-history community-votes history; do [ -f "$VOL/web/$f.json" ] && cp -f "$VOL/web/$f.json" "$WEB/$f.json"; done
 fi
-for f in markets dex oracle explorer assets stats cgp bridge guide instruments developers; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
+for f in markets dex oracle explorer assets stats cgp bridge contract guide instruments developers; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
 cp "$REPO/site/testnet-home.html" "$WEB/index.html"
 rm -rf "$WEB/shell"; cp -r "$REPO/site/shell" "$WEB/shell"
 # Site frame settings. DOMAIN (e.g. testnet.example.org) turns on HTTPS; MAIN_URL links to the mainnet site.

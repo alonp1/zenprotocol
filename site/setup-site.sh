@@ -20,7 +20,7 @@ echo "$DOMAIN -> ${IP:-<no DNS yet>}"
 
 echo "== Files"
 mkdir -p "$WEB/snapshots"
-for f in index about how-it-works community node mine developers stats assets cgp votes explorer; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
+for f in index about how-it-works community node mine developers stats assets cgp votes explorer contract; do cp "$REPO/site/$f.html" "$WEB/$f.html"; done
 rm -rf "$WEB/shell"; cp -r "$REPO/site/shell" "$WEB/shell"
 # Site frame settings (menus, name, link to the other network). Set SITE_NAME / TEST_URL once; they are kept in the file for later runs.
 old() { grep -o "\"$1\":\"[^\"]*\"" "$WEB/site-config.json" 2>/dev/null | cut -d'"' -f4 || true; }   # values from the last run are kept

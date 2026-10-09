@@ -4,6 +4,7 @@
 //   GET /explorer/api/blocks?before=<n>&take=<1..100>   latest blocks (summary rows)
 //   GET /explorer/api/block/<number|hash>               block summary + its transactions
 //   GET /explorer/api/tx/<hash>                         one transaction
+//   GET /explorer/api/contract/<contract id>           executions of a contract: count, first/last, per command, the latest 20
 //   GET /explorer/api/search/<text>                     where a number, hash or address leads
 //   GET /explorer/api/address/<address>?page=&take=&from=&to=&minZp=&maxZp=
 //                                                       live balances (node address index) + the address's transactions
@@ -191,6 +192,17 @@ async function handle(p, query) {
   if ((m = p.match(/^\/tx\/([0-9a-f]{64})$/))) {
     const row = db && q.tx.get(m[1]);
     return row ? { tip: t, transaction: txRow(row), block: blockRow(q.byNum.get(row.block)) } : null;
+  }
+  if ((m = p.match(/^\/contract\/([0-9a-f]{72})$/))) {
+    if (!open()) throw Object.assign(new Error('index not ready'), { status: 503 });
+    const id = m[1], timeOf = n => n == null ? null : q.byNum.get(n)?.time ?? null;
+    // transactions whose first contract call is this contract (the index keeps one contract per transaction)
+    const sum = db.prepare('SELECT COUNT(*) n, MIN(block) fb, MAX(block) lb FROM txs WHERE contract = ?').get(id);
+    const commands = db.prepare('SELECT command, COUNT(*) n, MAX(block) lastBlock FROM txs WHERE contract = ? GROUP BY command ORDER BY n DESC LIMIT 20').all(id)
+      .map(r => ({ command: r.command, count: r.n, lastBlock: r.lastBlock, lastTime: timeOf(r.lastBlock) }));
+    const recent = db.prepare('SELECT t.hash, t.block, t.command, t.zp, b.time FROM txs t JOIN blocks b ON b.number = t.block WHERE t.contract = ? ORDER BY t.block DESC, t.idx DESC LIMIT 20').all(id)
+      .map(r => ({ hash: r.hash, block: r.block, time: r.time, command: r.command, zp: r.zp }));
+    return { tip: t, indexedTo: indexed, contract: id, executions: sum.n, firstBlock: sum.fb, firstTime: timeOf(sum.fb), lastBlock: sum.lb, lastTime: timeOf(sum.lb), commands, recent };
   }
   if ((m = p.match(/^\/address\/([0-9a-z]{10,120})$/))) {
     if (!ready()) throw Object.assign(new Error('the address index is being built'), { status: 503 });

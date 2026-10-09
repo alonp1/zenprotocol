@@ -123,6 +123,7 @@ CREATE INDEX IF NOT EXISTS addr_txs_block ON addr_txs(address, block, idx);`);
 // ZP in the outputs of a transaction (without the fee), for searching by amount; added after the first release of the index
 if (!db.prepare("SELECT 1 FROM pragma_table_info('txs') WHERE name='zp'").get()) db.exec('ALTER TABLE txs ADD COLUMN zp INTEGER');
 db.exec('CREATE INDEX IF NOT EXISTS txs_zp ON txs(zp)');
+db.exec("CREATE INDEX IF NOT EXISTS txs_contract ON txs(contract, block) WHERE contract IS NOT NULL");   // the contract page: executions of one contract
 lap('database opened and tables checked');
 const q = {
   meta: db.prepare('SELECT v FROM meta WHERE k=?'), setMeta: db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)'),

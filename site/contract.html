@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZP Contract</title>
+<meta name="description" content="One smart contract on the ZP chain: its id, address, validity, executions and code.">
+<style>
+  :root {
+    --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --faint: #9a9890;
+    --line: #e3e1da; --grid: #eeece6; --accent: #1f6f5c; --series: #00866c;
+    --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890; --faint: #6b6a64;
+            --line: #2c2d2a; --grid: #252623; --accent: #5cc3a6; --series: #22a985;
+            --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  nav { font-size: 14px; margin-bottom: 18px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+       margin: 0 0 14px; font-weight: 600; }
+  p.lead { margin: 0 0 24px; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+            padding: 20px; margin-bottom: 18px; min-width: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid.four { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 760px) { .grid, .grid.four { grid-template-columns: repeat(2, 1fr); } .stat .v { font-size: 20px; } }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
+  .two > section { margin-bottom: 0; }
+  .two + .two, .two + details { margin-top: 18px; }
+  .stat .k { font-size: 13px; color: var(--muted); }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 13px; color: var(--muted); }
+  a { color: var(--accent); }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
+  .chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line);
+         border-radius: 6px; padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+         white-space: nowrap; display: none; z-index: 2; }
+  .tip b { font-variant-numeric: tabular-nums; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  details { margin-top: 10px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase;
+       letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  td.warn { color: var(--warn); font-weight: 600; } td.bad { color: var(--bad); font-weight: 600; }
+  .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
+  .supply { height: 12px; border-radius: 6px; background: var(--grid); overflow: hidden; margin: 4px 0 6px; }
+  .supply div { height: 100%; background: var(--series); border-radius: 6px 0 0 6px; }
+  .supply-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .phase { display: flex; gap: 2px; margin: 14px 0 6px; height: 10px; }
+  .phase div { background: var(--grid); border-radius: 2px; position: relative; }
+  .phase div.done { background: var(--series); }
+  .phase div.now { background: linear-gradient(90deg, var(--series) var(--p), var(--grid) var(--p)); }
+  .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
+  .phase-l span { position: absolute; top: 0; white-space: nowrap; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+</style>
+<style>
+  input.q { width: 100%; max-width: 360px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--card); color: var(--ink); font: inherit; margin-bottom: 12px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); } .pill.no { color: var(--faint); }
+  .sub { color: var(--muted); }
+  details.iv { border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin: 0 0 10px; padding: 0; }
+  details.iv > summary { list-style: none; padding: 14px 16px; display: grid; grid-template-columns: 1.1fr 1fr 1fr 1fr 1.3fr; gap: 10px; align-items: center; color: var(--ink); }
+  details.iv > summary::-webkit-details-marker { display: none; }
+  details.iv > summary .k { font-size: 12px; color: var(--muted); }
+  details.iv > summary .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  details.iv > summary .v.n { font-weight: 500; }
+  details.iv[open] > summary { border-bottom: 1px solid var(--line); }
+  details.iv .in { padding: 12px 16px 16px; }
+  @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+</style>
+<style>
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 8px 14px; font-size: 14px; }
+  .kv > div:nth-child(odd) { color: var(--muted); }
+  .kv > div { min-width: 0; overflow-wrap: anywhere; }
+  @media (max-width: 560px) { .kv { grid-template-columns: 1fr; gap: 0 } .kv > div:nth-child(even) { margin-bottom: 10px; } }
+  .copy { margin-left: 8px; font: inherit; font-size: 12px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--muted); cursor: pointer; }
+  pre.code { margin: 10px 0 0; padding: 12px; max-height: 480px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font: 12px/1.5 var(--mono); white-space: pre; tab-size: 2; }
+  .pill.bad { color: var(--bad); border-color: var(--bad); }
+  .nodata { color: var(--muted); font-size: 14px; }
+  td a { text-decoration: none; } td a:hover { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="/shell/shell.css">
+</head>
+<body>
+<main>
+  <nav><a href="/">← Community node</a> · <a href="/stats.html">Stats</a> · <a href="/explorer.html">Explorer</a> · <a href="/assets.html">Assets</a> · <a href="/cgp.html">CGP history</a> · <a href="/wallet/">ZP Wallet</a></nav>
+  <h1 id="title">Contract</h1>
+  <p class="lead" id="lead">Loading…</p>
+  <div id="view"></div>
+  <footer>Read from the chain index and the node of <span class="host">this site</span>. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
+</main>
+<script>
+const fmt = n => n == null ? '–' : Number(n).toLocaleString('en-US');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = a => a ? a.slice(0, 12) + '…' + a.slice(-8) : '–';
+const $ = id => document.getElementById(id);
+const dt = ms => ms ? new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '–';
+const dateOnly = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '–';
+const ago = ms => { if (!ms) return ''; const s = Math.max(0, (Date.now() - ms) / 1000); return s < 3600 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' hours ago' : Math.round(s / 86400) + ' days ago'; };
+document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
+
+// what the well-known contracts are for (the names come from site/contract-names.json); others show no description
+const INFO = {
+  CGP: ['CGP', 'Holds the CGP fund: the share of every block reward that the allocation vote sets aside. In the payout block it pays the winner of the payout vote.'],
+  VCGP: ['CGP voting contract', 'Records the community ballots of each CGP interval: the allocation vote, nominations and the payout vote. Voting power is the ZP held at the snapshot block.'],
+  'DEX-V2': ['ZenDex v2', 'Order-book exchange contract: makers lock an asset in an order, takers fill or cancel it.'],
+};
+const params = new URLSearchParams(location.search), id = (params.get('id') || '').trim().toLowerCase();
+const row = (k, v) => `<div>${k}</div><div>${v}</div>`;
+const copy = t => `<button class="copy" data-copy="${esc(t)}" type="button">Copy</button>`;
+
+async function main() {
+  if (!/^[0-9a-f]{72}$/.test(id)) { $('lead').innerHTML = 'No contract chosen. Pick one from the table on <a href="/stats.html">Stats</a>.'; return; }
+  const get = (u, ms = 20000) => fetch(u, { cache: 'no-cache', signal: AbortSignal.timeout(ms) }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  const [stats, ex, active] = await Promise.all([get('/stats.json').catch(() => null), get('/explorer/api/contract/' + id).catch(() => null), get('/node/contract/active', 60000).catch(() => null)]);
+  const k = (stats?.contracts || []).find(c => c.id === id);
+  const a = Array.isArray(active) ? active.find(c => c.contractId === id) : null;
+  const expire = k ? k.expire : a ? Number(a.expire) : null;
+  const tip = stats?.height ?? ex?.tip ?? null;
+  const left = expire != null && tip != null ? expire - tip : k?.blocksLeft ?? null;
+  const live = !!(k || a);
+  const bt = stats?.avgBlockTime24h || stats?.targetBlockTime || 240;
+  const known = Object.entries(INFO).find(([n]) => n === (k?.name));
+  const title = k?.name || 'Unnamed contract';
+  document.title = 'ZP Contract ' + title; $('title').textContent = title;
+  $('lead').textContent = known ? known[1][0] : '';
+  const address = k?.address || a?.address || '';
+  const pill = !live ? '<span class="pill bad">Not active</span>' : left != null && left < 300 ? '<span class="pill bad">Ends soon</span>' : '<span class="pill ok">Active</span>';
+  const when = left != null ? dateOnly(Date.now() + left * bt * 1000) : '';
+  const stat = (kk, v, s) => `<div class="stat"><div class="k">${kk}</div><div class="v">${v}</div><div class="s">${s || ''}</div></div>`;
+  let h = `<section><div class="grid four">
+    ${stat('Status', pill, live ? '' : 'The node lists only active contracts')}
+    ${stat('Active until block', fmt(expire), left != null ? (left < 0 ? 'ended' : fmt(left) + ' blocks left · around ' + when) : '')}
+    ${stat('Executions', ex ? fmt(ex.executions) : '–', ex ? 'transactions that call it' : 'index not ready')}
+    ${stat('Last executed', ex?.lastBlock ? dateOnly(ex.lastTime) : ex ? 'never' : '–', ex?.lastBlock ? 'block ' + fmt(ex.lastBlock) + ' · ' + ago(ex.lastTime) : '')}
+  </div></section>`;
+  h += `<section><h2>Identity</h2><div class="kv">
+    ${row('Name', esc(k?.name || '–') + (known ? ' · ' + esc(known[1][0]) : ''))}
+    ${known ? row('What it does', esc(known[1][1])) : ''}
+    ${row('Contract ID', `<span class="mono">${esc(id)}</span>${copy(id)}`)}
+    ${row('Address', address ? `<span class="mono">${esc(address)}</span>${copy(address)}` : '–')}
+    ${row('Code size', a?.code ? fmt(a.code.length) + ' characters' : '–')}
+    ${row('First execution', ex?.firstBlock ? `block ${fmt(ex.firstBlock)} · ${dt(ex.firstTime)}` : '–')}
+  </div></section>`;
+  if (ex?.commands?.length) h += `<section><h2>Commands</h2><div class="scroll"><table><tr><th>Command</th><th class="r">Executions</th><th class="r">Last block</th><th>Last time</th></tr>${ex.commands.map(c =>
+    `<tr><td class="mono">${esc(c.command ? (c.command.length > 44 ? short(c.command) : c.command) : '(none)')}</td><td class="r">${fmt(c.count)}</td><td class="r">${fmt(c.lastBlock)}</td><td>${dt(c.lastTime)}</td></tr>`).join('')}</table></div></section>`;
+  if (ex?.recent?.length) h += `<section><h2>Latest executions</h2><div class="scroll"><table><tr><th>Time</th><th class="r">Block</th><th>Command</th><th>Transaction</th></tr>${ex.recent.map(r =>
+    `<tr><td>${dt(r.time)}</td><td class="r"><a href="/explorer.html?block=${r.block}">${fmt(r.block)}</a></td><td class="mono">${esc(r.command ? (r.command.length > 28 ? short(r.command) : r.command) : '–')}</td><td class="mono"><a href="/explorer.html?tx=${esc(r.hash)}">${esc(short(r.hash))}</a></td></tr>`).join('')}</table></div>
+    <div class="note">Counts and lists cover transactions whose first contract call is this contract.</div></section>`;
+  else if (ex) h += '<section><h2>Executions</h2><p class="nodata">No transaction has called this contract yet.</p></section>';
+  h += `<section><h2>Code</h2>${a?.code ? `<details><summary>Show the contract code (${fmt(a.code.length)} characters)</summary>${copy(a.code)}<pre class="code">${esc(a.code)}</pre></details>`
+    : '<p class="nodata">The node returns the code of active contracts only.</p>'}</section>`;
+  $('view').innerHTML = h;
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]'); if (!b) return;
+  const t = b.dataset.copy, done = () => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1500); };
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(done, () => {
+    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch { /* manual copy */ } ta.remove();
+  });
+});
+main().catch(() => { $('lead').textContent = 'Could not load this contract. Try again in a minute.'; });
+</script>
+<script src="/shell/shell.js" defer></script>
+</body>
+</html>

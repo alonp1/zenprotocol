@@ -146,7 +146,7 @@
   </section>
 
   <section>
-    <h2>Active contracts</h2>
+    <h2>Active contracts <span style="text-transform:none;letter-spacing:0;font-weight:400">· click a name for its page</span></h2>
     <div class="scroll" id="contracts">–</div>
   </section>
 
@@ -388,7 +388,7 @@ function render(d) {
     cs.map(k => {
       const cls = k.blocksLeft < 300 ? 'bad' : k.blocksLeft < 3000 ? 'warn' : '';
       const eta = new Date(d.updated + k.blocksLeft * (d.avgBlockTime24h || d.targetBlockTime) * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      return `<tr><td>${esc(k.name || '–')}</td><td class="mono" title="${esc(k.address)}">${esc(short(k.address))}</td><td class="r">${fmt(k.expire)}</td><td class="r ${cls}">${fmt(k.blocksLeft)}</td><td class="r">${eta}</td></tr>`;
+      return `<tr><td>${k.id ? `<a href="/contract.html?id=${esc(k.id)}">${esc(k.name || 'Unnamed')}</a>` : esc(k.name || '–')}</td><td class="mono" title="${esc(k.address)}">${esc(short(k.address))}</td><td class="r">${fmt(k.expire)}</td><td class="r ${cls}">${fmt(k.blocksLeft)}</td><td class="r">${eta}</td></tr>`;
     }).join('') + '</table>' : 'No active contracts.';
   const start = c.intervalEnd - 10000, segs = [[start, c.snapshotBlock], [c.snapshotBlock, c.nominationEnd], [c.nominationEnd, c.intervalEnd]];
   $('phase').innerHTML = segs.map(([a, b]) => {

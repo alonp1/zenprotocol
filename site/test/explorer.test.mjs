@@ -121,6 +121,20 @@ test('find transactions and the address page', async () => {
   assert.ok(min.transactions.every(t => t.zp >= largest[0].zp));
 });
 
+test('contract page: executions of one contract', async () => {
+  const db = new DatabaseSync(DB, { readOnly: true });
+  const c = db.prepare("SELECT contract, COUNT(*) n, MAX(block) lb FROM txs WHERE contract IS NOT NULL AND length(contract) = 72 GROUP BY contract ORDER BY n DESC LIMIT 1").get(); db.close();
+  if (c) {
+    const d = (await get('/contract/' + c.contract)).body;
+    assert.equal(d.executions, c.n); assert.equal(d.lastBlock, c.lb);
+    assert.ok(d.recent.length > 0 && d.recent.length <= 20 && d.recent[0].block === c.lb && d.recent[0].time > 0);
+    assert.equal(d.commands.reduce((s, x) => s + x.count, 0), c.n);
+  }
+  const none = (await get('/contract/' + '0'.repeat(72))).body;
+  assert.equal(none.executions, 0); assert.deepEqual(none.recent, []);
+  assert.equal((await get('/contract/zz')).status, 404);
+});
+
 test('bad input is refused, not executed', async () => {
   for (const p of ['/find/blocks?from=yesterday', '/find/blocks?minTxs=-1', '/find/blocks?miner=abc', "/find/blocks?order=number;DROP TABLE blocks",
                    '/find/txs?minZp=1e9', "/find/txs?asset=ab' OR '1'='1", '/find/txs?kind=all;--', '/find/txs?address=notanaddress', '/address/zen1' + 'q'.repeat(5)]) {
