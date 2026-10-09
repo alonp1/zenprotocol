@@ -27,13 +27,14 @@ jobs:
         run: bash scripts/testnet-cgp-contracts.sh http://127.0.0.1:20000 devnet 100000
       - name: Fund the test voters (target interval 4, snapshot 390)
         run: |
+          # the devnet mines several blocks a second: slow it down so the 5-block nomination and vote phases can be used
+          docker update --cpus 0.12 zen-devnet
+          echo "::notice title=tip before funding::$(curl -fs http://127.0.0.1:20000/blockchain/info | head -c 80)"
           cd wallet && npm ci --no-audit --no-fund && cd ..
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
           cd wallet && node --no-warnings tools/cgp-sim.mjs fund --send --target 390 --node http://127.0.0.1:20000
       - name: Run the scenario through the payout block
         run: |
-          # the devnet mines several blocks a second: slow it down so the 5-block nomination and vote phases can be used
-          docker update --cpus 0.12 zen-devnet
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
           cd wallet && CGP_POLL_MS=1000 timeout 3000 node --no-warnings tools/cgp-sim.mjs run --send --target 390 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
           C=$(curl -fs http://127.0.0.1:20000/blockchain/cgp); echo "cgp after the vote: $C"
@@ -50,4 +51,6 @@ jobs:
           [ -n "$T" ] && [ "$T" -ge 420 ]
       - name: Sim output
         if: always()
-        run: tail -n 60 /tmp/sim.txt | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=sim output::{}"
+        run: |
+          grep -E "published|ERROR|phase (Nomination|Vote)|not |weight" /tmp/sim.txt | awk '!seen[$0]++' | grep -v "is not a candidate" | head -n 60 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=sim key lines::{}"
+          tail -n 20 /tmp/sim.txt | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=sim output::{}"
