@@ -19,16 +19,20 @@ import { fileURLToPath } from 'node:url';
 import { deserializeBlock, txHash, hex, unhex, Reader, VarInt, ContractId, Spend } from '../wallet/src/serialize.js';
 import { encodeAddress, pkHash } from '../wallet/src/keys.js';
 
-const CGP_CONTRACT = '00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1';     // Chain.fs cgpContractId
-const VOTING_CONTRACT = '000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12';  // Chain.fs votingContractId
+// Mainnet and testnet differ in contract ids and interval lengths (Chain.fs): the testnet's CGP cycle is 100 blocks.
+const NET = process.argv.includes('--net') ? process.argv[process.argv.indexOf('--net') + 1] : (process.env.ZEN_NET || 'main');   // 'main' or 'test': address prefix of the chain being indexed (zen / tzn)
+const CHAIN = NET === 'test'
+  ? { cgp: '00000000eac6c58bed912ff310df9f6960e8ed5c28aac83b8a98964224bab1e06c779b93', voting: '00000000e89738718a802a7d217941882efe8e585e20b20901391bc37af25fac2f22c8ab', interval: 100, snapshot: 90, nomination: 5, offset: 0 }
+  : { cgp: '00000000cdaa2a511cd2e1d07555b00314d1be40a649d3b6f419eb1e4e7a8e63240a36d1', voting: '000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12', interval: 10000, snapshot: 9000, nomination: 500, offset: 24 };   // offset: wallets and the explorer count mainnet intervals from the CGP launch
+const CGP_CONTRACT = CHAIN.cgp;          // Chain.fs cgpContractId
+const VOTING_CONTRACT = CHAIN.voting;    // Chain.fs votingContractId
 // Repo voting contract: the community vote on protocol upgrades. Its command is the git commit id (40 hex) being voted for.
 const REPO_CONTRACT_MAIN = '00000000e3113f8bf9cf8b764d945d6f99c642bdb069d137bdd5f7e44f1e75947f58a044';
-const INTERVAL = 10000, SNAPSHOT = 9000, NOMINATION = 500;
-const COMMUNITY_INTERVAL_OFFSET = 24;      // wallets and the explorer count intervals from the CGP launch
+const INTERVAL = CHAIN.interval, SNAPSHOT = CHAIN.snapshot, NOMINATION = CHAIN.nomination;
+const COMMUNITY_INTERVAL_OFFSET = CHAIN.offset;
 const CONFIRM = 10, TAKE = 2000;
 
 const arg = (name, def) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : def; };
-const NET = arg('net', process.env.ZEN_NET || 'main');   // 'main' or 'test': address prefix of the chain being indexed (zen / tzn)
 const DEX_CONTRACT = arg('dex', process.env.ZEN_DEX || '');   // ZenDex contract id to index (testnet or mainnet); empty = off
 const REPO_CONTRACT = arg('repo', process.env.ZEN_REPO ?? (NET === 'main' ? REPO_CONTRACT_MAIN : ''));   // empty = off
 const API = arg('api', 'http://127.0.0.1:11567'), WEB = arg('web', '/var/www/zen');
