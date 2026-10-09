@@ -5,7 +5,7 @@ import { newMnemonic, checkMnemonic, isValidAddress, decodeAddress } from '../sr
 import { NodeClient, NodeError, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
 import { CGP_PARAMS, VOTING_CONTRACT, allocationRange, allocationBallot, payoutBallot, candidateBallot, phaseAt, snapshotBlock } from '../src/cgp.js';
-import { openWallet, prepareVote, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
+import { openWallet, prepareVote, checkInfo, discover, readState, readHistory, prepareSend, prepareExtend, extendCost, MAX_EXTEND_BLOCKS, publish, receiveAddress, canSpend } from '../src/wallet.js';
 import { parseZP, formatZP, ZP } from '../src/tx.js';
 import { hex } from '../src/serialize.js';
 import contractNames from '../../site/contract-names.json';
@@ -224,14 +224,14 @@ const views = {
   },
 
   contracts: () => {
-    const cs = S.contracts;
+    const cs = S.contracts, wa = active(), mayExtend = !!(wa && S.open.get(wa.id) && canSpend(S.open.get(wa.id)));
     return `${top()}<div class="screen"><h1>Smart contracts</h1>
-    <div class="card"><h2>Active contracts</h2><div class="list">${!cs ? '<p class="muted small">Loading…</p>' : cs.length === 0 ? '<p class="muted small">None.</p>' : cs.map(k => {
+    <div class="card"><h2>Active contracts</h2><div class="list">${!cs ? '<p class="muted small">Loading…</p>' : cs.length === 0 ? '<p class="muted small">None.</p>' : cs.map((k, i) => {
       const left = k.expire - (S.tip || k.expire), cls = left < 300 ? 'lvl-bad' : left < 3000 ? 'lvl-warn' : '';
       return `<div class="item"><div><div>${esc(k.name || 'Unnamed')}</div><div class="muted small mono" title="${esc(k.address)}">${esc(shortAddr(k.address))}</div></div>
-        <div data-s="right"><div class="small">until ${Number(k.expire).toLocaleString('en-US')}</div><div class="small ${cls}">${left.toLocaleString('en-US')} blocks left</div></div></div>`;
+        <div data-s="right"><div class="small">until ${Number(k.expire).toLocaleString('en-US')}</div><div class="small ${cls}">${left.toLocaleString('en-US')} blocks left</div>${mayExtend ? `<button class="btn small" data-act="extend" data-i="${i}">Extend</button>` : ''}</div></div>`;
     }).join('')}</div></div>
-    <div class="card"><p class="muted small">Tokens issued by contracts appear on the Wallet screen. Viewing code, extending and running contracts arrive in a later version.</p></div></div>${nav('contracts')}`;
+    <div class="card"><p class="muted small">Tokens issued by contracts appear on the Wallet screen. Extending a contract keeps it running past its end block: it costs ZP from the active wallet. Viewing code and running contracts arrive in a later version.</p></div></div>${nav('contracts')}`;
   },
 
   settings: () => `${top()}<div class="screen"><h1>Settings</h1>
@@ -343,6 +343,31 @@ function modalHtml() {
   if (m.type === 'voted') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">✓ Broadcast successfully</h2>
     <p>The node accepted your ${esc(m.kind)}: <b>${esc(m.label)}</b>.</p>
     <p class="muted small">It counts once it is in a block of this phase (about 4 minutes). Its status is under “Your ballots” on this screen.</p>
+    <div class="card small"><div class="muted">Transaction</div><div class="mono" data-s="wrap">${esc(m.hash)}</div></div>
+    <button class="btn primary big" data-act="close">Done</button></div></div>`;
+  if (m.type === 'extend') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>Extend ${esc(m.name || 'contract')}</h2>
+    <form data-form="extend" class="screen" data-s="flush">
+    <div class="card"><div class="kv"><span class="muted">Ends at block</span><span>${m.expire.toLocaleString('en-US')}</span></div>
+    <div class="kv"><span class="muted">Blocks left</span><span>${Math.max(0, m.expire - (S.tip || m.expire)).toLocaleString('en-US')}</span></div>
+    <div class="kv"><span class="muted">Price</span><span>${m.code.length.toLocaleString('en-US')} kalapas per block</span></div>
+    <div class="kv"><span class="muted">Your balance</span><span>${m.balance === null ? '–' : formatZP(m.balance) + ' ZP'}</span></div></div>
+    <label class="field">Extend by (blocks)<input name="blocks" inputmode="numeric" autocomplete="off" value="${esc(m.blocks || '')}" required></label>
+    <div class="wrapchips">${extendPresets().map(([b, t]) => `<button type="button" class="chip" data-act="ext-pick" data-v="${b}">${esc(t)}</button>`).join('')}</div>
+    <div class="card"><div class="kv"><span class="muted">Cost</span><span id="ext-cost">–</span></div>
+    <div class="kv"><span class="muted">New end block</span><span id="ext-new">–</span></div></div>
+    <p id="ext-note" class="small muted"></p>${errBox()}
+    <div class="row"><button type="button" class="btn" data-act="close">Cancel</button><button class="btn primary" id="ext-go" disabled>Review</button></div></form></div></div>`;
+  if (m.type === 'confirm-extend') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>Confirm extension</h2>
+    <div class="card"><div class="kv"><span class="muted">Contract</span><span>${esc(m.name || 'Unnamed')}</span></div>
+    <div class="kv"><span class="muted">Extend by</span><span>${m.blocks.toLocaleString('en-US')} blocks</span></div>
+    <div class="kv"><span class="muted">Cost</span><span class="amt">${formatZP(m.prepared.cost)} ZP</span></div>
+    <div class="kv"><span class="muted">New end block</span><span>${(m.expire + m.blocks - 1).toLocaleString('en-US')}</span></div>
+    <div class="kv"><span class="muted">From</span><span>${esc(active().name)}</span></div></div>
+    <p class="muted small">The ZP is spent for good: it is not returned if the contract is not used.</p>${errBox()}
+    <div class="row"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="confirm-extend" ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>' : 'Sign and send'}</button></div></div></div>`;
+  if (m.type === 'extended') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">✓ Broadcast successfully</h2>
+    <p>The node accepted the extension of <b>${esc(m.name || 'the contract')}</b> by ${m.blocks.toLocaleString('en-US')} blocks.</p>
+    <p class="muted small">It takes effect when the transaction is in a block (about 4 minutes). The new end block then shows on this screen.</p>
     <div class="card small"><div class="muted">Transaction</div><div class="mono" data-s="wrap">${esc(m.hash)}</div></div>
     <button class="btn primary big" data-act="close">Done</button></div></div>`;
   if (m.type === 'sent') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2 class="ok">Sent</h2>
@@ -497,6 +522,21 @@ function syncAlloc(raw, from) {
   }
   if (go) go.disabled = !okv || !voters().length;
 }
+// about 4 minutes per block on mainnet: 365 blocks a day. The testnet pace varies, so only blocks are named there
+function extendPresets() {
+  return net() === 'main' ? [[10950, '30 days'], [32850, '90 days'], [65700, '180 days'], [131400, '1 year']] : [[1000, '1,000'], [10000, '10,000'], [100000, '100,000']];
+}
+function syncExtend() {
+  const m = S.modal, inp = $app.querySelector('input[name=blocks]'); if (!m || m.type !== 'extend' || !inp) return;
+  const t = inp.value.trim(), n = Number(t), okn = /^\d{1,8}$/.test(t) && n >= 1 && n <= MAX_EXTEND_BLOCKS;
+  $app.querySelectorAll('[data-act=ext-pick]').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+  const cost = $app.querySelector('#ext-cost'), nw = $app.querySelector('#ext-new'), note = $app.querySelector('#ext-note'), go = $app.querySelector('#ext-go');
+  const price = okn ? extendCost(m.code, n) : null, short = price !== null && m.balance !== null && price > m.balance;
+  cost.textContent = price === null ? '–' : formatZP(price) + ' ZP'; nw.textContent = okn ? (m.expire + n - 1).toLocaleString('en-US') : '–';
+  note.className = 'small ' + (!t || (okn && !short) ? 'muted' : 'bad');
+  note.textContent = !t ? '' : !okn ? `Enter a whole number of blocks, from 1 to ${MAX_EXTEND_BLOCKS.toLocaleString('en-US')}` : short ? 'Not enough ZP in this wallet' : (net() === 'main' ? `About ${(n / 365).toLocaleString('en-US', { maximumFractionDigits: 1 })} days` : '');
+  go.disabled = !okn || short;
+}
 function syncTo() {
   const inp = $app.querySelector('input[name=to]'), note = $app.querySelector('#to-note'); if (!inp || !note) return;
   const a = inp.value.replace(/\s+/g, ''); if (a !== inp.value) inp.value = a;
@@ -549,6 +589,21 @@ $app.addEventListener('click', async e => {
       catch { note.className = 'small bad'; note.textContent = 'This browser did not allow reading the clipboard: press and hold in the field, then choose Paste'; }
       return;
     }
+    if (act === 'extend') {
+      const k = S.contracts[+t.dataset.i], a = active(); if (!k || !a) return;
+      const list = await node().activeContracts(), c = Array.isArray(list) ? list.find(x => x && (x.contractId === k.id || x.address === k.address)) : null;
+      if (!c || typeof c.code !== 'string' || !c.code) throw new Error('The node did not return this contract’s code');
+      await refreshWallet(a.id);
+      const zp = S.data.get(a.id)?.state?.assets.find(x => x.asset === '00');
+      S.modal = { type: 'extend', id: c.contractId, name: k.name, code: c.code, expire: Number(c.expire ?? c.expiry ?? k.expire), balance: S.data.get(a.id)?.state ? (zp?.spendable ?? 0n) : null, blocks: '' };
+      S.error = ''; render(); return syncExtend();
+    }
+    if (act === 'ext-pick') { $app.querySelector('input[name=blocks]').value = t.dataset.v; return syncExtend(); }
+    if (act === 'confirm-extend') {
+      S.busy = true; render();
+      const m = S.modal, hash = await publish(node(), m.prepared);
+      S.busy = false; S.modal = { type: 'extended', hash, name: m.name, blocks: m.blocks }; render(); setTimeout(() => { refreshAll(); }, 5000); return;
+    }
     if (act === 'close') { S.modal = null; S.error = ''; return render(); }
     if (act === 'lock') return lock();
     if (act === 'toggle-pw') { const inp = t.parentElement.querySelector('input'), show = inp.type === 'password'; inp.type = show ? 'text' : 'password'; t.textContent = show ? 'Hide' : 'Show'; t.setAttribute('aria-pressed', String(show)); t.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
@@ -584,6 +639,7 @@ $app.addEventListener('input', e => {
   else if (t.name === 'pctr') syncAlloc(t.value, 'slider');
   else if (t.name === 'to' && t.closest('[data-form=vote-nom]')) syncTo();
   else if (t.name === 'amount') syncAmt();
+  else if (t.name === 'blocks') syncExtend();
 });
 
 $app.addEventListener('submit', async e => {
@@ -640,6 +696,13 @@ $app.addEventListener('submit', async e => {
         const amount = parseZP(v.amount.trim()); if (amount <= 0n) throw new Error('Enter an amount');
         const fund = S.stats?.cgp?.balance?.zp; if (Number.isFinite(fund) && Number(amount) / 1e8 > fund) throw new Error(`The CGP fund holds ${zpStr(fund)} ZP: ask for less`);
         return await reviewVote('nomination', 'Nomination', payoutBallot(to, [{ asset: ZP, amount }]), `Pay ${formatZP(amount)} ZP`, [['To', to, true]]);
+      }
+      case 'extend': {
+        const m = S.modal, blocks = Number(v.blocks.trim()), a = active(); m.blocks = v.blocks;
+        await refreshWallet(a.id);
+        const d = S.data.get(a.id); if (!d?.state || d.error) throw new Error('Could not read the balance from the node');
+        const prepared = prepareExtend(S.open.get(a.id), d.state, m.id, m.code, blocks);
+        S.modal = { ...m, type: 'confirm-extend', blocks, prepared }; S.error = ''; return render();
       }
       case 'node': {
         const url = v.url.trim().replace(/\/+$/, '');

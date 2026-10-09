@@ -34,7 +34,7 @@ http.createServer((req, res) => {
         case '/blockchain/candidates': return send(res, 200, st.cands ? [
           { recipient: other, spendlist: [{ asset: '00', amount: '200000000' }] },
           { recipient: encodeAddress(unhex(hex(key0.pkHash)), NET), spendlist: [{ asset: '00', amount: '50000000' }] }] : []);
-        case '/contract/active': return send(res, 200, [{ contractId: VOTING, address: 'x', expire: st.tip + 90000, code: '' }]);
+        case '/contract/active': return send(res, 200, [{ contractId: VOTING, address: encodeAddress(unhex(VOTING), NET, true), expire: st.tip + 90000, code: '// voting contract\n'.padEnd(4000, 'x') }]);
         case '/addressdb/outputs': return send(res, 200, body.addresses?.includes(addr0) ? fund() : []);
         case '/addressdb/balance': return send(res, 200, body.addresses?.includes(addr0) ? [{ asset: '00', balance: String(st.zp) }] : []);
         case '/addressdb/transactions': return send(res, 200, []);

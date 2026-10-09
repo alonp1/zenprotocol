@@ -70,3 +70,22 @@ test('vault: encrypts, unlocks with the right password only', async () => {
   await assert.rejects(unlockVault(vault, 'wrong password'), /Wrong password/);
   await assert.rejects(createVault('short'), /at least 8/);
 });
+
+test('extending a contract pays code length x blocks to an ExtensionSacrifice output', async () => {
+  const { prepareExtend, extendCost } = await import('../src/wallet.js');
+  const { deserializeTx, unhex } = await import('../src/serialize.js');
+  const w = openWallet({ id: 'x', name: 'X', network: 'main', kind: 'mnemonic' }, WORDS);
+  const key = [...w.keys.values()][0];
+  const utxos = [{ outpoint: { txHash: new Uint8Array(32).fill(7), index: 0 }, lock: { type: 'PK', hash: key.pkHash }, spend: { asset: '00', amount: parseZP('5') } }];
+  const id = '000000006ea5457ed23e3e13f31fe4cfd46c200587f2e4cc22df30ac77790f6d2c15cc12', code = 'x'.repeat(4000);
+  assert.equal(extendCost(code, 10000), 40_000_000n);
+  const p = prepareExtend(w, { tip: 100, utxos }, id, code, 10000);
+  const tx = deserializeTx(unhex(p.hex));
+  const sac = tx.outputs.find(o => o.lock.type === 'ExtensionSacrifice');
+  assert.equal(sac.spend.amount, 40_000_000n);
+  assert.equal(Buffer.from(sac.lock.contractId.hash).toString('hex'), id.slice(8));
+  assert.equal(tx.outputs.find(o => o.lock.type === 'PK').spend.amount, parseZP('5') - 40_000_000n);
+  assert.throws(() => prepareExtend(w, { tip: 100, utxos }, id, code, 0), /number of blocks/);
+  assert.throws(() => prepareExtend(w, { tip: 100, utxos }, id, code, 10 ** 9), /Not enough funds|number of blocks/);
+  assert.throws(() => prepareExtend(w, { tip: 100, utxos: [] }, id, code, 5), /Not enough funds/);
+});

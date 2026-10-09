@@ -139,6 +139,31 @@ export function prepareSend(w, state, to, amount) {
   });
 }
 
+// --- extending a contract (Consensus/TransactionValidation.fs: extendContracts) -----------------------------
+// The sacrifice is paid in ZP to an ExtensionSacrifice output of the contract: blocks = amount / (1 kalapa x code length).
+// Only a contract that is still active can be extended (a lapsed one needs its code activated again).
+export const SACRIFICE_PER_BYTE_BLOCK = 1n;                      // Consensus/Chain.fs, main and test
+export const MAX_EXTEND_BLOCKS = 10_000_000;
+export const extendCost = (code, blocks) => SACRIFICE_PER_BYTE_BLOCK * BigInt(String(code).length) * BigInt(blocks);
+export function prepareExtend(w, state, contractIdHex, code, blocks) {
+  if (!canSpend(w)) throw new Error('This is a watch-only wallet');
+  if (!/^[0-9a-f]{72}$/.test(contractIdHex)) throw new Error('Invalid contract id');
+  if (!Number.isSafeInteger(blocks) || blocks < 1 || blocks > MAX_EXTEND_BLOCKS) throw new Error(`Enter a number of blocks from 1 to ${MAX_EXTEND_BLOCKS.toLocaleString('en-US')}`);
+  if (!code) throw new Error('The node did not return the contract code');
+  const cost = extendCost(code, blocks);
+  const keyFor = u => w.keys.get(hex(u.lock.type === 'PK' ? u.lock.hash : u.lock.pkHash));
+  const utxos = state.utxos
+    .filter(u => u.spend.asset === '00' && keyFor(u))
+    .map(u => ({ ...u, spend: { asset: ZEN_ASSET, amount: u.spend.amount }, key: keyFor(u) }));
+  const changeHash = decodeAddress(receiveAddress(w)).hash;
+  const prepared = buildTransaction({
+    utxos, tipBlockNumber: state.tip, maturity: maturityFor(w.network),
+    payments: [{ lock: { type: 'ExtensionSacrifice', contractId: contractIdOf(contractIdHex) }, spend: { asset: ZEN_ASSET, amount: cost } }],
+    changeLock: { type: 'PK', hash: changeHash },
+  });
+  return { ...prepared, cost, blocks };
+}
+
 export async function publish(node, prepared) {
   const res = await node.publish(prepared.hex);
   if (typeof res === 'string' && /^[0-9a-f]{64}$/.test(res) && res !== prepared.hash)
