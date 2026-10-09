@@ -132,6 +132,11 @@ test('contract page: executions of one contract', async () => {
   }
   const none = (await get('/contract/' + '0'.repeat(72))).body;
   assert.equal(none.executions, 0); assert.deepEqual(none.recent, []);
+  // extensions: the sample blocks have none, so one row is written the way the indexer does
+  const w = new DatabaseSync(DB); const cid = '0'.repeat(8) + 'ab'.repeat(32);
+  w.prepare('INSERT INTO extensions VALUES (?,?,?,?,?,?)').run('f'.repeat(64), 1, 50, 1700000000000, cid, '40000000'); w.close();
+  const e = (await get('/contract/' + cid)).body.extensions;
+  assert.equal(e.count, 1); assert.equal(e.totalKalapas, '40000000'); assert.equal(e.lastBlock, 50); assert.equal(e.recent[0].kalapas, '40000000'); assert.equal(e.recent[0].hash, 'f'.repeat(64));
   assert.equal((await get('/contract/zz')).status, 404);
 });
 

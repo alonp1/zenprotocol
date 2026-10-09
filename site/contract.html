@@ -145,11 +145,17 @@ async function main() {
   const pill = !live ? '<span class="pill bad">Not active</span>' : left != null && left < 300 ? '<span class="pill bad">Ends soon</span>' : '<span class="pill ok">Active</span>';
   const when = left != null ? dateOnly(Date.now() + left * bt * 1000) : '';
   const stat = (kk, v, s) => `<div class="stat"><div class="k">${kk}</div><div class="v">${v}</div><div class="s">${s || ''}</div></div>`;
-  let h = `<section><div class="grid four">
+  const xt = ex?.extensions, len = a?.code?.length || 0;
+  const zpf = k => (Number(k) / 1e8).toLocaleString('en-US', { maximumFractionDigits: 8 });
+  const blocksOf = k => len ? Math.floor(Number(k) / len) : null;
+  const unavailable = 'not available on this server yet';
+  let h = `<section><div class="grid">
     ${stat('Status', pill, live ? '' : 'The node lists only active contracts')}
     ${stat('Active until block', fmt(expire), left != null ? (left < 0 ? 'ended' : fmt(left) + ' blocks left · around ' + when) : '')}
-    ${stat('Executions', ex ? fmt(ex.executions) : '–', ex ? 'transactions that call it' : 'index not ready')}
+    ${stat('Executions', ex ? fmt(ex.executions) : '–', ex ? 'transactions that call it' : unavailable)}
     ${stat('Last executed', ex?.lastBlock ? dateOnly(ex.lastTime) : ex ? 'never' : '–', ex?.lastBlock ? 'block ' + fmt(ex.lastBlock) + ' · ' + ago(ex.lastTime) : '')}
+    ${stat('Extensions', xt ? fmt(xt.count) : '–', xt ? (xt.count ? zpf(xt.totalKalapas) + ' ZP paid in total' : 'none yet') + (xt.complete ? '' : ' · history still being indexed') : unavailable)}
+    ${stat('Last extended', xt?.lastBlock ? dateOnly(xt.lastTime) : xt ? 'never' : '–', xt?.lastBlock ? 'block ' + fmt(xt.lastBlock) + ' · ' + ago(xt.lastTime) : '')}
   </div></section>`;
   h += `<section><h2>Identity</h2><div class="kv">
     ${row('Name', esc(k?.name || '–') + (known ? ' · ' + esc(known[1][0]) : ''))}
@@ -161,6 +167,9 @@ async function main() {
   </div></section>`;
   if (ex?.commands?.length) h += `<section><h2>Commands</h2><div class="scroll"><table><tr><th>Command</th><th class="r">Executions</th><th class="r">Last block</th><th>Last time</th></tr>${ex.commands.map(c =>
     `<tr><td class="mono">${esc(c.command ? (c.command.length > 44 ? short(c.command) : c.command) : '(none)')}</td><td class="r">${fmt(c.count)}</td><td class="r">${fmt(c.lastBlock)}</td><td>${dt(c.lastTime)}</td></tr>`).join('')}</table></div></section>`;
+  if (xt?.recent?.length) h += `<section><h2>Extensions</h2><div class="scroll"><table><tr><th>Time</th><th class="r">Block</th><th class="r">Paid (ZP)</th><th class="r">Blocks added</th><th>Transaction</th></tr>${xt.recent.map(r =>
+    `<tr><td>${dt(r.time)}</td><td class="r"><a href="/explorer.html?block=${r.block}">${fmt(r.block)}</a></td><td class="r">${zpf(r.kalapas)}</td><td class="r">${blocksOf(r.kalapas) == null ? '–' : fmt(blocksOf(r.kalapas))}</td><td class="mono"><a href="/explorer.html?tx=${esc(r.hash)}">${esc(short(r.hash))}</a></td></tr>`).join('')}</table></div>
+    <div class="note">Anyone can extend a contract by paying ZP to it: one block costs 1 kalapa per character of its code.</div></section>`;
   if (ex?.recent?.length) h += `<section><h2>Latest executions</h2><div class="scroll"><table><tr><th>Time</th><th class="r">Block</th><th>Command</th><th>Transaction</th></tr>${ex.recent.map(r =>
     `<tr><td>${dt(r.time)}</td><td class="r"><a href="/explorer.html?block=${r.block}">${fmt(r.block)}</a></td><td class="mono">${esc(r.command ? (r.command.length > 28 ? short(r.command) : r.command) : '–')}</td><td class="mono"><a href="/explorer.html?tx=${esc(r.hash)}">${esc(short(r.hash))}</a></td></tr>`).join('')}</table></div>
     <div class="note">Counts and lists cover transactions whose first contract call is this contract.</div></section>`;

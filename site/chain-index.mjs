@@ -123,7 +123,11 @@ CREATE INDEX IF NOT EXISTS addr_txs_block ON addr_txs(address, block, idx);`);
 // ZP in the outputs of a transaction (without the fee), for searching by amount; added after the first release of the index
 if (!db.prepare("SELECT 1 FROM pragma_table_info('txs') WHERE name='zp'").get()) db.exec('ALTER TABLE txs ADD COLUMN zp INTEGER');
 db.exec('CREATE INDEX IF NOT EXISTS txs_zp ON txs(zp)');
-db.exec("CREATE INDEX IF NOT EXISTS txs_contract ON txs(contract, block) WHERE contract IS NOT NULL");   // the contract page: executions of one contract
+db.exec("CREATE INDEX IF NOT EXISTS txs_contract ON txs(contract, block) WHERE contract IS NOT NULL");
+// contract extensions: ZP paid to an ExtensionSacrifice output of a contract (Consensus/TransactionValidation.fs extendContracts);
+// blocks added = amount / code length, which the contract page works out from the code
+db.exec('CREATE TABLE IF NOT EXISTS extensions (tx TEXT, idx INTEGER, block INTEGER, time INTEGER, contract TEXT, amount TEXT, PRIMARY KEY (tx, idx))');
+db.exec('CREATE INDEX IF NOT EXISTS extensions_contract ON extensions(contract, block)');   // the contract page: executions of one contract
 lap('database opened and tables checked');
 const q = {
   meta: db.prepare('SELECT v FROM meta WHERE k=?'), setMeta: db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)'),
@@ -140,6 +144,7 @@ const q = {
   dexPut: db.prepare('INSERT OR REPLACE INTO dex VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'),
   cvote: db.prepare('INSERT OR IGNORE INTO commitvotes VALUES (?,?,?,?,?)'),
   payout: db.prepare('INSERT INTO payouts VALUES (?,?,?,?,?,?)'),
+  extPut: db.prepare('INSERT OR IGNORE INTO extensions VALUES (?,?,?,?,?,?)'),
   allocHas: db.prepare('SELECT 1 FROM allocation WHERE interval=?'), allocPut: db.prepare('INSERT INTO allocation VALUES (?,?,?)'),
 };
 const meta = (k, d) => q.meta.get(k)?.v ?? d;
@@ -206,6 +211,7 @@ function indexBlock(n, raw) {
         q.assetNew.run(a, a.slice(0, 72), n);
         q.assetBurn.run(String(BigInt(q.assetGet.get(a).destroyed) + o.spend.amount), a);
       }
+      if (o.lock.type === 'ExtensionSacrifice' && a === '00') q.extPut.run(th, i, n, ts, cidStr(o.lock.contractId), String(o.spend.amount));
       const addr = addressOf(o.lock);
       if (addr) q.utxoPut.run(th + ':' + i, a, addr, String(o.spend.amount));
       outs.push([addr || o.lock.type, a, String(o.spend.amount)]);
@@ -312,6 +318,33 @@ if (REPO_CONTRACT && meta('repomig2', '') !== 'done') {
   }
   if (ok) { q.setMeta.run('repomig2', 'done'); console.log('chain-index: repo votes backfilled'); }
   else console.log(`chain-index: repo votes backfill continues from block ${meta('repomig_cursor', '0')}`);
+}
+
+// ---- one-time backfill of the contract extensions of blocks indexed before they were collected (one request per run of blocks) ----
+if (meta('extmig', '') !== 'done') {
+  const cursor = Number(meta('extmig_cursor', '0')), allowed = Math.min(BUDGET * 0.3, 100000);
+  const todo = db.prepare("SELECT DISTINCT block FROM txs WHERE instr(outputs, '\"ExtensionSacrifice\"') > 0 AND block > ? ORDER BY block").all(cursor).map(r => r.block);
+  let ok = true, i = 0;
+  while (i < todo.length) {
+    if (Date.now() - start0 > allowed) { ok = false; break; }
+    const from = todo[i]; let j = i;
+    while (j + 1 < todo.length && todo[j + 1] - from < 300) j++;
+    const to = todo[j], want = new Set(todo.slice(i, j + 1));
+    try {
+      const got = (await api(`/blockchain/blocks?blockNumber=${to}&take=${to - from + 1}`, undefined, 120000, 2)).filter(x => want.has(x.blockNumber));
+      if (got.length !== want.size) throw new Error(`got ${got.length} of ${want.size} blocks`);
+      db.exec('BEGIN');
+      for (const b of got) {
+        const blk = deserializeBlock(unhex(b.rawBlock), { lenient: true }), ts = Number(new DataView(blk.header.buffer, blk.header.byteOffset).getBigUint64(72));
+        for (const { tx } of blk.txs) tx.outputs.forEach((o, k) => { if (o.lock.type === 'ExtensionSacrifice' && assetStr(o.spend.asset) === '00') q.extPut.run(hex(txHash(tx)), k, b.blockNumber, ts, cidStr(o.lock.contractId), String(o.spend.amount)); });
+      }
+      q.setMeta.run('extmig_cursor', String(to));
+      db.exec('COMMIT');
+    } catch (e) { try { db.exec('ROLLBACK'); } catch { /* none open */ } console.log(`chain-index: extensions of blocks ${from}-${to}: ${e.message} (next run retries)`); ok = false; break; }
+    i = j + 1;
+  }
+  if (ok) { q.setMeta.run('extmig', 'done'); console.log('chain-index: contract extensions backfilled'); }
+  else console.log(`chain-index: extensions backfill continues from block ${meta('extmig_cursor', '0')}`);
 }
 
 // ---- index new blocks ------------------------------------------------------------------------

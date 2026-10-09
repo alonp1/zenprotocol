@@ -36,7 +36,7 @@ function open() {
       blocks: db.prepare('SELECT * FROM blocks WHERE number < ? ORDER BY number DESC LIMIT ?'),
       byNum: db.prepare('SELECT * FROM blocks WHERE number=?'), byHash: db.prepare('SELECT * FROM blocks WHERE hash=?'),
       txsOf: db.prepare('SELECT * FROM txs WHERE block=? ORDER BY idx'), tx: db.prepare('SELECT * FROM txs WHERE hash=?'),
-      mig: db.prepare("SELECT v FROM meta WHERE k='addrmig'"),
+      mig: db.prepare("SELECT v FROM meta WHERE k='addrmig'"), mig2: db.prepare("SELECT v FROM meta WHERE k='extmig'"),
     };
     return true;
   } catch { db = null; return false; }
@@ -202,7 +202,15 @@ async function handle(p, query) {
       .map(r => ({ command: r.command, count: r.n, lastBlock: r.lastBlock, lastTime: timeOf(r.lastBlock) }));
     const recent = db.prepare('SELECT t.hash, t.block, t.command, t.zp, b.time FROM txs t JOIN blocks b ON b.number = t.block WHERE t.contract = ? ORDER BY t.block DESC, t.idx DESC LIMIT 20').all(id)
       .map(r => ({ hash: r.hash, block: r.block, time: r.time, command: r.command, zp: r.zp }));
-    return { tip: t, indexedTo: indexed, contract: id, executions: sum.n, firstBlock: sum.fb, firstTime: timeOf(sum.fb), lastBlock: sum.lb, lastTime: timeOf(sum.lb), commands, recent };
+    let extensions = null;   // null until the indexer has created the table (it is created when the indexer next runs)
+    try {
+      const es = db.prepare('SELECT COUNT(*) n, MAX(block) lb FROM extensions WHERE contract = ?').get(id);
+      const all = db.prepare('SELECT amount FROM extensions WHERE contract = ?').all(id);
+      extensions = { count: es.n, totalKalapas: String(all.reduce((x, r) => x + BigInt(r.amount), 0n)), lastBlock: es.lb, lastTime: timeOf(es.lb),
+        recent: db.prepare('SELECT tx, block, time, amount FROM extensions WHERE contract = ? ORDER BY block DESC, idx DESC LIMIT 10').all(id).map(r => ({ hash: r.tx, block: r.block, time: r.time, kalapas: r.amount })),
+        complete: q.mig2.get()?.v === 'done' };
+    } catch { /* no extensions table yet */ }
+    return { tip: t, indexedTo: indexed, contract: id, executions: sum.n, extensions, firstBlock: sum.fb, firstTime: timeOf(sum.fb), lastBlock: sum.lb, lastTime: timeOf(sum.lb), commands, recent };
   }
   if ((m = p.match(/^\/address\/([0-9a-z]{10,120})$/))) {
     if (!ready()) throw Object.assign(new Error('the address index is being built'), { status: 503 });
