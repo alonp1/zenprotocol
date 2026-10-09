@@ -352,7 +352,7 @@ function modalHtml() {
     <div class="kv"><span class="muted">Price</span><span>${m.code.length.toLocaleString('en-US')} kalapas per block</span></div>
     <div class="kv"><span class="muted">Your balance</span><span>${m.balance === null ? '–' : formatZP(m.balance) + ' ZP'}</span></div></div>
     <label class="field">Extend by (blocks)<input name="blocks" inputmode="numeric" autocomplete="off" value="${esc(m.blocks || '')}" required></label>
-    <div class="wrapchips">${extendPresets().map(([b, t]) => `<button type="button" class="chip" data-act="ext-pick" data-v="${b}">${esc(t)}</button>`).join('')}</div>
+    <div class="wrapchips">${extendPresets().map(([b, t]) => `<button type="button" class="chip" data-act="ext-pick" data-v="${b}" title="${formatZP(extendCost(m.code, b))} ZP">${esc(t)} · ${zpStr(Number(extendCost(m.code, b)) / 1e8)} ZP</button>`).join('')}</div>
     <div class="card"><div class="kv"><span class="muted">Cost</span><span id="ext-cost">–</span></div>
     <div class="kv"><span class="muted">New end block</span><span id="ext-new">–</span></div></div>
     <p id="ext-note" class="small muted"></p>${errBox()}
@@ -534,7 +534,7 @@ function syncExtend() {
   const price = okn ? extendCost(m.code, n) : null, short = price !== null && m.balance !== null && price > m.balance;
   cost.textContent = price === null ? '–' : formatZP(price) + ' ZP'; nw.textContent = okn ? (m.expire + n - 1).toLocaleString('en-US') : '–';
   note.className = 'small ' + (!t || (okn && !short) ? 'muted' : 'bad');
-  note.textContent = !t ? '' : !okn ? `Enter a whole number of blocks, from 1 to ${MAX_EXTEND_BLOCKS.toLocaleString('en-US')}` : short ? 'Not enough ZP in this wallet' : (net() === 'main' ? `About ${(n / 365).toLocaleString('en-US', { maximumFractionDigits: 1 })} days` : '');
+  note.textContent = !t ? '' : !okn ? `Enter a whole number of blocks, from 1 to ${MAX_EXTEND_BLOCKS.toLocaleString('en-US')}` : short ? 'Not enough ZP in this wallet' : (net() === 'main' ? (n < 365 ? 'Less than a day' : `About ${(n / 365).toLocaleString('en-US', { maximumFractionDigits: 1 })} days`) : '');
   go.disabled = !okn || short;
 }
 function syncTo() {
