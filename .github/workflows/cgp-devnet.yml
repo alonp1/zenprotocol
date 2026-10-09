@@ -1,7 +1,7 @@
 name: cgp-devnet
 # A whole CGP cycle on the fast devnet (local chain, 1 miner node): activate the CGP and voting contracts, fund four test voters,
 # run the scenario of wallet/tools/cgp-sim.mjs (allocation vote, nominations, payout votes), then check that the chain goes
-# through the payout block (block 410) and keeps mining. Used to test the miner change that builds the CGP payout transaction.
+# through the payout block (block 610) and keeps mining. Used to test the miner change that builds the CGP payout transaction.
 on:
   workflow_dispatch:
   push:
@@ -25,30 +25,30 @@ jobs:
           echo "block $T after start"; [ -n "$T" ] && [ "$T" -ge 40 ]
       - name: Activate the CGP and voting contracts
         run: bash scripts/testnet-cgp-contracts.sh http://127.0.0.1:20000 devnet 100000
-      - name: Fund the test voters (target interval 4, snapshot 390)
+      - name: Fund the test voters (target interval 6, snapshot 590)
         run: |
           # the devnet mines several blocks a second: slow it down so the 5-block nomination and vote phases can be used
           docker update --cpus 0.12 zen-devnet
           echo "::notice title=tip before funding::$(curl -fs http://127.0.0.1:20000/blockchain/info | head -c 80)"
           cd wallet && npm ci --no-audit --no-fund && cd ..
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
-          cd wallet && node --no-warnings tools/cgp-sim.mjs fund --send --target 390 --node http://127.0.0.1:20000
+          cd wallet && node --no-warnings tools/cgp-sim.mjs fund --send --target 590 --node http://127.0.0.1:20000
       - name: Run the scenario through the payout block
         run: |
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
-          cd wallet && CGP_POLL_MS=1000 timeout 3000 node --no-warnings tools/cgp-sim.mjs run --send --target 390 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
+          cd wallet && CGP_POLL_MS=1000 timeout 3000 node --no-warnings tools/cgp-sim.mjs run --send --target 590 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
           C=$(curl -fs http://127.0.0.1:20000/blockchain/cgp); echo "cgp after the vote: $C"
           echo "$C" | grep -q recipient || { echo "::error title=no winner::the scenario did not produce a payout winner, so the payout block is not tested: $C"; exit 1; }
           docker update --cpus 2 zen-devnet
       - name: The chain passes the payout block and keeps mining
         run: |
           set +e
-          for i in $(seq 90); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 420 ] && break; sleep 5; done
+          for i in $(seq 90); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 620 ] && break; sleep 5; done
           CGP=$(curl -fs http://127.0.0.1:20000/blockchain/cgp)
           LOG=$(docker exec zen-devnet sh -c 'grep -E "commitments mismatch|Miner created the CGP|Could not create the CGP|No payout|failed validation" /data/logs/node0.log | tail -n 12 | cut -c1-600')
           echo "tip $T; cgp $CGP"; echo "$LOG"
           printf 'tip %s%%0Acgp %s%%0A%s' "$T" "$CGP" "$(echo "$LOG" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')" | xargs -0 -I{} echo "::notice title=cgp payout result::{}"
-          [ -n "$T" ] && [ "$T" -ge 420 ]
+          [ -n "$T" ] && [ "$T" -ge 620 ]
       - name: Sim output
         if: always()
         run: |
