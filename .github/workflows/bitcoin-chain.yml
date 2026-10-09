@@ -16,7 +16,7 @@ jobs:
       MN: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
     steps:
       - uses: actions/checkout@v4
-      - name: Build the devnet image (local chain: blocks come fast, so adding one header per block is quick)
+      - name: "Build the devnet image (local chain, blocks come fast, so adding one header per block is quick)"
         run: docker build -f Docker/Dockerfile.devnet -t zen-devnet . 2>&1 | tail -n 15
       - name: Start one devnet node with a miner
         run: |
