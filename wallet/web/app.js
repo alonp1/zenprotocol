@@ -4,9 +4,10 @@ import qrcode from 'qrcode-generator';
 import { newMnemonic, checkMnemonic, isValidAddress, decodeAddress } from '../src/keys.js';
 import { NodeClient, NodeError, DEFAULT_NODES } from '../src/node.js';
 import { createVault, unlockVault, seal, open, storage } from '../src/vault.js';
-import { CGP_PARAMS, VOTING_CONTRACT, allocationRange, allocationBallot, payoutBallot, candidateBallot, phaseAt } from '../src/cgp.js';
+import { CGP_PARAMS, VOTING_CONTRACT, allocationRange, allocationBallot, payoutBallot, candidateBallot, phaseAt, snapshotBlock } from '../src/cgp.js';
 import { openWallet, prepareVote, checkInfo, discover, readState, readHistory, prepareSend, publish, receiveAddress, canSpend } from '../src/wallet.js';
 import { parseZP, formatZP, ZP } from '../src/tx.js';
+import { hex } from '../src/serialize.js';
 import contractNames from '../../site/contract-names.json';
 
 const LOCK_AFTER_MS = 15 * 60 * 1000;
@@ -52,7 +53,7 @@ const voteWeight = () => voters().reduce((s, w) => s + zpOf(w.id), 0n);
 const nameOf = (id, addr) => contractNames[addr] || contractNames[id] || null;
 const zpStr = v => Number.isFinite(v) ? v.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '–';
 
-function go(screen, extra = {}) { Object.assign(S, { screen, error: '', modal: null }, extra); render(); window.scrollTo(0, 0); if (screen === 'markets') loadMarkets(); }
+function go(screen, extra = {}) { freshScreen = true; Object.assign(S, { screen, error: '', modal: null }, extra); if (screen === 'vote') S.cands = null; /* the candidate list belongs to one interval: ask the node again */ render(); window.scrollTo(0, 0); if (screen === 'markets') loadMarkets(); }
 // the site that serves this node (oracle, explorer API and index files sit next to /node/)
 const siteBase = () => { try { const u = new URL(S.settings.nodes[net()]); return /\/node$/.test(u.pathname) ? u.origin : ''; } catch { return ''; } };
 async function loadMarkets() {
@@ -71,7 +72,7 @@ async function loadMarkets() {
   render();
 }
 
-function fail(e) { S.error = e?.message || String(e); S.busy = false; render(); }
+function fail(e) { S.error = e?.message || String(e); S.busy = false; render(); $app.querySelector('.modal .err, .err')?.scrollIntoView?.({ block: 'center' }); }   // the message may sit below the button that was pressed
 
 // ---------------------------------------------------------------- views
 const top = () => `<div class="top"><span class="brand">ZP Wallet</span>
@@ -183,12 +184,12 @@ const views = {
 
   vote: () => {
     const c = cgpInfo(), sel = new Set(voters().map(w => w.id)), signers = walletsHere().filter(w => w.kind !== 'watch');
-    return `${top()}<div class="screen"><h1>Community vote</h1>
+    return `${top()}<div class="screen"><h1>CGP vote</h1>
       ${c ? `<div class="card cgp"><div class="row k"><span>INTERVAL ${c.community} <span class="muted">(node ${c.interval})</span></span><span data-s="right">${esc(c.phase)}</span></div>
         <div data-s="mt6">${esc(c.next)} in ${c.blocksLeft.toLocaleString('en-US')} blocks · around ${esc(c.eta)}</div>
         <div class="kv" data-s="mt6"><span class="muted">To the CGP</span><span>${zpStr(c.cgpPerBlock)} ZP / block (${alloc()}%)</span></div>
         <div class="kv"><span class="muted">CGP fund</span><span title="${esc(S.stats?.cgp?.balance ? 'at block ' + S.stats.cgp.balance.block : '')}">${cgpBalance()}</span></div>
-        <div class="kv"><span class="muted">Snapshot block</span><span>${c.snapshot.toLocaleString('en-US')}</span></div></div>` : '<p class="muted">Loading…</p>'}
+        <div class="kv"><span class="muted">Snapshot block</span><span>${c.snapshot.toLocaleString('en-US')}</span></div></div>` : S.nodeOk === false ? `<div class="err" role="alert">Cannot reach the node (${esc(S.nodeError || 'no answer')}). The vote needs a node: check the address in Settings, then try again.</div><button class="btn" data-act="refresh">Try again</button>` : '<p class="muted">Loading…</p>'}
       <div class="card"><h2>Wallets that vote</h2>
         <p class="muted small">Choose one wallet or several: their balances at the snapshot block add up to one vote weight.</p>
         <div class="list">${signers.map(w => `<button class="item" data-act="vote-toggle" data-id="${esc(w.id)}" data-s="plain" aria-pressed="${sel.has(w.id)}">
@@ -250,11 +251,11 @@ const views = {
 
 const alloc = () => { const a = S.cgp?.allocation; return Number.isInteger(a) && a >= 0 && a <= 100 ? a : 90; };
 
-// CGP cycle from the tip (Chain.fs: interval 10,000, snapshot +9,000, nomination 500)
+// CGP cycle seen from the next block (the one a ballot sent now would land in); intervals per network from cgp.js
 function cgpInfo() {
   if (!S.tip) return null;
-  const tip = S.tip, interval = Math.floor((tip - 1) / 10000) + 1, snap = (interval - 1) * 10000 + 9000, nom = snap + 500, end = interval * 10000;
-  const [phase, next, at] = tip < snap ? ['Before snapshot', 'Balance snapshot', snap] : tip < nom ? ['Nomination', 'Voting opens', nom] : ['Voting', 'Voting closes', end];
+  const p = CGP_PARAMS[net()], tip = S.tip, ph = phaseAt(p, tip + 1), interval = ph.interval, snap = snapshotBlock(p, interval);
+  const [phase, next, at] = ph.phase === 'before' ? ['Before snapshot', 'Balance snapshot', snap] : ph.phase === 'Nomination' ? ['Nomination', 'Voting opens', ph.closes] : ['Voting', 'Voting closes', ph.closes];
   const eta = new Date(Date.now() + (at - tip) * 236682).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const reward = 50 / 2 ** Math.floor(Math.max(0, tip - 2) / 800000);       // ZP per block, halving every 800,000 blocks
   // wallets and the explorer number intervals from the CGP launch (node interval 106 = interval 82)
@@ -294,7 +295,16 @@ async function reviewVote(kind, command, ballotHex, label) {
   await refreshWallet(funder.id);
   const d = S.data.get(funder.id); if (!d?.state) throw new Error('Could not read the balance from the node');
   const voterKeys = sel.flatMap(w => [...S.open.get(w.id).keys.values()]);
-  const prepared = await prepareVote({ w: S.open.get(funder.id), state: d.state, node: node(), votingContractId: VOTING_CONTRACT[net()], command, ballotHex, voterKeys });
+  // an output spent by a vote that is not in a block yet still shows as unspent: do not use it twice
+  const now = Date.now(), here = new Set(d.state.utxos.map(u => hex(u.outpoint.txHash) + ':' + u.outpoint.index));
+  S.pendingVotes = (S.pendingVotes || []).filter(p => now - p.at < 30 * 60 * 1000 && here.has(p.spent));
+  const exclude = S.pendingVotes.map(p => p.spent);
+  let prepared;
+  try { prepared = await prepareVote({ w: S.open.get(funder.id), state: d.state, node: node(), votingContractId: VOTING_CONTRACT[net()], command, ballotHex, voterKeys, exclude }); }
+  catch (e) {
+    if (exclude.length && /little ZP/.test(e.message)) throw new Error('Your last vote is still waiting for its block (about 4 minutes). Wait for it, then send the next one.');
+    throw e;
+  }
   S.modal = { type: 'confirm-vote', kind, label, prepared, weight: voteWeight() }; S.error = ''; render();
 }
 
@@ -333,10 +343,27 @@ function modalHtml() {
   return '';
 }
 
+// Background refreshes re-render the page: what the person has typed (password, 24 words, an amount) must survive that.
+let freshScreen = true;
+const fieldKey = el => (el.form?.dataset.form || '') + '/' + el.name;
+function snapshotFields() {
+  return [...$app.querySelectorAll('form[data-form] input, form[data-form] textarea')].filter(el => el.name && el.type !== 'hidden')
+    .map(el => ({ key: fieldKey(el), box: el.type === 'checkbox', value: el.type === 'checkbox' ? el.checked : el.value, focus: el === document.activeElement,
+                  from: el.selectionStart, to: el.selectionEnd, type: el.type }));
+}
 function render() {
+  const saved = freshScreen ? [] : snapshotFields();
+  freshScreen = false;
   const v = views[S.screen] || views.welcome;
   $app.innerHTML = v() + modalHtml();
   const f = $app.querySelector('[autofocus]'); if (f) f.focus();
+  if (S.screen === 'vote' && S.error && !S.modal) $app.querySelector('.err')?.scrollIntoView({ block: 'center' });   // the message sits below three forms: a phone screen would not show it
+  for (const s of saved) {
+    const el = [...$app.querySelectorAll('form[data-form] input, form[data-form] textarea')].find(e => e.name && fieldKey(e) === s.key);
+    if (!el) continue;
+    if (s.box) el.checked = s.value; else if (el.value !== s.value) el.value = s.value;
+    if (s.focus) { el.focus(); try { el.setSelectionRange(s.from, s.to); } catch { /* checkbox */ } }
+  }
 }
 
 // ---------------------------------------------------------------- data
@@ -441,10 +468,11 @@ $app.addEventListener('click', async e => {
     if (act === 'reset') { S.modal = { type: 'confirm', title: 'Remove all wallets from this browser?', text: 'Only do this if you have the 24 words or keys of every wallet. Then add them again with a new password.', ok: 'Remove all', act: 'do-reset' }; return render(); }
     if (act === 'do-reset') { storage.clear(); S.vault = null; S.modal = null; return go('welcome'); }
     if (act === 'load-cands') { S.cands = await node().candidates(); if (!Array.isArray(S.cands)) S.cands = []; return render(); }
-    if (act === 'vote-cand') { const x = S.cands[+t.dataset.i]; return reviewVote('payout vote', 'Payout', candidateBallot(x), `Pay ${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset').join(' + ')} to ${shortAddr(x.recipient)}`); }
+    if (act === 'vote-cand') { const x = S.cands[+t.dataset.i]; return await reviewVote('payout vote', 'Payout', candidateBallot(x), `Pay ${x.spendlist.map(s => s.asset === '00' ? formatZP(BigInt(s.amount)) + ' ZP' : 'asset').join(' + ')} to ${shortAddr(x.recipient)}`); }
     if (act === 'confirm-vote') {
       S.busy = true; render();
       const m = S.modal, hash = await publish(node(), m.prepared);
+      (S.pendingVotes ||= []).push({ spent: m.prepared.spent, at: Date.now() });
       S.busy = false; S.modal = { type: 'voted', hash }; render(); return;
     }
     if (act === 'confirm-send') {
@@ -501,14 +529,14 @@ $app.addEventListener('submit', async e => {
         S.draft.pct = v.pct; const pct = Number(v.pct.trim());
         const r = allocationRange(CGP_PARAMS[net()], alloc());
         if (!(pct >= r.min && pct <= r.max)) throw new Error(`With ${alloc()}% in force, only ${r.min}% to ${r.max}% counts`);
-        return reviewVote('allocation vote', 'Allocation', allocationBallot(pct), `${pct}% of block rewards to the CGP`);
+        return await reviewVote('allocation vote', 'Allocation', allocationBallot(pct), `${pct}% of block rewards to the CGP`);
       }
       case 'vote-nom': {
         S.draft.nto = v.to; S.draft.namount = v.amount;
         const to = v.to.trim(); let ok = false; try { ok = decodeAddress(to).chain === net(); } catch { /* invalid */ }
         if (!ok) throw new Error('Not a valid address for this network');
         const amount = parseZP(v.amount.trim()); if (amount <= 0n) throw new Error('Enter an amount');
-        return reviewVote('nomination', 'Nomination', payoutBallot(to, [{ asset: ZP, amount }]), `Pay ${formatZP(amount)} ZP to ${shortAddr(to)}`);
+        return await reviewVote('nomination', 'Nomination', payoutBallot(to, [{ asset: ZP, amount }]), `Pay ${formatZP(amount)} ZP to ${shortAddr(to)}`);
       }
       case 'node': {
         const url = v.url.trim().replace(/\/+$/, '');
