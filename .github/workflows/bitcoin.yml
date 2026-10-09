@@ -38,7 +38,7 @@ jobs:
           bash scripts/testnet-bitcoin.sh http://127.0.0.1:31567 testnet > /tmp/bitcoin.txt 2>&1
           RC=$?
           cat /tmp/bitcoin.txt | tail -n 60
-          tail -n 25 /tmp/bitcoin.txt | python3 -c "import sys;print('::notice title=bitcoin output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          head -c 7000 /tmp/bitcoin.txt | python3 -c "import sys;print('::notice title=bitcoin output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
       - name: Node log
         if: always()
