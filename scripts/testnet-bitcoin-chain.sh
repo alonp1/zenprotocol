@@ -34,8 +34,8 @@ for i in range(n):
     prev = d
 PY
 echo "made $(wc -l < /tmp/headers.txt) headers"
-# the last one is kept for the wrong-link test (it will not follow the tip)
-BAD=$(tail -n 1 /tmp/headers.txt); head -n -1 /tmp/headers.txt > /tmp/good.txt
+# an old header (number 2) is tried at the end: it does not follow the tip, so it must be rejected
+BAD=$(sed -n 2p /tmp/headers.txt); head -n -1 /tmp/headers.txt > /tmp/good.txt
 
 add() {  # header -> 0 if accepted
   local BODY B R
