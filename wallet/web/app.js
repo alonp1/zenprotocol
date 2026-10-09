@@ -231,7 +231,7 @@ const views = {
     <div class="card"><h2>Active contracts</h2><div class="list">${!cs ? '<p class="muted small">Loading…</p>' : cs.length === 0 ? '<p class="muted small">None.</p>' : cs.map((k, i) => {
       const left = k.expire - (S.tip || k.expire), cls = left < 300 ? 'lvl-bad' : left < 3000 ? 'lvl-warn' : '';
       return `<div class="item"><div><div>${esc(k.name || 'Unnamed')}</div><div class="muted small mono" title="${esc(k.address)}">${esc(shortAddr(k.address))}</div></div>
-        <div data-s="right"><div class="small">until ${Number(k.expire).toLocaleString('en-US')}</div><div class="small ${cls}">${left.toLocaleString('en-US')} blocks left</div>${mayExtend ? `<button class="btn small" data-act="extend" data-i="${i}">Extend</button>` : ''}</div></div>`;
+        <div data-s="right"><div class="small">until ${Number(k.expire).toLocaleString('en-US')}</div><div class="small ${cls}">${left.toLocaleString('en-US')} blocks left</div>${dateAfter(left) ? `<div class="small muted">around ${dateAfter(left)}</div>` : ''}${mayExtend ? `<button class="btn small" data-act="extend" data-i="${i}">Extend</button>` : ''}</div></div>`;
     }).join('')}</div></div>
     <div class="card"><p class="muted small">Tokens issued by contracts appear on the Wallet screen. Extending a contract keeps it running past its end block: it costs ZP from the active wallet. Viewing code and running contracts arrive in a later version.</p></div></div>${nav('contracts')}`;
   },
@@ -350,7 +350,7 @@ function modalHtml() {
   if (m.type === 'extend') return `<div class="modal" role="dialog" aria-modal="true"><div class="sheet"><h2>Extend ${esc(m.name || 'contract')}</h2>
     <form data-form="extend" class="screen" data-s="flush">
     <div class="card"><div class="kv"><span class="muted">Ends at block</span><span>${m.expire.toLocaleString('en-US')}</span></div>
-    <div class="kv"><span class="muted">Blocks left</span><span>${Math.max(0, m.expire - (S.tip || m.expire)).toLocaleString('en-US')}</span></div>
+    <div class="kv"><span class="muted">Blocks left</span><span>${Math.max(0, m.expire - (S.tip || m.expire)).toLocaleString('en-US')}${dateAfter(m.expire - (S.tip || m.expire)) ? ' · around ' + dateAfter(m.expire - (S.tip || m.expire)) : ''}</span></div>
     <div class="kv"><span class="muted">Price</span><span>${m.code.length.toLocaleString('en-US')} kalapas per block</span></div>
     <div class="kv"><span class="muted">Your balance</span><span>${m.balance === null ? '–' : formatZP(m.balance) + ' ZP'}</span></div></div>
     <label class="field">Extend by (blocks)<input name="blocks" inputmode="numeric" autocomplete="off" value="${esc(m.blocks || '')}" required></label>
@@ -365,7 +365,7 @@ function modalHtml() {
     <div class="kv"><span class="muted">Contract ID</span><span class="mono">${esc(m.id.slice(0, 12))}…${esc(m.id.slice(-8))}</span></div>
     <div class="kv"><span class="muted">Extend by</span><span>${m.blocks.toLocaleString('en-US')} blocks${net() === 'main' ? ` (${m.blocks < 365 ? 'less than a day' : 'about ' + (m.blocks / 365).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' days'})` : ''}</span></div>
     <div class="kv"><span class="muted">Cost</span><span class="amt">${formatZP(m.prepared.cost)} ZP</span></div>
-    <div class="kv"><span class="muted">New end block</span><span>${(m.expire + m.blocks - 1).toLocaleString('en-US')}</span></div>
+    <div class="kv"><span class="muted">New end block</span><span>${(m.expire + m.blocks - 1).toLocaleString('en-US')}${dateAfter(m.expire + m.blocks - 1 - (S.tip || m.expire)) ? ' · around ' + dateAfter(m.expire + m.blocks - 1 - (S.tip || m.expire)) : ''}</span></div>
     <div class="kv"><span class="muted">From</span><span>${esc(active().name)}</span></div></div>
     ${m.prepared.cost >= EXTEND_WARN ? `<p class="bad small">This is a large payment: ${formatZP(m.prepared.cost)} ZP. Each block costs ${m.code.length.toLocaleString('en-US')} kalapas because this contract's code is that long. Check that this is the contract you meant.</p>` : ''}
     <p class="muted small">The ZP is spent for good: it is not returned if the contract is not used.</p>${errBox()}
@@ -528,6 +528,11 @@ function syncAlloc(raw, from) {
   if (go) go.disabled = !okv || !voters().length;
 }
 // about 4 minutes per block on mainnet: 365 blocks a day. The testnet pace varies, so only blocks are named there
+// the date a block number is reached at the mainnet pace of about 4 minutes (the testnet pace varies, so no date there)
+function dateAfter(blocks) {
+  if (net() !== 'main' || !Number.isFinite(blocks) || blocks < 0) return '';
+  return new Date(Date.now() + blocks * 240000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 function extendPresets() {
   return net() === 'main' ? [[10950, '30 days'], [32850, '90 days'], [65700, '180 days'], [131400, '1 year']] : [[1000, '1,000'], [10000, '10,000'], [100000, '100,000']];
 }
@@ -537,7 +542,7 @@ function syncExtend() {
   $app.querySelectorAll('[data-act=ext-pick]').forEach(b => b.classList.toggle('on', b.dataset.v === t));
   const cost = $app.querySelector('#ext-cost'), nw = $app.querySelector('#ext-new'), note = $app.querySelector('#ext-note'), go = $app.querySelector('#ext-go');
   const price = okn ? extendCost(m.code, n) : null, short = price !== null && m.balance !== null && price > m.balance;
-  cost.textContent = price === null ? '–' : formatZP(price) + ' ZP'; nw.textContent = okn ? (m.expire + n - 1).toLocaleString('en-US') : '–';
+  cost.textContent = price === null ? '–' : formatZP(price) + ' ZP'; nw.textContent = okn ? (m.expire + n - 1).toLocaleString('en-US') + (dateAfter(m.expire + n - 1 - (S.tip || m.expire)) ? ' · around ' + dateAfter(m.expire + n - 1 - (S.tip || m.expire)) : '') : '–';
   note.className = 'small ' + (!t || (okn && !short) ? 'muted' : 'bad');
   note.textContent = !t ? '' : !okn ? `Enter a whole number of blocks, from 1 to ${MAX_EXTEND_BLOCKS.toLocaleString('en-US')}` : short ? 'Not enough ZP in this wallet' : (net() === 'main' ? (n < 365 ? 'Less than a day' : `About ${(n / 365).toLocaleString('en-US', { maximumFractionDigits: 1 })} days`) : '');
   go.disabled = !okn || short;
