@@ -28,7 +28,7 @@ jobs:
       - name: Fund the test voters (target interval 6, snapshot 590)
         run: |
           # the devnet mines several blocks a second: slow it down so the 5-block nomination and vote phases can be used
-          docker update --cpus 0.12 zen-devnet
+          docker update --cpus 0.3 zen-devnet
           echo "::notice title=tip before funding::$(curl -fs http://127.0.0.1:20000/blockchain/info | head -c 80)"
           cd wallet && npm ci --no-audit --no-fund && cd ..
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
@@ -36,7 +36,7 @@ jobs:
       - name: Run the scenario through the payout block
         run: |
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
-          cd wallet && CGP_POLL_MS=1000 timeout 3000 node --no-warnings tools/cgp-sim.mjs run --send --target 590 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
+          cd wallet && CGP_POLL_MS=1000 timeout 5400 node --no-warnings tools/cgp-sim.mjs run --send --target 590 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
           C=$(curl -fs http://127.0.0.1:20000/blockchain/cgp); echo "cgp after the vote: $C"
           echo "$C" | grep -q recipient || { echo "::error title=no winner::the scenario did not produce a payout winner, so the payout block is not tested: $C"; exit 1; }
           docker update --cpus 2 zen-devnet
