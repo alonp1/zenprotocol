@@ -11,7 +11,7 @@ on:
 jobs:
   cgp:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,8 +32,13 @@ jobs:
           cd wallet && node --no-warnings tools/cgp-sim.mjs fund --send --target 390 --node http://127.0.0.1:20000
       - name: Run the scenario through the payout block
         run: |
+          # the devnet mines several blocks a second: slow it down so the 5-block nomination and vote phases can be used
+          docker update --cpus 0.12 zen-devnet
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
-          cd wallet && CGP_POLL_MS=1000 timeout 1500 node --no-warnings tools/cgp-sim.mjs run --send --target 390 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
+          cd wallet && CGP_POLL_MS=1000 timeout 3000 node --no-warnings tools/cgp-sim.mjs run --send --target 390 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
+          C=$(curl -fs http://127.0.0.1:20000/blockchain/cgp); echo "cgp after the vote: $C"
+          echo "$C" | grep -q recipient || { echo "::error title=no winner::the scenario did not produce a payout winner, so the payout block is not tested: $C"; exit 1; }
+          docker update --cpus 2 zen-devnet
       - name: The chain passes the payout block and keeps mining
         run: |
           set +e
