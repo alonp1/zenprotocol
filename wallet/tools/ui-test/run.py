@@ -25,7 +25,7 @@ with sync_playwright() as p:
     errors = []
     pg.on('console', lambda m: errors.append(m.text) if m.type == 'error' and '404' not in m.text else None)   # the static test server has no config.json/stats.json
     pg.on('pageerror', lambda e: errors.append('pageerror: ' + str(e)))
-    mock(tip=50, alloc=0, zp=5000, cands=1, reset=1)
+    mock(tip=50 if NET == 'test' else 1053860, alloc=0 if NET == 'test' else 90, zp=5000, cands=1, reset=1)
     pg.goto(APP); pg.wait_for_selector('form[data-form=create-vault]')
     pg.fill('input[name=p1]', 'password123'); pg.fill('input[name=p2]', 'password123'); pg.click('form[data-form=create-vault] button.primary')
     pg.wait_for_selector('form[data-form=add-wallet]')
@@ -43,17 +43,18 @@ with sync_playwright() as p:
         pg.wait_for_selector('[data-go=vote]'); pg.wait_for_timeout(600); pg.click('button[data-go=vote]'); pg.wait_for_selector('h1:has-text("CGP vote")'); pg.wait_for_timeout(500)
 
     # ranges
-    VOTE_TIP = 95 if NET == 'test' else 9500 + 10
-    for last, want in [(0, '0% to 15%'), (50, '42% to 58%'), (90, '89% to 90%')]:
+    VOTE_TIP = 95 if NET == 'test' else 1059600      # mainnet: interval 106, voting phase
+    for last, want in [(0, '0% to 15%'), (50, '42% to 58%'), (90, '89% to 90%')]:   # 90% in force is the real mainnet case
         reload_vote(VOTE_TIP, last)
         t = pg.inner_text('body'); ok(want in t, f'allocation in force {last}% shows the range {want}')
-    reload_vote(VOTE_TIP, 0)
+    LAST = 0 if NET == 'test' else 90
+    reload_vote(VOTE_TIP, LAST)
     pg.screenshot(path=f'{OUT}/3-vote-phase.png', full_page=True)
     # out of range, then in range
     pg.fill('input[name=pct]', '40'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_timeout(600)
     t = pg.inner_text('body'); ok('Confirm allocation vote' not in t, 'a value out of range (40 with 0% in force) does not open the review'); print('     message:', re.findall(r'[^\n]*(?:range|between|valid)[^\n]*', t)[-1:] )
     pg.screenshot(path=f'{OUT}/4-alloc-out-of-range.png', full_page=True)
-    pg.fill('input[name=pct]', '10'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_selector('.modal'); pg.wait_for_timeout(400)
+    pg.fill('input[name=pct]', '10' if NET == 'test' else '89'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_selector('.modal'); pg.wait_for_timeout(400)
     pg.screenshot(path=f'{OUT}/5-alloc-review.png')
     ok('Confirm allocation vote' in pg.inner_text('.modal'), 'in-range value opens the review')
     pg.click('button[data-act=confirm-vote]'); pg.wait_for_selector('.modal h2.ok'); pg.screenshot(path=f'{OUT}/6-alloc-sent.png')
@@ -69,7 +70,7 @@ with sync_playwright() as p:
         ok('Confirm payout vote' in t or 'still waiting' in t, 'payout vote opens the review or says the last vote is still waiting for its block')
         pg.screenshot(path=f'{OUT}/8-payout-review.png')
     # nomination phase
-    reload_vote(91 if NET == 'test' else 9000 + 10, 0)
+    reload_vote(91 if NET == 'test' else 1059100, 0 if NET == 'test' else 90)   # mainnet: nomination phase
     pg.fill('input[name=to]', ADDR['other'])
     pg.fill('input[name=amount]', '1.5'); pg.screenshot(path=f'{OUT}/9-nomination.png', full_page=True)
     pg.click('form[data-form=vote-nom] button.primary'); pg.wait_for_timeout(1500)
@@ -77,9 +78,9 @@ with sync_playwright() as p:
     pg.screenshot(path=f'{OUT}/10-nomination-review.png')
     ok(len(errors) == 0, 'no console errors: ' + '; '.join(errors[:5]))
     # a wallet with no ZP, and a node that does not answer: clear messages, no blank screen
-    reload_vote(VOTE_TIP, 0, zp=0)
+    reload_vote(VOTE_TIP, LAST, zp=0)
     t = pg.inner_text('body'); pg.screenshot(path=f'{OUT}/11-zero-balance.png', full_page=True)
-    pg.fill('input[name=pct]', '10'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_timeout(1200)
+    pg.fill('input[name=pct]', '10' if NET == 'test' else '89'); pg.click('form[data-form=vote-alloc] button.primary'); pg.wait_for_timeout(1200)
     t = pg.inner_text('body'); ok('little ZP' in t or 'spendable output' in t, 'no ZP: the wallet says it needs a little ZP for the fee')
     pg.screenshot(path=f'{OUT}/12-zero-balance-error.png')
     mock(tip=VOTE_TIP, zp=5000)
