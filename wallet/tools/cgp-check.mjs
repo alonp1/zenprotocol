@@ -4,6 +4,7 @@
 import { NodeClient } from '../src/node.js';
 import { newMnemonic, deriveKey } from '../src/keys.js';
 import { openWallet, prepareVote } from '../src/wallet.js';
+import { ZP } from '../src/tx.js';
 import { CGP_PARAMS, VOTING_CONTRACT, phaseAt, snapshotBlock, allocationRange, allocationBallot, payoutBallot } from '../src/cgp.js';
 
 const arg = (n, d) => { const i = process.argv.indexOf('--' + n); return i < 0 ? d : process.argv[i + 1]; };
@@ -29,7 +30,7 @@ const active = await node.activeContracts().catch(e => (fail('contract/active: '
 const row = Array.isArray(active) ? active.find(c => c && c.contractId === voting) : null;
 if (!row) fail(`the voting contract ${voting} is NOT active: nobody can vote`);
 else {
-  const exp = row.expiry ?? row.expires ?? row.expiryBlock;
+  const exp = row.expire;
   ok(`voting contract active${exp != null ? ', expires at block ' + exp + (Number(exp) > tip ? ` (${(Number(exp) - tip).toLocaleString()} blocks, about ${Math.round((Number(exp) - tip) * 237 / 86400)} days left)` : ' - EXPIRED') : ''}`);
   if (exp != null && Number(exp) <= tip + 20000) fail('the voting contract expires within about 55 days: plan its reactivation');
 }
@@ -46,8 +47,8 @@ const tryVote = async (what, command, ballotHex) => {
 };
 if (last !== null) await tryVote(`allocation ballot ${last}%`, 'Allocation', allocationBallot(last));
 const addr = (await import('../src/keys.js')).encodeAddress(k.pkHash, NET);
-await tryVote('payout ballot to a wallet address', 'Payout', payoutBallot(addr, [{ asset: '00', amount: 100000000n }]));
-await tryVote('nomination to a wallet address', 'Nomination', payoutBallot(addr, [{ asset: '00', amount: 100000000n }]));
+await tryVote('payout ballot to a wallet address', 'Payout', payoutBallot(addr, [{ asset: ZP, amount: 100000000n }]));
+await tryVote('nomination to a wallet address', 'Nomination', payoutBallot(addr, [{ asset: ZP, amount: 100000000n }]));
 const cands = await node.candidates().catch(e => (fail('blockchain/candidates: ' + e.message), null));
 if (cands) ok(`candidates endpoint answers (${Array.isArray(cands) ? cands.length : '?'} now)`);
 console.log(bad ? `\n${bad} problem(s)` : '\nall checks passed');
