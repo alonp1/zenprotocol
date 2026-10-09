@@ -67,8 +67,8 @@ input.mono { font-family: var(--mono); font-size: 13px; }
 .nav { margin-top: auto; border-top: 1px solid var(--line2); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 6px 4px 14px; position: sticky; bottom: 0; background: var(--bg); }
 .nav button { background: none; border: 0; color: var(--muted); font: 11px var(--sans); display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; cursor: pointer; min-height: 48px; }
 .nav button.on { color: var(--accent); }
-.modal { position: fixed; inset: 0; background: rgba(5,10,12,.7); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
-.sheet { width: 100%; max-width: 460px; background: var(--bg); border: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; max-height: 92vh; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; }
+.modal { position: fixed; inset: 0; background: rgba(5,10,12,.7); display: flex; align-items: center; justify-content: center; z-index: 10; padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(12px + env(safe-area-inset-bottom, 0px)); }   /* a window in the middle of the screen, not a sheet at the bottom */
+.sheet { width: 100%; max-width: 460px; background: var(--bg); border: 1px solid var(--line); border-radius: 18px; padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .kv:last-child { border-bottom: 0; }
 .kv span:last-child { text-align: right; word-break: break-all; }
