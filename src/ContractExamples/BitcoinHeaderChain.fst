@@ -65,7 +65,7 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
   let st = state >!= tryDict in
   let! tipOpt = st >?= D.tryFind "tip" >?= tryHash in
   let! hdrsOpt = st >?= D.tryFind "hdrs" >?= tryList in
-  let! parsed = (match hex with | Some s -> B.parseHeader s | None -> ret None) in
+  let! parsed = (match hex with | Some s -> B.parseHeader s | None -> incRet 120 None) in
   match hex, parsed with
   | Some s, Some h ->
     let! hash = B.computeHeaderHash h in
@@ -75,10 +75,10 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     let! linked =
       (match tipOpt with
        | Some tip -> hashEq tip parent
-       | None -> ret true) in
+       | None -> incRet 255 true) in
     if pow && linked then
       let old = (match hdrsOpt with | Some l -> l | None -> []) in
-      let d0 = D.add "tip" (Hash hash) D.empty in
+      let! d0 = D.add "tip" (Hash hash) D.empty in
       let! d1 = D.add "hdrs" (Collection (List (String s :: old))) d0 in
       let! res = CR.ofTxSkel txSkeleton in
       CR.setStateUpdate (Collection (Dict d1)) res
