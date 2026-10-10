@@ -4,22 +4,103 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zen Chain Run a node</title>
-<meta name="description" content="Install a node with Docker, load a snapshot and connect to the seed.">
+<meta name="description" content="Run a ZP node with Docker on Linux, macOS or Windows: requirements, install commands, snapshot and seed.">
 <link rel="stylesheet" href="/shell/shell.css">
+<style>
+  .zp .req { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin: 14px 0 6px; }
+  .zp .req .card .k { font-size: 13px; color: var(--s-muted); }
+  .zp .req .card .v { font-size: 20px; font-weight: 650; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .zp .req .card .s { font-size: 13.5px; color: var(--s-muted); }
+  .zp .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 16px 0 0; }
+  .zp .tabs button { font: inherit; font-size: 15px; background: var(--s-card); color: var(--s-ink); border: 1px solid var(--s-line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  .zp .tabs button[aria-selected="true"] { background: var(--s-accent); color: var(--s-accent-ink); border-color: var(--s-accent); font-weight: 600; }
+  .zp .tabs button:focus-visible { outline: 2px solid var(--s-accent); outline-offset: 2px; }
+  .zp .pane { background: var(--s-card); border: 1px solid var(--s-line); border-radius: 10px; padding: 16px 18px; margin-top: 10px; min-width: 0; }
+  .zp .pane h3 { margin-top: 14px; } .zp .pane h3:first-child { margin-top: 0; }
+  .zp .pane pre { background: var(--s-bg); margin: 8px 0 6px; }
+  .zp .cmd { position: relative; }
+  .zp .cmd button { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 12.5px; background: var(--s-card); color: var(--s-muted); border: 1px solid var(--s-line); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+  .zp .cmd pre { padding-right: 70px; }
+  .zp ol.what { counter-reset: w; list-style: none; padding: 0; max-width: 72ch; }
+  .zp ol.what li { counter-increment: w; position: relative; padding-left: 38px; margin-bottom: 12px; }
+  .zp ol.what li::before { content: counter(w); position: absolute; left: 0; top: 1px; width: 26px; height: 26px; border-radius: 50%; background: var(--s-card); border: 1px solid var(--s-line); display: grid; place-items: center; font-size: 13px; font-weight: 700; color: var(--s-accent); }
+  .zp ol.what code { font-size: 13px; }
+  .zp .small { font-size: 14px; color: var(--s-muted); }
+</style>
 <script src="/shell/shell.js" defer></script>
 </head>
 <body class="zp">
 <main>
 <h1>Run a node</h1>
-<p class="lead">Docker on Linux, macOS or Windows. A snapshot skips most of the initial sync.</p>
+<p class="lead">A ZP node keeps its own copy of the chain, checks every block and shares it with other nodes. It runs in Docker on Linux, macOS or Windows; a snapshot skips most of the initial sync.</p>
+
+<h2>What you need</h2>
+<div class="req">
+  <div class="card"><div class="k">Processor</div><div class="v">1 CPU core</div><div class="s">2 or more if you also mine. The node is capped at 1 core by default.</div></div>
+  <div class="card"><div class="k">Memory</div><div class="v">2 GB RAM</div><div class="s">The node is capped at 2 GB. 4 GB total leaves room for the system.</div></div>
+  <div class="card"><div class="k">Disk</div><div class="v">20 GB free</div><div class="s">Chain about 10 GB plus a 5 GB snapshot download. SSD recommended; 40 GB for a server.</div></div>
+  <div class="card"><div class="k">Network</div><div class="v">Port 9655 TCP</div><div class="s">Open inbound so other nodes can connect. Works without it, with fewer peers.</div></div>
+</div>
+<p class="small">A small cloud server is enough, for example 2 vCPU, 2–4 GB RAM, 40 GB disk on Ubuntu 22.04 or 24.04. Most cloud providers forbid mining; mine only on your own hardware.</p>
+
 <h2>Install</h2>
-<pre>git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
+<p>Choose your system:</p>
+<div class="tabs" role="tablist" aria-label="Operating system">
+  <button role="tab" id="t-linux" aria-controls="p-linux" aria-selected="true">Linux</button>
+  <button role="tab" id="t-mac" aria-controls="p-mac" aria-selected="false" tabindex="-1">macOS</button>
+  <button role="tab" id="t-win" aria-controls="p-win" aria-selected="false" tabindex="-1">Windows</button>
+</div>
+
+<div class="pane" role="tabpanel" id="p-linux" aria-labelledby="t-linux">
+  <h3>One command (Ubuntu, Debian and most distributions)</h3>
+  <div class="cmd"><pre>curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-node.sh | bash</pre></div>
+  <p class="small">Installs Docker if it is missing, then does steps 1–5 below. Run it again later to update; the chain data is kept. Options go in front of <code>bash</code>, for example <code>MINER_THREADS=2 bash</code> to mine on your own hardware.</p>
+  <h3>Or step by step</h3>
+  <div class="cmd"><pre>git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
 cd zenprotocol
-docker compose build
+docker compose pull
 docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
-docker compose up -d</pre>
-<p>Seed address of this site: <code><span class="host">this-site</span>:9655</code></p>
-<p><a href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script/Docker">Full setup guide on GitHub</a></p>
+docker compose up -d</pre></div>
+  <p class="small">Needs Git and Docker with the compose plugin (<code>curl -fsSL https://get.docker.com | sudo sh</code>).</p>
+</div>
+
+<div class="pane" role="tabpanel" id="p-mac" aria-labelledby="t-mac" hidden>
+  <h3>Before you start</h3>
+  <p>Install <a href="https://www.docker.com/products/docker-desktop/">Docker Desktop</a>, open it and wait until it shows <b>Engine running</b>. Git comes with the Xcode command line tools (<code>xcode-select --install</code>).</p>
+  <h3>One command, in Terminal</h3>
+  <div class="cmd"><pre>curl -fsSL https://raw.githubusercontent.com/alonp1/zenprotocol/node-upgrade-script/scripts/install-node.sh | bash</pre></div>
+  <h3>Or step by step</h3>
+  <div class="cmd"><pre>git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
+cd zenprotocol
+docker compose pull
+docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
+docker compose up -d</pre></div>
+  <p class="small">The node image is built for Intel (x86-64). On Apple Silicon Docker Desktop runs it through emulation: it works, but the first sync and mining are slower.</p>
+</div>
+
+<div class="pane" role="tabpanel" id="p-win" aria-labelledby="t-win" hidden>
+  <h3>Before you start</h3>
+  <p>In PowerShell run <code>winget install Git.Git Docker.DockerDesktop</code> and restart the computer. Open Docker Desktop, accept the WSL install if asked, and wait for <b>Engine running</b>. Use Docker only: the native Windows node cannot create wallets.</p>
+  <h3>In PowerShell</h3>
+  <div class="cmd"><pre>git clone -b node-upgrade-script https://github.com/alonp1/zenprotocol.git
+cd zenprotocol
+Set-Content .env "ZEN_DATA=zen-data"
+docker compose pull
+docker compose run --rm --no-deps --entrypoint /load-snapshot.sh zen-node
+docker compose up -d</pre></div>
+  <p class="small"><code>ZEN_DATA=zen-data</code> keeps the chain in a Docker volume; in a Windows folder the database is about 4 times slower. Run the snapshot step from one window only: two downloads at once corrupt the file. To check the node use <code>curl.exe</code>, not <code>curl</code>.</p>
+</div>
+
+<h2>What these commands do</h2>
+<ol class="what">
+  <li><b>Fetch the setup.</b> <code>git clone</code> downloads this community repository: the Docker settings and helper scripts, not the chain.</li>
+  <li><b>Get the node image.</b> <code>docker compose pull</code> downloads a ready image (several hundred MB). It holds the official Zen Protocol node release 1.0.13, unchanged, on the Mono 6.12 runtime, with this site added as a seed so the node finds peers. If the download fails, <code>docker compose build</code> builds the same image on your machine from the official release files (a few minutes).</li>
+  <li><b>Load a snapshot.</b> The <code>load-snapshot.sh</code> step downloads the newest chain snapshot (about 5 GB), checks its SHA-256, test-extracts it and puts it in the data folder. Snapshots hold chain data only, never a wallet. Without it the node syncs from block 0, which takes days.</li>
+  <li><b>Start the node.</b> <code>docker compose up -d</code> runs it in the background and restarts it after a reboot. It is capped at 1 CPU and 2 GB RAM, keeps its data in <code>./zen-data</code>, opens port 9655 for peers, and keeps its API (port 11567) on this computer only, because the API controls the node's wallet.</li>
+  <li><b>Check the sync.</b> <code>curl -s http://127.0.0.1:11567/blockchain/info</code>. The node is synced when <code>blocks</code> equals <code>headers</code>.</li>
+</ol>
+<p>Mining, wallets and every setting: <a href="https://github.com/alonp1/zenprotocol/tree/node-upgrade-script/Docker">full setup guide on GitHub</a>. Seed address of this site: <code><span class="host">this-site</span>:9655</code></p>
+
 <h2>Snapshot</h2>
 <div id="snap">Loading…</div>
 <h2>Status of this site's node</h2>
@@ -58,6 +139,23 @@ refresh(); setInterval(refresh, 30000);
   const u = document.createElement('p'); u.append('Or let a Docker node fetch it: '); const uc = document.createElement('code'); uc.textContent = 'SNAPSHOT_URL=' + location.origin + '/snapshots/' + s.file; u.append(uc);
   el.replaceChildren(a, i, h, u); } catch (e) { el.textContent = 'No snapshot published yet.'; } })();
 document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
+
+// operating system tabs: the visitor's own system is selected first
+const tabs = [...document.querySelectorAll('[role=tab]')];
+const pick = (t, focus) => { tabs.forEach(b => { const on = b === t; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; $(b.getAttribute('aria-controls')).hidden = !on; }); if (focus) t.focus(); };
+tabs.forEach((t, k) => { t.addEventListener('click', () => pick(t)); t.addEventListener('keydown', e => { const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0; if (d) pick(tabs[(k + d + tabs.length) % tabs.length], true); }); });
+const ua = navigator.userAgent; pick(/Windows/i.test(ua) ? $('t-win') : /Mac OS X|Macintosh/i.test(ua) && !/iPhone|iPad/i.test(ua) ? $('t-mac') : $('t-linux'));
+
+// copy buttons on every command block
+document.querySelectorAll('.cmd').forEach(c => {
+  const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Copy';
+  b.addEventListener('click', () => {
+    const pre = c.querySelector('pre'), done = () => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1500); };
+    const sel = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Press Ctrl+C'; };
+    if (navigator.clipboard) navigator.clipboard.writeText(pre.textContent).then(done, sel); else sel();
+  });
+  c.append(b);
+});
 </script>
 </body>
 </html>

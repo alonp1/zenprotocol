@@ -4,98 +4,114 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ZP CGP History</title>
-<meta name="description" content="Every CGP interval of the ZP chain: ballots, voters, vote weight, allocation decided and payouts.">
+<meta name="description" content="Every CGP interval of the ZP chain: what was decided, who voted, and what the community fund paid out.">
 <style>
   :root {
     --bg: #f6f5f1; --card: #ffffff; --ink: #1d1d1b; --muted: #6b6a64; --faint: #9a9890;
-    --line: #e3e1da; --grid: #eeece6; --accent: #1f6f5c; --series: #00866c;
-    --ok: #1f7a3f; --warn: #a15c00; --bad: #a32020;
+    --line: #e3e1da; --grid: #eeece6; --accent: #1f6f5c; --accent-soft: #e3f0ec; --miner: #8a8778;
+    --ok: #1f7a3f; --warn: #a15c00; --warn-soft: #fbf1d9; --bad: #a32020;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root { --bg: #121311; --card: #1b1c1a; --ink: #ecebe6; --muted: #9a9890; --faint: #6b6a64;
-            --line: #2c2d2a; --grid: #252623; --accent: #5cc3a6; --series: #22a985;
-            --ok: #5ccb83; --warn: #e0a64a; --bad: #ef6b6b; }
+            --line: #2c2d2a; --grid: #252623; --accent: #5cc3a6; --accent-soft: #17302a; --miner: #77746a;
+            --ok: #5ccb83; --warn: #e0a64a; --warn-soft: #2b2410; --bad: #ef6b6b; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink);
-         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
   nav { font-size: 14px; margin-bottom: 18px; }
-  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
-       margin: 0 0 14px; font-weight: 600; }
-  p.lead { margin: 0 0 24px; color: var(--muted); }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-            padding: 20px; margin-bottom: 18px; min-width: 0; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .grid.four { grid-template-columns: repeat(4, 1fr); }
-  @media (max-width: 760px) { .grid, .grid.four { grid-template-columns: repeat(2, 1fr); } .stat .v { font-size: 20px; } }
-  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; }
-  .two > section { margin-bottom: 0; }
-  .two + .two, .two + details { margin-top: 18px; }
-  .stat .k { font-size: 13px; color: var(--muted); }
-  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat .s { font-size: 13px; color: var(--muted); }
   a { color: var(--accent); }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.015em; }
+  h2 { font-size: 20px; margin: 0 0 12px; letter-spacing: -0.01em; }
+  h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
+  p.lead { margin: 0 0 22px; color: var(--muted); max-width: 68ch; font-size: 17px; }
   .mono { font-family: var(--mono); font-size: 13px; }
-  .chart { position: relative; }
-  .chart svg { display: block; width: 100%; height: 220px; overflow: visible; }
-  .chart .axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-  .tip { position: absolute; pointer-events: none; background: var(--card); border: 1px solid var(--line);
-         border-radius: 6px; padding: 6px 9px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
-         white-space: nowrap; display: none; z-index: 2; }
-  .tip b { font-variant-numeric: tabular-nums; }
-  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
-  details { margin-top: 10px; font-size: 13px; }
-  summary { cursor: pointer; color: var(--muted); }
+  .muted { color: var(--muted); }
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 18px; min-width: 0; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* the interval in progress */
+  .now-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 14px; }
+  .now-head .when { color: var(--muted); font-size: 14px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 9px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); vertical-align: 3px; margin-left: 6px; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 6px 0 16px; }
+  .step { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-width: 0; position: relative; }
+  .step .n { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .step .t { font-weight: 650; margin: 2px 0 2px; }
+  .step .d { font-size: 13px; color: var(--muted); }
+  .step .p { height: 4px; border-radius: 2px; background: var(--grid); margin-top: 8px; overflow: hidden; }
+  .step .p i { display: block; height: 100%; background: var(--accent); }
+  .step.done { background: var(--grid); border-color: transparent; }
+  .step.done .n::after { content: " ✓"; color: var(--ok); }
+  .step.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .step.now .n { color: var(--accent); }
+  @media (max-width: 700px) { .steps { grid-template-columns: 1fr 1fr; } }
+  .headline { font-size: 19px; font-weight: 600; margin: 0 0 16px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+  .fact { background: var(--bg); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+  .fact .k { font-size: 13px; color: var(--muted); }
+  .fact .v { font-size: 18px; font-weight: 650; margin-top: 2px; overflow-wrap: anywhere; }
+  .fact .s { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* reward split bar: miners grey, fund green */
+  .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); margin-top: 6px; }
+  .split i { display: block; height: 100%; } .split .c { background: var(--accent); } .split .m { background: var(--miner); }
+  .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+  .sw.c { background: var(--accent); } .sw.m { background: var(--miner); }
+  .chg { font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-left: 6px; white-space: nowrap; }
+  .chg.up { background: var(--accent-soft); color: var(--accent); } .chg.down { background: var(--warn-soft); color: var(--warn); }
+
+  details.how { margin: 0 0 18px; }
+  details.how > summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+  .how ol { margin: 10px 0 0; padding-left: 22px; max-width: 70ch; } .how li { margin-bottom: 6px; }
+
+  /* history */
+  .hist-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin: 28px 0 12px; }
+  .hist-head h2 { margin: 0; }
+  label.tog { font-size: 14px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  details.iv { border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin: 0 0 10px; }
+  details.iv > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: grid; grid-template-columns: 140px minmax(250px,1.4fr) 1.3fr 0.8fr 16px; gap: 14px; align-items: center; }
+  details.iv > summary::-webkit-details-marker { display: none; }
+  details.iv > summary::after { content: "▸"; color: var(--faint); justify-self: end; transition: transform .15s; }
+  details.iv[open] > summary::after { transform: rotate(90deg); }
+  details.iv[open] > summary { border-bottom: 1px solid var(--line); }
+  details.iv > summary > div { min-width: 0; }
+  .k { font-size: 12px; color: var(--muted); }
+  .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ivn { font-size: 18px; font-weight: 700; }
+  @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } details.iv > summary::after { display: none; } }
+  .quiet { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 16px; margin: 0 0 10px; color: var(--muted); font-size: 14px; }
+  .in { padding: 4px 16px 18px; }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+  .results > div { min-width: 0; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 7px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .row:last-child { border-bottom: 0; }
+  @media (max-width: 520px) { .row { grid-template-columns: 1fr; } .row .num { text-align: left; color: var(--muted); } }
+  .row .lbl { overflow-wrap: anywhere; }
+  .row .num { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; white-space: nowrap; }
+  .row .meter { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; }
+  .row .meter i { display: block; height: 100%; background: var(--faint); }
+  .row.win .meter i { background: var(--accent); }
+  .row.win .lbl { font-weight: 650; }
+  .tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin-left: 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 2px 0 10px; }
+  .seg button { font: inherit; font-size: 13px; background: none; border: 0; padding: 5px 12px; color: var(--muted); cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
   .scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
-  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase;
-       letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td { padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   td.r, th.r { text-align: right; }
-  td.warn { color: var(--warn); font-weight: 600; } td.bad { color: var(--bad); font-weight: 600; }
-  .bar { height: 8px; border-radius: 0 4px 4px 0; background: var(--series); min-width: 2px; }
-  .supply { height: 12px; border-radius: 6px; background: var(--grid); overflow: hidden; margin: 4px 0 6px; }
-  .supply div { height: 100%; background: var(--series); border-radius: 6px 0 0 6px; }
-  .supply-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .phase { display: flex; gap: 2px; margin: 14px 0 6px; height: 10px; }
-  .phase div { background: var(--grid); border-radius: 2px; position: relative; }
-  .phase div.done { background: var(--series); }
-  .phase div.now { background: linear-gradient(90deg, var(--series) var(--p), var(--grid) var(--p)); }
-  .phase div.s0.done { background: var(--faint); } .phase div.s1.done { background: var(--warn); }
-  .phase div.s0.now { background: linear-gradient(90deg, var(--faint) var(--p), var(--grid) var(--p)); }
-  .phase div.s1.now { background: linear-gradient(90deg, var(--warn) var(--p), var(--grid) var(--p)); }
-  .phase-l { position: relative; height: 18px; font-size: 12px; color: var(--muted); }
-  .phase-l span { position: absolute; top: 0; white-space: nowrap; }
-  .stage-l { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); }
-  .stage-l .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; background: var(--grid); }
-  .stage-l .s0 { background: var(--faint); } .stage-l .s1 { background: var(--warn); } .stage-l .s2 { background: var(--series); }
-  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
-</style>
-<style>
-  input.q { width: 100%; max-width: 360px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
-            background: var(--card); color: var(--ink); font: inherit; margin-bottom: 12px; }
+  tr.nc td { color: var(--faint); }
   .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
-  .pill.ok { color: var(--ok); border-color: var(--ok); } .pill.no { color: var(--faint); }
-  .sub { color: var(--muted); }
-  details.iv { border: 1px solid var(--line); border-radius: 10px; background: var(--card); margin: 0 0 10px; padding: 0; }
-  details.iv > summary { list-style: none; padding: 14px 16px; display: grid; grid-template-columns: 1.1fr 1fr 1fr 1fr 1.3fr; gap: 10px; align-items: center; color: var(--ink); }
-  details.iv > summary::-webkit-details-marker { display: none; }
-  details.iv > summary .k { font-size: 12px; color: var(--muted); }
-  details.iv > summary .v { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4px; background: var(--line); }
-  .split i { display: block; height: 100%; } .split .m { background: var(--muted); } .split .c { background: var(--accent); }
-  td.addr { white-space: normal; overflow-wrap: anywhere; word-break: break-all; width: 320px; max-width: 320px; font-size: 12.5px; }
-  td.addr a { overflow-wrap: anywhere; word-break: break-all; }
-  .lg { font-size: 12px; color: var(--muted); margin-top: 3px; }
-  .bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 6px; }
-  details.iv > summary .v.n { font-weight: 500; }
-  details.iv[open] > summary { border-bottom: 1px solid var(--line); }
-  details.iv .in { padding: 12px 16px 16px; }
-  @media (max-width: 760px) { details.iv > summary { grid-template-columns: 1fr 1fr; } }
-  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 6px; }
+  .pill.ok { color: var(--ok); border-color: var(--ok); }
+  .kind { font-size: 12px; color: var(--muted); }
+  .paybox { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; margin-top: 14px; }
+  .paybox b { font-size: 17px; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
 </style>
 <link rel="stylesheet" href="/shell/shell.css">
 </head>
@@ -103,124 +119,199 @@
 <main>
   <nav><a href="/">← Community node</a> · <a href="/stats.html">Stats</a> · <a href="/explorer.html">Explorer</a> · <a href="/assets.html">Assets</a> · <a href="/cgp.html">CGP history</a> · <a href="/wallet/">ZP Wallet</a></nav>
   <h1>CGP voting history</h1>
-  <p class="lead" id="updated">Loading…</p>
-  <section>
-    <div id="range"></div>
-    <div class="note" style="margin-top:0">Each interval is <span id="ivlen">10,000</span> blocks. The balance at the snapshot block is the vote weight; nominations follow the snapshot,
-    then the allocation and payout vote. The allocation (the CGP share of every block reward; miners get the rest) decided in an interval applies to the next one. Interval numbers as in the community wallets
-    (on mainnet the node counts 24 more). A ballot is counted if it is the first of its key and type inside its voting window.</div>
-  </section>
+  <p class="lead">The CGP (Common Goods Pool) is the community fund of ZP. In every interval, ZP holders vote on two things: how each block reward is split between miners and the fund, and who the fund pays.</p>
+
+  <details class="how"><summary>How a CGP interval works</summary>
+    <ol>
+      <li><b>Snapshot.</b> At the snapshot block, every wallet's ZP balance is recorded. That balance is its vote weight for this interval; coins moved later do not count.</li>
+      <li><b>Nominations.</b> Holders propose who should be paid from the fund and how much.</li>
+      <li><b>Voting.</b> Holders vote on the reward split and choose one of the nominated payouts. Only the first ballot of each wallet per vote type counts.</li>
+      <li><b>Result.</b> The payout with the most weight is paid from the fund just after the interval ends, and the new split applies to the whole next interval. The miners' share may move by at most 15% of itself per interval, and never below 10%.</li>
+    </ol>
+  </details>
+
+  <section class="card" id="now"><div class="muted" id="updated">Loading…</div></section>
+
+  <div class="hist-head">
+    <h2>Past intervals</h2>
+    <label class="tog"><input type="checkbox" id="showQuiet"> Show intervals with no activity</label>
+  </div>
   <div id="list"></div>
-  <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
+  <footer>Indexed from the chain by the community node of <span class="host">this site</span>, updated every 5 minutes. Interval numbers as in the community wallets<span id="offnote"></span>. Community-run. Not affiliated with or endorsed by Zen Protocol Ltd.</footer>
 </main>
 <script>
 const fmt = n => n == null ? '–' : Number(n).toLocaleString('en-US');
 const amt = v => v == null ? '–' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 8 });
+const zp = v => v == null ? '–' : Number(v).toLocaleString('en-US', { maximumFractionDigits: v >= 100 ? 0 : 2 });
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const short = a => a ? a.slice(0, 10) + '…' + a.slice(-6) : '–';
 const day = ms => ms ? new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '–';
 const $ = id => document.getElementById(id);
 document.querySelectorAll('.host').forEach(e => e.textContent = location.hostname);
-const ballotText = b => !b ? '?' : b.allocation != null ? 'Allocation ' + b.allocation + '%' :
-  'Pay ' + esc(short(b.recipient)) + ' ' + b.spends.map(s => s[0] === '00' ? amt(Number(s[1]) / 1e8) + ' ZP' : esc(s[1]) + ' ' + esc(short(s[0]))).join(', ');
-const splitBar = p => p == null ? '–' : `<div class="v">CGP ${p}% · miners ${100 - p}%</div><div class="split" title="CGP ${p}% of each block reward, miners ${100 - p}%"><i class="c" style="width:${p}%"></i><i class="m" style="width:${100 - p}%"></i></div>`;
-// weighted result of the allocation ballots that count: how much vote weight stands behind each percentage
-const tally = votes => {
-  const m = new Map(); let total = 0;
-  for (const v of votes) if (v.counted && v.ballot && v.ballot.allocation != null && v.weight != null) {
-    const r = m.get(v.ballot.allocation) || { pct: v.ballot.allocation, weight: 0, voters: 0 }; r.weight += v.weight; r.voters++; m.set(v.ballot.allocation, r); total += v.weight;
-  }
-  return { rows: [...m.values()].sort((a, b) => b.weight - a.weight), total };
+
+let D = null;   // cgp-history.json
+const ivNo = i => i.communityInterval >= 1 ? i.communityInterval : i.interval;
+// approximate time of a block, from the average block time and the time of the last update
+const blockTime = b => D && D.blockSeconds && D.updated ? D.updated - (D.tip - b) * D.blockSeconds * 1000 : null;
+const dur = blocks => {
+  if (!D || !D.blockSeconds) return fmt(blocks) + ' blocks';
+  const m = Math.round(blocks * D.blockSeconds / 60);
+  const t = m >= 1440 ? Math.floor(m / 1440) + ' d ' + Math.floor(m % 1440 / 60) + ' h' : m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min';
+  return 'about ' + t;
 };
-const tallyHtml = votes => {
-  const t = tally(votes); if (!t.rows.length) return '';
-  return '<h3>Allocation vote: weight behind each percentage</h3><div class="scroll"><table><tr><th>CGP share</th><th>Miners share</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share of voted weight</th></tr>' +
-    t.rows.map(r => { const sh = t.total ? r.weight / t.total * 100 : 0; return `<tr><td>${r.pct}%</td><td>${100 - r.pct}%</td><td class="r">${r.voters}</td><td class="r">${amt(Math.round(r.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('') + '</table></div>';
+const spendText = s => s[0] === '00' ? amt(Number(s[1]) / 1e8) + ' ZP' : esc(s[1]) + ' ' + esc(short(s[0]));
+const recip = r => `<span class="mono" title="${esc(r)}">${esc(short(r))}</span>`;
+const ballotText = b => !b ? 'unreadable ballot' : b.allocation != null ? `Fund ${b.allocation}% · miners ${100 - b.allocation}%` :
+  `${b.spends.map(spendText).join(', ')} to ${recip(b.recipient)}`;
+const splitHtml = (p, prev) => {
+  if (p == null) return '<div class="v">–</div>';
+  const c = prev != null && prev !== p ? `<span class="chg ${p > prev ? 'up' : 'down'}" title="Fund share was ${prev}%">${p > prev ? '▲' : '▼'} fund ${prev}% → ${p}%</span>` : '';
+  return `<div class="v"><span class="sw m"></span>Miners ${100 - p}% · <span class="sw c"></span>Fund ${p}%${c}</div>
+    <div class="split" role="img" aria-label="Miners ${100 - p} percent, fund ${p} percent"><i class="m" style="width:${100 - p}%"></i><i class="c" style="width:${p}%"></i></div>`;
+};
+// weight behind each choice; the leader is marked
+const tallyRows = (votes, key, label) => {
+  const m = new Map(); let total = 0;
+  let weighed = true, voters = 0;   // weights are known once the interval is indexed as complete; until then, count wallets
+  for (const v of votes) if (v.counted && v.ballot) {
+    const k = key(v.ballot); if (k == null) continue;
+    if (v.weight == null) weighed = false;
+    const r = m.get(k) || { k, b: v.ballot, weight: 0, voters: 0 }; r.weight += v.weight || 0; r.voters++; m.set(k, r); total += v.weight || 0; voters++;
+  }
+  const by = r => weighed ? r.weight : r.voters, all = weighed ? total : voters;
+  const rows = [...m.values()].sort((a, b) => by(b) - by(a));
+  return { total, html: rows.map((r, n) => { const sh = all ? by(r) / all * 100 : 0;
+    return `<div class="row${n === 0 ? ' win' : ''}"><div class="lbl">${label(r.b)}${n === 0 && rows.length > 1 ? '<span class="tag">leading</span>' : ''}</div>
+      <div class="num">${weighed ? sh.toFixed(1) + '% · ' + zp(r.weight) + ' ZP · ' : ''}${r.voters} ${r.voters === 1 ? 'wallet' : 'wallets'}</div><div class="meter"><i style="width:${sh.toFixed(1)}%"></i></div></div>`; }).join('') };
+};
+const allocTally = votes => tallyRows(votes.filter(v => v.command === 'Allocation'), b => b.allocation, b => `Fund ${b.allocation}% · miners ${100 - b.allocation}%`);
+const candTally = (votes, cmd) => tallyRows(votes.filter(v => v.command === cmd), b => b.allocation == null ? JSON.stringify([b.recipient, b.spends]) : null, ballotText);
+const pending = i => !i.complete && i.votes.some(v => v.counted && v.weight == null);
+
+const ballotsTable = (i, which) => {
+  const list = i.votes.filter(v => which === 'all' || (which === 'nom' ? v.command === 'Nomination' : v.command !== 'Nomination'));
+  if (!list.length) return '<div class="note">No ballots of this kind.</div>';
+  const kind = { Nomination: 'Nomination', Allocation: 'Split vote', Payout: 'Payout vote' };
+  return '<div class="scroll"><table><tr><th>Wallet</th><th>Ballot</th><th>Voted for</th><th class="r">Weight (ZP)</th><th>Date</th><th>Counted</th></tr>' +
+    list.map(v => `<tr class="${v.counted ? '' : 'nc'}"><td class="mono"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}" title="${esc(v.voter)}">${esc(short(v.voter))}</a></td>
+      <td class="kind">${kind[v.command] || esc(v.command)}</td><td>${ballotText(v.ballot)}</td>
+      <td class="r">${v.weight != null ? zp(v.weight) : '–'}</td><td title="block ${fmt(v.block)}">${day(v.time)}</td>
+      <td>${v.counted ? '<span class="pill ok">yes</span>' : '<span class="pill" title="Sent outside its stage, or a second ballot from the same wallet">no</span>'}</td></tr>`).join('') + '</table></div>';
 };
 
-// the three stages of an interval: snapshot, nominations, voting. Widths follow the block counts; the one in progress is filled up to the tip.
-const left = (blocks, bs) => {   // "1,234 blocks (about 2 d 3 h)"
-  if (!bs) return fmt(blocks) + ' blocks';
-  const m = Math.round(blocks * bs / 60), t = m >= 1440 ? Math.floor(m / 1440) + ' d ' + Math.floor(m % 1440 / 60) + ' h' : m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min';
-  return fmt(blocks) + ' blocks (about ' + t + ')';
-};
-// what the summary shows for an interval in progress: the stage and what is left of it
-const openText = (i, tip, bs) => tip < i.start ? 'not started' :
-  tip <= i.snapshot ? 'Snapshot in ' + left(i.snapshot - tip, bs) :
-  tip <= i.nominationEnd ? 'Nominations open, ' + left(i.nominationEnd - tip, bs) + ' left, then voting' :
-  'Voting open, ' + left(i.end - tip, bs) + ' left';
-const stageBar = (i, tip, bs) => {
-  const segs = [['Until snapshot', i.start, i.snapshot], ['Nominations', i.snapshot, i.nominationEnd], ['Voting', i.nominationEnd, i.end]];
-  const bar = segs.map(([n, a, b]) => {
-    const len = Math.max(1, b - a), p = Math.max(0, Math.min(1, (tip - a) / len));
-    const cls = tip >= b ? 'done' : tip > a ? 'now' : '';
-    return `<div class="${cls} s${segs.findIndex(x => x[0] === n)}" style="flex:${len};--p:${(p * 100).toFixed(1)}%" title="${n}: blocks ${fmt(a)}–${fmt(b)}"></div>`;
+function nowCard(cur, live) {
+  const tip = D.tip, len = cur.end - cur.start + 1;
+  const steps = [
+    ['Snapshot', `block ${fmt(cur.snapshot)}`, cur.start, cur.snapshot, 'Balances recorded as vote weight'],
+    ['Nominations', `blocks ${fmt(cur.snapshot + 1)}–${fmt(cur.nominationEnd)}`, cur.snapshot, cur.nominationEnd, 'Propose who the fund pays'],
+    ['Voting', `blocks ${fmt(cur.nominationEnd + 1)}–${fmt(cur.end)}`, cur.nominationEnd, cur.end, 'Vote on the split and the payout'],
+    ['Result', `block ${fmt(cur.end + 1)} onward`, cur.end, cur.end + Math.max(1, Math.round(len / 1000)), 'Payout made, new split applies'],
+  ];
+  const stepHtml = steps.map(([t, blocks, a, b, d], k) => {
+    const p = Math.max(0, Math.min(1, (tip - a) / Math.max(1, b - a)));
+    const cls = tip >= b ? 'done' : tip > a || (k === 0 && tip >= cur.start) ? 'now' : '';
+    return `<div class="step ${cls}"><div class="n">Step ${k + 1}</div><div class="t">${t}</div><div class="d">${blocks}<br>${d}</div>${cls === 'now' ? `<div class="p"><i style="width:${(p * 100).toFixed(1)}%"></i></div>` : ''}</div>`;
   }).join('');
-  const labels = segs.map(([n, a, b], k) => `<span><i class="sw s${k}"></i><b>${n}</b> blocks ${fmt(a)}–${fmt(b)}</span>`).join('');
-  const cur = tip < i.start ? 'not started' : tip > i.end ? 'finished' : tip <= i.snapshot ? 'before the snapshot (vote weight is the balance at the snapshot block)' : tip <= i.nominationEnd ? 'nominations are open' : 'voting is open';
-  return `<div class="phase">${bar}</div><div class="stage-l">${labels}</div>
-    <div class="note" style="margin-top:6px">${tip >= i.start && tip <= i.end ? `Now: <b>${esc(openText(i, tip, bs))}</b> (block ${fmt(tip)} of ${fmt(i.end)})` : `Stage: ${cur}`}</div>`;
-};
-// how much vote weight stands behind each candidate (nominations and payout votes name a recipient and an amount)
-const candTally = votes => {
-  const m = new Map(); let total = 0;
-  for (const v of votes) if (v.counted && v.ballot && v.ballot.allocation == null && v.weight != null) {
-    const k = ballotText(v.ballot), r = m.get(k) || { k, weight: 0, voters: 0 }; r.weight += v.weight; r.voters++; m.set(k, r); total += v.weight;
+  const headline = tip <= cur.snapshot ? `Snapshot in ${fmt(cur.snapshot - tip)} blocks (${dur(cur.snapshot - tip)}). Balances at that block will be the vote weight.` :
+    tip <= cur.nominationEnd ? `Nominations are open: ${fmt(cur.nominationEnd - tip)} blocks left (${dur(cur.nominationEnd - tip)}), then voting starts.` :
+    `Voting is open: ${fmt(cur.end - tip)} blocks left (${dur(cur.end - tip)}).`;
+
+  const inForce = live && Number.isInteger(live.allocation) ? live.allocation : cur.allocationInForce;
+  let range = '';
+  if (inForce != null) {   // PROTOCOL.md 7.4: the miners' share may move by at most 15% of itself per interval, never below 10%
+    const L = 100 - inForce, lo = Math.max(10, Math.floor(L * 85 / 100)), hi = Math.min(100, Math.floor(L * 100 / 85)), a = 100 - hi, b = 100 - lo;
+    range = `<div class="fact"><div class="k">Allowed in this split vote</div><div class="v">Fund ${a === b ? a + '%' : a + '% to ' + b + '%'}</div>
+      <div class="s">Miners ${100 - b === 100 - a ? 100 - a + '%' : (100 - b) + '% to ' + (100 - a) + '%'}. ${a === b ? 'Only one value is possible.' : 'Any whole percent in this range.'} Ballots outside it are rejected.</div></div>`;
   }
-  const rows = [...m.values()].sort((a, b) => b.weight - a.weight);
-  if (!rows.length) return '';
-  return '<h3>Weight behind each candidate</h3><div class="scroll"><table><tr><th>Candidate</th><th class="r">Voters</th><th class="r">Weight (ZP)</th><th>Share of voted weight</th></tr>' +
-    rows.map(r => { const sh = total ? r.weight / total * 100 : 0; return `<tr><td class="addr">${r.k}</td><td class="r">${r.voters}</td><td class="r">${amt(Math.round(r.weight))}</td><td><span class="bar" style="width:${Math.round(sh)}px"></span>${sh.toFixed(1)}%</td></tr>`; }).join('') + '</table></div>';
-};
-const ballotsTable = (list, empty) => list.length ?
-  '<div class="scroll"><table><tr><th>Wallet (voter)</th><th>Voted for</th><th class="r">Coins voted (ZP)</th><th class="r">Block</th><th>Date</th><th></th></tr>' +
-  list.map(v => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(v.voter)}" title="All transactions of this wallet">${esc(v.voter)}</a></td><td>${ballotText(v.ballot)}</td>
-    <td class="r">${v.weight != null ? amt(v.weight) : '–'}</td><td class="r">${fmt(v.block)}</td><td>${day(v.time)}</td>
-    <td>${v.counted ? '<span class="pill ok">counted</span>' : '<span class="pill no" title="outside this stage\'s window, or a repeated ballot">not counted</span>'}</td></tr>`).join('') + '</table></div>'
-  : `<div class="note">${empty}</div>`;
+  const p = live && live.payout;
+  const maturity = len === 100 ? 10 : 100;
+  const paid = p && p.recipient ? `<div class="fact"><div class="k">Payout chosen by the last vote</div><div class="v">${(p.spendlist || []).map(x => x.asset === '00' ? amt(Number(x.amount) / 1e8) + ' ZP' : esc(x.amount) + ' ' + esc(short(x.asset))).join(', ')}</div>
+      <div class="s">to ${recip(p.recipient)}, paid at block ${fmt(cur.start + maturity - 1)}</div></div>` : '';
+  const at = allocTally(cur.votes), pt = candTally(cur.votes, 'Payout'), nt = candTally(cur.votes, 'Nomination');
+  const live2 = cur.votes.length ? `<div class="results" style="margin-top:6px">
+      ${at.html ? `<div><h3>Split vote so far</h3>${at.html}</div>` : ''}
+      ${pt.html ? `<div><h3>Payout vote so far</h3>${pt.html}</div>` : nt.html ? `<div><h3>Nominations so far</h3>${nt.html}</div>` : ''}
+    </div>${pending(cur) ? '<div class="note">Until the interval ends this counts wallets; vote weights (ZP at the snapshot) are added after it ends.</div>' : ''}` :
+    '<div class="note">No ballots yet in this interval.</div>';
+  $('now').innerHTML = `
+    <div class="now-head"><h2 style="margin:0">Interval ${ivNo(cur)} <span class="badge">in progress</span></h2>
+      <div class="when">blocks ${fmt(cur.start)}–${fmt(cur.end)} · now at block ${fmt(tip)}${D.complete ? '' : ' · index still catching up'}</div></div>
+    <div class="steps">${stepHtml}</div>
+    <p class="headline">${headline}</p>
+    <div class="facts">
+      <div class="fact"><div class="k">Block reward split now</div>${splitHtml(inForce)}<div class="s">Decided by the previous interval's vote.</div></div>
+      ${range}${paid}
+    </div>
+    ${live2}`;
+}
+
+function intervalHtml(i, prevAlloc) {
+  const pay = i.payouts.length ? i.payouts.map(p => `<b>${amt(p.amount)} ${p.asset === '00' ? 'ZP' : esc(short(p.asset))}</b> to ${p.recipientName ? esc(p.recipientName) : recip(p.recipient)}`).join('<br>') : '<span class="muted">No payout</span>';
+  const end = blockTime(i.end);
+  const at = allocTally(i.votes), pt = candTally(i.votes, 'Payout'), nt = candTally(i.votes, 'Nomination');
+  const counts = { all: i.votes.length, nom: i.votes.filter(v => v.command === 'Nomination').length };
+  counts.vote = counts.all - counts.nom;
+  return `<details class="iv" data-iv="${i.interval}"><summary>
+      <div><div class="ivn">Interval ${ivNo(i)}</div><div class="k">${end ? 'ended ~' + day(end) : 'blocks ' + fmt(i.start) + '–' + fmt(i.end)}</div></div>
+      <div><div class="k">Split decided for next interval</div>${i.allocationDecided != null ? splitHtml(i.allocationDecided, i.allocationInForce) : '<div class="v muted">–</div>'}</div>
+      <div><div class="k">Paid from the fund</div><div class="v" style="font-weight:500">${pay}</div></div>
+      <div><div class="k">Turnout</div><div class="v">${i.voters} ${i.voters === 1 ? 'wallet' : 'wallets'}</div><div class="k">${zp(i.weightVoted)} ZP weight</div></div>
+    </summary>
+    <div class="in">
+      <div class="note" style="margin:10px 0 0">Blocks ${fmt(i.start)}–${fmt(i.end)} · snapshot at block ${fmt(i.snapshot)} · split during this interval: miners ${i.allocationInForce != null ? 100 - i.allocationInForce : '–'}%, fund ${i.allocationInForce ?? '–'}%</div>
+      ${at.html || pt.html || nt.html ? `<div class="results">
+        ${at.html ? `<div><h3>Split vote</h3>${at.html}</div>` : ''}
+        ${pt.html ? `<div><h3>Payout vote</h3>${pt.html}</div>` : nt.html ? `<div><h3>Nominations</h3>${nt.html}</div>` : ''}
+      </div>` : ''}
+      ${i.payouts.length ? i.payouts.map(p => `<div class="paybox"><span>Paid</span><b>${amt(p.amount)} ${p.asset === '00' ? 'ZP' : esc(short(p.asset))}</b>
+        <span>to <a class="mono" href="/explorer.html?address=${encodeURIComponent(p.recipient)}" title="${esc(p.recipient)}">${esc(p.recipientName ? p.recipientName : short(p.recipient))}</a></span>
+        <span class="muted">block ${fmt(p.block)} · ${day(p.time)} · tx <span class="mono" title="${esc(p.tx)}">${esc(short(p.tx))}</span></span></div>`).join('') : ''}
+      ${i.votes.length ? `<h3>All ballots</h3>
+        <div class="seg" role="group" aria-label="Which ballots">
+          <button type="button" data-w="all" aria-pressed="true">All (${counts.all})</button>
+          <button type="button" data-w="nom" aria-pressed="false">Nominations (${counts.nom})</button>
+          <button type="button" data-w="vote" aria-pressed="false">Votes (${counts.vote})</button></div>
+        <div class="tbl">${ballotsTable(i, 'all')}</div>` : '<div class="note">No ballots in this interval.</div>'}
+    </div></details>`;
+}
+
+function renderList() {
+  const showQuiet = $('showQuiet').checked;
+  const past = D.intervals.filter(i => i.complete && (i.communityInterval >= 1 || i.votes.length || i.payouts.length));
+  const active = i => i.votes.length || i.payouts.length || (i.allocationDecided != null && i.allocationDecided !== i.allocationInForce);
+  let html = '', quiet = [];
+  const flush = () => {
+    if (!quiet.length) return;
+    const a = ivNo(quiet[quiet.length - 1]), b = ivNo(quiet[0]), p = quiet[0].allocationDecided ?? quiet[0].allocationInForce;
+    html += `<div class="quiet">${quiet.length === 1 ? 'Interval ' + a : 'Intervals ' + a + '–' + b}: no ballots and no payout${p != null ? `; the fund kept ${p}% of each block reward` : ''}.</div>`;
+    quiet = [];
+  };
+  for (const i of past) {
+    if (!showQuiet && !active(i)) { quiet.push(i); continue; }
+    flush(); html += intervalHtml(i);
+  }
+  flush();
+  $('list').innerHTML = html || '<div class="quiet">No finished intervals yet.</div>';
+}
+
+$('list').addEventListener('click', e => {
+  const btn = e.target.closest('.seg button'); if (!btn) return;
+  const det = btn.closest('details.iv'), i = D.intervals.find(x => String(x.interval) === det.dataset.iv);
+  det.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+  det.querySelector('.tbl').innerHTML = ballotsTable(i, btn.dataset.w);
+});
+$('showQuiet').addEventListener('change', renderList);
+
 fetch('/cgp-history.json', { cache: 'no-cache' }).then(r => r.json()).then(d => {
-  $('updated').textContent = (d.complete ? 'Indexed to block ' : 'Indexing the chain… block ') + fmt(d.indexedTo) + ' of ' + fmt(d.tip);
-  const cur = d.intervals[0];
-  if (cur) $('ivlen').textContent = fmt(cur.end - cur.start + 1);
-  // What was decided and what may be voted next: the node's own CGP state (live), else the index
-  fetch('/node/blockchain/cgp', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null).then(live => {
-    const last = live && Number.isInteger(live.allocation) ? live.allocation : cur && cur.allocationInForce;
-    if (last == null || last === undefined || !cur) return;
-    const len = cur.end - cur.start + 1, maturity = len === 100 ? 10 : 100;
-    const ivn = live && live.interval ? live.interval : cur.interval, ivStart = (ivn - 1) * len + 1;
-    const L = 100 - last, lo = Math.max(10, Math.floor(L * 85 / 100)), hi = Math.min(100, Math.floor(L * 100 / 85));   // PROTOCOL.md 7.4: the miners' share may move by at most 15% of itself per interval, never below 10%
-    const a = 100 - hi, b = 100 - lo;
-    const p = live && live.payout;
-    const win = p && p.recipient ? `Winner of the payout vote: <span class="mono">${esc(p.recipient)}</span> gets ${(p.spendlist || []).map(x => (x.asset === '00' ? amt(Number(x.amount) / 1e8) + ' ZP' : esc(x.amount) + ' ' + esc(short(x.asset)))).join(', ')} from the CGP fund, paid at block ${fmt(ivStart + maturity - 1)} of interval ${ivn}.` : 'No payout winner for this interval (the CGP fund was empty or nobody was nominated).';
-    $('range').innerHTML = `<div class="note" style="margin-top:0;margin-bottom:12px"><b>Decided by the last vote, in force in interval ${ivn}</b> (blocks ${fmt(ivStart)}–${fmt(ivStart + len - 1)}):<br>
-      Block reward split: CGP <b>${last}%</b> · miners <b>${100 - last}%</b>.<br>${win}<br><br>
-      <b>What can be voted for in this interval's allocation vote:</b> CGP <b>${a}%–${b}%</b> (miners <b>${100 - b}%–${100 - a}%</b>) — ${a === b ? 'a single value' : 'any whole percent in that range'}. A ballot outside the range is not accepted.</div>`;
-  });
-  let ivs = d.intervals.filter(i => i.communityInterval >= 1 || i.votes.length || i.payouts.length);
-  if (!ivs.length) ivs = d.intervals.slice(0, 1);   // a chain with no community numbering (testnet): show the current interval
-  $('list').innerHTML = ivs.map((i, n) => {
-    const pay = i.payouts.length ? i.payouts.map(p => `${amt(p.amount)} ${p.asset === '00' ? 'ZP' : esc(short(p.asset))} → ${esc(p.recipientName || short(p.recipient))}`).join('<br>') : 'none';
-    const decided = i.complete ? (i.allocationDecided != null ? i.allocationDecided + '%' : '–') : openText(i, d.tip, d.blockSeconds);
-    return `<details class="iv" ${n === 0 ? 'open' : ''}><summary>
-      <div><div class="k">Interval</div><div class="v">${i.communityInterval >= 1 ? i.communityInterval : i.interval}</div><div class="k">blocks ${fmt(i.start)}–${fmt(i.end)}</div></div>
-      <div><div class="k">Split in force</div>${splitBar(i.allocationInForce)}</div>
-      <div><div class="k">Split decided for next</div>${i.complete && i.allocationDecided != null ? splitBar(i.allocationDecided) : '<div class="v">' + decided + '</div>'}</div>
-      <div><div class="k">Voters · weight</div><div class="v">${i.voters} · ${amt(Math.round(i.weightVoted))} ZP</div></div>
-      <div><div class="k">Payout</div><div class="v n">${pay}</div></div></summary>
-      <div class="in">
-        ${stageBar(i, d.tip, d.blockSeconds)}
-        <h2 style="margin-top:18px">Stage 1 · Nominations <span class="sub">(${i.votes.filter(v => v.command === 'Nomination').length} ballots)</span></h2>
-        ${candTally(i.votes.filter(v => v.command === 'Nomination'))}
-        ${ballotsTable(i.votes.filter(v => v.command === 'Nomination'), 'No nomination ballots in this interval.')}
-        <h2 style="margin-top:18px">Stage 2 · Voting <span class="sub">(${i.votes.filter(v => v.command !== 'Nomination').length} ballots)</span></h2>
-        ${tallyHtml(i.votes.filter(v => v.command === 'Allocation'))}
-        ${candTally(i.votes.filter(v => v.command === 'Payout'))}
-        ${ballotsTable(i.votes.filter(v => v.command !== 'Nomination'), 'No voting ballots in this interval.')}
-        ${i.payouts.length ? '<h3>Payout transactions</h3><div class="scroll"><table><tr><th>Recipient</th><th class="r">Amount</th><th class="r">Block</th><th>Transaction</th></tr>' +
-          i.payouts.map(p => `<tr><td class="mono addr"><a href="/explorer.html?address=${encodeURIComponent(p.recipient)}" title="${esc(p.recipient)}">${esc(p.recipientName ? p.recipientName + ' · ' + p.recipient : p.recipient)}</a></td><td class="r">${amt(p.amount)} ${p.asset === '00' ? 'ZP' : ''}</td><td class="r">${fmt(p.block)}</td><td class="mono" title="${esc(p.tx)}">${esc(short(p.tx))}</td></tr>`).join('') + '</table></div>' : ''}
-      </div></details>`;
-  }).join('') || '<section>No CGP activity indexed yet.</section>';
-}).catch(() => { $('updated').textContent = 'Not available yet: the index is being built.'; });
+  D = d;
+  const cur = d.intervals.find(i => !i.complete) || d.intervals[0];
+  if (cur && cur.communityInterval !== cur.interval) $('offnote').textContent = ' (the node itself counts ' + (cur.interval - cur.communityInterval) + ' more)';
+  renderList();
+  if (!cur) { $('now').innerHTML = '<div class="muted">No CGP data indexed yet.</div>'; return; }
+  nowCard(cur, null);
+  // the node's own CGP state is the live source for the split in force and the payout winner
+  fetch('/node/blockchain/cgp', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null).then(live => { if (live) nowCard(cur, live); });
+}).catch(() => { $('now').innerHTML = '<div class="muted">Not available yet: the index is being built.</div>'; });
 </script>
 <script src="/shell/shell.js" defer></script>
 </body>
