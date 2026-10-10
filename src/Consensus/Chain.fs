@@ -99,7 +99,7 @@ let localGenesisHash = Hash.fromString "6d678ab961c8b47046da8d19c0de5be07eb0fe1e
 let localParameters = {
     testParameters with
         proofOfWorkLimit=Difficulty.uncompress 0x20fffffful;
-        blockInterval=1000UL * 60UL;
+        blockInterval=2000UL;   // devnet (local chain, Debug builds only): a block every 2 s, so CI can run whole CGP cycles and contract tests quickly
         name="local"
         genesisHashHash =
             localGenesisHash
