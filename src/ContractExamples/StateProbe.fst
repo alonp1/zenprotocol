@@ -12,12 +12,23 @@ module D = Zen.Dictionary
 module CR = Zen.ContractResult
 module RT = Zen.ResultT
 module C = Zen.Cost
+module Tx = Zen.TxSkeleton
+
+// A transaction is checked against a contract only through inputs the contract owns (or mints). A contract that moves
+// nothing is not run when the block is validated, so its state never changes. Each saving command therefore mints one
+// unit of the contract's own token and locks it back to the contract.
+val withMarker: contractId -> txSkeleton -> txSkeleton `cost` 194
+let withMarker contractId txSkeleton =
+  let! asset = Zen.Asset.getDefault contractId in
+  Tx.addInput (Mint ({ asset = asset; amount = 1UL })) txSkeleton
+  >>= Tx.lockToContract asset 1UL contractId
 
 let main txSkeleton _ contractId command sender messageBody wallet state =
   match command with
   | "set" ->
     begin
-    let! r = CR.ofTxSkel txSkeleton in
+    let! tx = withMarker contractId txSkeleton in
+    let! r = CR.ofTxSkel tx in
     let! _ = incRet 128 () in   // same cost as "setdict": every branch must cost the same
     CR.setStateUpdate (U64 7UL) r
     end
@@ -25,7 +36,8 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     begin
     let! d0 = D.add "tip" (U64 1UL) D.empty in
     let! d1 = D.add "hdrs" (Collection (List [String "a"])) d0 in
-    let! r = CR.ofTxSkel txSkeleton in
+    let! tx = withMarker contractId txSkeleton in
+    let! r = CR.ofTxSkel tx in
     CR.setStateUpdate (Collection (Dict d1)) r
     end
   | _ ->
@@ -37,6 +49,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     end
 
 let cf _ _ _ _ _ _ _ =
-    160
+    354
     |> cast nat
     |> C.ret
