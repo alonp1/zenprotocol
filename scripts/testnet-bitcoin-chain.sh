@@ -48,8 +48,13 @@ add() {  # header -> 0 if accepted
 RC=0; I=0; T0=$(date +%s)
 while read -r H; do
   I=$((I+1)); S=$(date +%s)
-  if ! add "$H"; then echo "FAIL header $I"; RC=1; break; fi
-  T=$(tip); for k in $(seq 120); do sleep 1; [ "$(tip)" -gt "$T" ] && break; done
+  ok=0
+  for try in 1 2 3; do   # a refusal can mean the previous header is not in a block yet: wait one more block and try again
+    if add "$H"; then ok=1; break; fi
+    T=$(tip); for k in $(seq 180); do sleep 1; [ "$(tip)" -gt "$T" ] && break; done
+  done
+  [ $ok = 1 ] || { echo "FAIL header $I"; RC=1; break; }
+  T=$(tip); for k in $(seq 180); do sleep 1; [ "$(tip)" -gt "$T" ] && break; done
   if [ $I -le 3 ] || [ $((I % 10)) -eq 0 ]; then echo "  header $I accepted, $(( $(date +%s) - S )) s"; fi
   [ $((I % 10)) -eq 0 ] && echo "added $I headers so far, $(( $(date +%s) - T0 )) s"
 done < /tmp/good.txt
