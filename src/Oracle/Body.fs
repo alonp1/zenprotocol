@@ -1,5 +1,5 @@
 /// `zen-oracle body Name:type=value ...` prints the hex message body (a node data dictionary) for a contract call.
-/// types: s string, u uint64, h hash, k public key, c contract id as a lock, p public key hash as a lock, L comma separated list of hashes.
+/// types: s string, u uint64, i uint32, h hash, k public key, c contract id as a lock, p public key hash as a lock, L comma separated list of hashes.
 module Oracle.Body
 
 open System
@@ -22,6 +22,7 @@ let private field (spec: string) : FStar.String.t * data =
         match kind with
         | "s" -> String (ZFStar.fsToFstString value)
         | "u" -> U64 (UInt64.Parse value)
+        | "i" -> U32 (UInt32.Parse value)
         | "h" -> Hash (hashBytes value)
         | "k" ->
             // a compressed key (33 bytes hex), parsed by Consensus so that its serialization is valid
