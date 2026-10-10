@@ -72,11 +72,15 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     let! parent = B.parent h in
     let! nbits = B.nbits h in
     let! pow = B.checkProofOfWork hash nbits in
+    // no state yet: the first header is the checkpoint. A state without a readable tip is an error, not a new start.
     let! linked =
-      (match tipOpt with
-       | Some tip -> hashEq tip parent
-       | None -> incRet 255 true) in
-    if pow && linked then
+      (match st, tipOpt with
+       | None, _ -> incRet 255 true
+       | Some _, Some tip -> hashEq tip parent
+       | Some _, None -> incRet 255 false) in
+    if (match st, tipOpt with | Some _, None -> true | _ -> false) then
+      RT.autoFailw "the state has no readable tip"
+    else if pow && linked then
       let old = (match hdrsOpt with | Some l -> l | None -> []) in
       let! d0 = D.add "tip" (Hash hash) D.empty in
       let! d1 = D.add "hdrs" (Collection (List (String s :: old))) d0 in

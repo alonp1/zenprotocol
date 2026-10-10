@@ -32,7 +32,7 @@ jobs:
       - name: BitcoinHeaderChain on the devnet
         run: |
           set +e
-          bash scripts/testnet-bitcoin-chain.sh http://127.0.0.1:20000 devnet 2>&1 | tee /tmp/bitcoin-chain.txt | while IFS= read -r l; do case "$l" in *PASS*|*FAIL*|*RESULT*|*added*|*ACTIVATED*) echo "::notice title=t3::$l";; esac; done
+          bash scripts/testnet-bitcoin-chain.sh http://127.0.0.1:20000 devnet 2>&1 | tee /tmp/bitcoin-chain.txt | while IFS= read -r l; do case "$l" in *PASS*|*FAIL*|*RESULT*|*added*|*rejected*) echo "::notice title=t3::$l";; esac; done
           RC=${PIPESTATUS[0]}
           cat /tmp/bitcoin-chain.txt | tail -n 60
           head -c 7000 /tmp/bitcoin-chain.txt | python3 -c "import sys;print('::notice title=bitcoin chain output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
