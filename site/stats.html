@@ -124,8 +124,14 @@
     <div class="grid four" style="margin-top:16px">
       <div class="stat"><div class="k">Mined</div><div class="v" id="sup-mined">–</div><div class="s">plus 20,000,000 at genesis</div></div>
       <div class="stat"><div class="k">Left to mine</div><div class="v" id="sup-left">–</div><div class="s" id="sup-leftpct"></div></div>
-      <div class="stat"><div class="k">Block reward</div><div class="v" id="sup-rw">–</div><div class="s" id="sup-split"></div></div>
+      <div class="stat"><div class="k">Block reward (total)</div><div class="v" id="sup-rw">–</div><div class="s" id="sup-split"></div></div>
       <div class="stat"><div class="k">Next halving at block</div><div class="v" id="sup-hv">–</div><div class="s" id="sup-hveta"></div></div>
+    </div>
+    <div class="grid four" style="margin-top:12px">
+      <div class="stat"><div class="k">To the miner, per block</div><div class="v" id="rw-miner">–</div><div class="s" id="rw-miner-s">plus the fees of the block</div></div>
+      <div class="stat"><div class="k">To the CGP fund, per block</div><div class="v" id="rw-cgp">–</div><div class="s" id="rw-cgp-s">set by the allocation vote</div></div>
+      <div class="stat"><div class="k">To miners (24h)</div><div class="v" id="rw-miner24">–</div><div class="s">blocks of the last 24h</div></div>
+      <div class="stat"><div class="k">To the CGP fund (24h)</div><div class="v" id="rw-cgp24">–</div><div class="s">blocks of the last 24h</div></div>
     </div>
   </section>
 
@@ -359,8 +365,18 @@ function render(d) {
     $('sup-left').textContent = fmtZP(sp.max - d.totalZP);
     $('sup-leftpct').textContent = (100 - pct).toFixed(1) + '% of the max supply';
     $('sup-rw').textContent = sp.blockReward + ' ZP';
-    $('sup-split').textContent = sp.minerShare != null
-      ? `${(sp.blockReward * sp.minerShare / 100).toFixed(2)} to the miner · ${(sp.blockReward * (100 - sp.minerShare) / 100).toFixed(2)} to the CGP` : '';
+    $('sup-split').textContent = sp.minerShare != null ? `split between the miner and the CGP fund (below)` : '';
+    if (sp.minerShare != null) {
+      const toMiner = sp.blockReward * sp.minerShare / 100, toCgp = sp.blockReward - toMiner;
+      $('rw-miner').textContent = toMiner.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' ZP';
+      $('rw-miner-s').textContent = sp.minerShare + '% of the block reward, plus the fees of the block';
+      $('rw-cgp').textContent = toCgp.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' ZP';
+      $('rw-cgp-s').textContent = (100 - sp.minerShare) + '% of the block reward, set by the allocation vote';
+      if (d.blocks24h != null) {
+        $('rw-miner24').textContent = fmtZP(toMiner * d.blocks24h) + ' ZP';
+        $('rw-cgp24').textContent = fmtZP(toCgp * d.blocks24h) + ' ZP';
+      }
+    }
     $('sup-hv').textContent = fmt(sp.nextHalving.block);
     $('sup-hveta').textContent = 'reward ' + sp.nextHalving.reward + ' ZP · around ' +
       new Date(sp.nextHalving.eta).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });

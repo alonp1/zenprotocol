@@ -169,7 +169,8 @@ function summary(b, tip) {
     ['Block', fmt(b.number)], ['Hash', `<span class="mono">${esc(b.hash)}</span>`],
     ['Parent', b.number > 1 ? link('block', b.parent, b.parent) : '–'], ['Time', dt(b.time) + ' · ' + new Date(b.time).toISOString().slice(0, 19).replace('T', ' ') + ' UTC'],
     ['Confirmations', conf != null ? fmt(conf) : '–'], ['Transactions', fmt(b.txs)],
-    ['ZP transferred', zp(b.moved) + ' ZP'], ['Block reward', zp(b.reward) + ' ZP'], ['Fees', zp(b.fees) + ' ZP'],
+    ['ZP transferred', zp(b.moved) + ' ZP'], ['Block reward (total)', zp(b.reward) + ' ZP'],
+    ...(b.minerReward != null ? [['To the miner', zp(b.minerReward) + ' ZP (with fees)'], ['To the CGP fund', zp(b.cgpReward) + ' ZP']] : []), ['Fees', zp(b.fees) + ' ZP'],
     ['Miner', b.miner ? `<span class="mono">${esc(b.miner)}</span>` : '–'], ['Difficulty (compact)', fmt(b.difficulty)],
   ];
   return '<section><h2>Summary</h2><div class="kv2">' + rows.map(([k, v]) => `<div>${k}</div><div>${v}</div>`).join('') + '</div>' +
@@ -190,8 +191,8 @@ async function showTx(id) {
 }
 const latestTable = d => {
   const last = d.blocks.at(-1)?.number;
-  return '<div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
-    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td>${addrLink(b.miner)}</td></tr>`).join('') +
+  return '<div class="scroll"><table><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">To miner</th><th class="r">To CGP fund</th><th>Miner</th></tr>' +
+    d.blocks.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dt(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${b.minerReward != null ? zp(b.minerReward) : zp(b.reward)}</td><td class="r">${b.cgpReward != null ? zp(b.cgpReward) : '–'}</td><td>${addrLink(b.miner)}</td></tr>`).join('') +
     `</table></div><div class="pager"><span></span><span>${last > 1 ? `<a href="?before=${last}">Older →</a>` : ''}</span></div>`;
 };
 const blocksSub = d => 'Tip ' + fmt(d.tip) + (d.indexedTo < d.tip - 20 ? ' · history indexed to block ' + fmt(d.indexedTo) + ' (in progress)' : '');
@@ -232,8 +233,8 @@ function tabs(active) {
 }
 
 function blocksTable(rows) {
-  return '<div class="scroll"><table class="ex"><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">Reward</th><th>Miner</th></tr>' +
-    rows.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dts(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${zp(b.reward)}</td><td>${addrLink(b.miner)}</td></tr>`).join('') + '</table></div>';
+  return '<div class="scroll"><table class="ex"><tr><th>Block</th><th>Time</th><th>Hash</th><th class="r">Txs</th><th class="r">ZP transferred</th><th class="r">To miner</th><th class="r">To CGP fund</th><th>Miner</th></tr>' +
+    rows.map(b => `<tr><td>${link('block', b.number, fmt(b.number))}</td><td>${dts(b.time)}</td><td class="mono">${link('block', b.hash, short(b.hash))}</td><td class="r">${b.txs}</td><td class="r">${zp(b.moved)}</td><td class="r">${b.minerReward != null ? zp(b.minerReward) : zp(b.reward)}</td><td class="r">${b.cgpReward != null ? zp(b.cgpReward) : '–'}</td><td>${addrLink(b.miner)}</td></tr>`).join('') + '</table></div>';
 }
 
 function txsTable(rows, withAddress) {

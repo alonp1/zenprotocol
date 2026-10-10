@@ -150,6 +150,18 @@ test('contract page: executions of one contract', async () => {
   assert.equal((await get('/contract/zz')).status, 404);
 });
 
+test('blocks split the reward between the miner and the CGP fund', async () => {
+  const { body } = await get('/find/blocks?take=20');   // from the index (the mock node does not serve single blocks)
+  assert.ok(body.blocks.length > 0);
+  for (const b of body.blocks) {
+    assert.ok(b.minerReward != null && b.cgpReward != null, 'split present');
+    assert.equal(BigInt(b.minerReward) + BigInt(b.cgpReward), BigInt(b.reward));
+    assert.ok(BigInt(b.cgpReward) > 0n, 'mainnet sends a share of every block to the CGP fund');
+  }
+  const one = (await get('/block/' + body.blocks[0].number)).body;
+  assert.equal(one.block.cgpReward, body.blocks[0].cgpReward);
+});
+
 test('bad input is refused, not executed', async () => {
   for (const p of ['/find/blocks?from=yesterday', '/find/blocks?minTxs=-1', '/find/blocks?miner=abc', "/find/blocks?order=number;DROP TABLE blocks",
                    '/find/txs?minZp=1e9', "/find/txs?asset=ab' OR '1'='1", '/find/txs?kind=all;--', '/find/txs?address=notanaddress', '/address/zen1' + 'q'.repeat(5)]) {

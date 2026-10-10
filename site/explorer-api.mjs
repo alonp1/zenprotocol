@@ -37,6 +37,7 @@ function open() {
       byNum: db.prepare('SELECT * FROM blocks WHERE number=?'), byHash: db.prepare('SELECT * FROM blocks WHERE hash=?'),
       txsOf: db.prepare('SELECT * FROM txs WHERE block=? ORDER BY idx'), tx: db.prepare('SELECT * FROM txs WHERE hash=?'),
       mig: db.prepare("SELECT v FROM meta WHERE k='addrmig'"), mig2: db.prepare("SELECT v FROM meta WHERE k='extmig'"),
+      coinbase: db.prepare('SELECT outputs FROM txs WHERE block=? AND idx=0'),
     };
     return true;
   } catch { db = null; return false; }
@@ -53,15 +54,28 @@ async function tip() {
   return tipCache.tip;
 }
 
-const blockRow = b => ({ number: b.number, hash: b.hash, parent: b.parent, time: b.time, difficulty: b.difficulty, txs: b.txs,
-  reward: b.reward, fees: b.fees, moved: b.moved, miner: b.miner });
+// The coinbase pays the miner (Coinbase lock) and the CGP fund (the only contract a coinbase may pay, Consensus/BlockConnection.fs
+// Coinbase.check). `reward` is both; `minerReward` and `cgpReward` split it. Contract addresses start with "czen"/"ctzn".
+const isContractAddr = a => typeof a === 'string' && (a.startsWith('czen') || a.startsWith('ctzn'));
+function cgpOfOutputs(outs) {
+  let cgp = 0n;
+  for (const [addr, asset, amount] of outs || []) if (asset === '00' && isContractAddr(addr)) cgp += BigInt(amount);
+  return cgp;
+}
+function blockRow(b) {
+  let cgp = null;
+  try { const row = q.coinbase.get(b.number); if (row) cgp = cgpOfOutputs(JSON.parse(row.outputs)); } catch {}
+  const split = cgp == null ? {} : { cgpReward: String(cgp), minerReward: String(BigInt(b.reward) - cgp) };
+  return { number: b.number, hash: b.hash, parent: b.parent, time: b.time, difficulty: b.difficulty, txs: b.txs,
+    reward: b.reward, ...split, fees: b.fees, moved: b.moved, miner: b.miner };
+}
 const txRow = t => ({ hash: t.hash, block: t.block, index: t.idx, inputs: JSON.parse(t.inputs), outputs: JSON.parse(t.outputs),
   contract: t.contract, command: t.command });
 
 // a block straight from the node (JSON form), in the same shape as the index
 function fromNodeJson(j) {
   const h = j.header, txs = Object.entries(j.transactions || {});
-  let reward = 0n, moved = 0n, miner = null;
+  let reward = 0n, moved = 0n, miner = null, cgpReward = 0n;
   const subsidy = h.blockNumber < 2 ? 0n : (5000000000n >> BigInt(Math.floor((h.blockNumber - 2) / 800000)));
   const rows = txs.map(([hash, tx], idx) => {
     const outs = (tx.outputs || []).map(o => {
@@ -69,6 +83,7 @@ function fromNodeJson(j) {
       const addr = v && typeof v === 'object' ? v.address || null : null, amt = BigInt(o.spend.amount);
       if (o.spend.asset === '00') {
         if (idx === 0 && (kind === 'Coinbase' || kind === 'PK' || kind === 'Contract')) reward += amt;
+        if (idx === 0 && kind === 'Contract') cgpReward += amt;
         else if (kind !== 'Fee') moved += amt;
       }
       if (idx === 0 && !miner && (kind === 'Coinbase' || kind === 'PK')) miner = addr;
@@ -81,7 +96,8 @@ function fromNodeJson(j) {
   });
   return {
     block: { number: h.blockNumber, hash: j.hash, parent: h.parent, time: h.timestamp, difficulty: h.difficulty, txs: rows.length,
-             reward: String(reward), fees: String(reward > subsidy ? reward - subsidy : 0n), moved: String(moved), miner },
+             reward: String(reward), minerReward: String(reward - cgpReward), cgpReward: String(cgpReward),
+             fees: String(reward > subsidy ? reward - subsidy : 0n), moved: String(moved), miner },
     transactions: rows, source: 'node',
   };
 }
