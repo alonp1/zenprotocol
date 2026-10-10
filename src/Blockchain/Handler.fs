@@ -161,11 +161,21 @@ let handleRequest chain (requestId:RequestId) request session timestamp state =
                     let msgBody = CGP.Contract.createPayoutMsgBody (CGP.internalizeRecipient payout)
                     match TransactionHandler.executeContract session TxSkeleton.empty timestamp chain.cgpContractId "Payout" None msgBody state false with
                     | Ok tx ->
-                        let ex = Transaction.toExtended tx
-                        eventX "Miner created the CGP payout transaction {hash}"
-                        >> setField "hash" (Hash.toString ex.txHash)
-                        |> Log.warning
-                        { state with memoryState = { state.memoryState with mempool = MemPool.add ex state.memoryState.mempool } }
+                        // Take the transaction through its byte form, as a transaction that arrives from a wallet or a peer does.
+                        // Serialization.Data.size counts one byte too many for a List (the payout message body holds one), so
+                        // Transaction.toExtended leaves a trailing zero byte in `raw` and its hashes are not the hashes of the bytes
+                        // the block carries: every block with it failed with "commitments mismatch" (testnet block 610, 2026-10-09).
+                        // Reading the bytes back keeps only the bytes that make up the transaction and hashes exactly those.
+                        match Serialization.TransactionExtended.deserialize (Transaction.toExtended tx).raw with
+                        | Some ex ->
+                            eventX "Miner created the CGP payout transaction {hash}"
+                            >> setField "hash" (Hash.toString ex.txHash)
+                            |> Log.warning
+                            { state with memoryState = { state.memoryState with mempool = MemPool.add ex state.memoryState.mempool } }
+                        | None ->
+                            eventX "Could not create the CGP payout transaction: it does not read back from its bytes"
+                            |> Log.error
+                            state
                     | Error e ->
                         eventX "Could not create the CGP payout transaction: {error}"
                         >> setField "error" e
