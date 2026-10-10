@@ -92,6 +92,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     RT.autoFailw "header is required (160 hex characters)"
 
 let cf _ _ _ _ _ _ _ =
-    2019
+    2036
     |> cast nat
     |> C.ret
