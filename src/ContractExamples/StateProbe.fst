@@ -18,6 +18,7 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
   | "set" ->
     begin
     let! r = CR.ofTxSkel txSkeleton in
+    let! _ = incRet 128 () in   // same cost as "setdict": every branch must cost the same
     CR.setStateUpdate (U64 7UL) r
     end
   | "setdict" ->
@@ -36,6 +37,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     end
 
 let cf _ _ _ _ _ _ _ =
-    200
+    160
     |> cast nat
     |> C.ret
