@@ -1,7 +1,7 @@
 name: cgp-devnet
 # A whole CGP cycle on the fast devnet (local chain, 1 miner node): activate the CGP and voting contracts, fund four test voters,
 # run the scenario of wallet/tools/cgp-sim.mjs (allocation vote, nominations, payout votes), then check that the chain goes
-# through the payout block (block 410) and keeps mining. Used to test the miner change that builds the CGP payout transaction.
+# through the payout block (block 610) and keeps mining. Used to test the miner change that builds the CGP payout transaction.
 on:
   workflow_dispatch:
   push:
@@ -25,34 +25,34 @@ jobs:
           echo "block $T after start"; [ -n "$T" ] && [ "$T" -ge 40 ]
       - name: Activate the CGP and voting contracts
         run: bash scripts/testnet-cgp-contracts.sh http://127.0.0.1:20000 devnet 100000
-      - name: Fund the test voters (target interval 4, snapshot 390)
+      - name: Fund the test voters (target interval 6, snapshot 590)
         run: |
           echo "::notice title=tip before funding::$(curl -fs http://127.0.0.1:20000/blockchain/info | head -c 80)"
           cd wallet && npm ci --no-audit --no-fund && cd ..
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
-          cd wallet && node --no-warnings tools/cgp-sim.mjs fund --send --target 390 --node http://127.0.0.1:20000
+          cd wallet && node --no-warnings tools/cgp-sim.mjs fund --send --target 590 --node http://127.0.0.1:20000
       - name: Run the scenario through the payout block
         run: |
           export TESTNET_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
-          cd wallet && CGP_POLL_MS=1000 timeout 5400 node --no-warnings tools/cgp-sim.mjs run --send --target 390 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
-          # the tally is made when the interval's last block is connected: wait a few blocks before reading the winner
-          for i in $(seq 60); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 404 ] && break; sleep 2; done
+          cd wallet && CGP_POLL_MS=1000 timeout 5400 node --no-warnings tools/cgp-sim.mjs run --send --target 590 --node http://127.0.0.1:20000 2>&1 | tee /tmp/sim.txt | tail -n 40
+          # the node puts the winner in its CGP state only around the payout block (610): read it after block 612, when the payout block is done
+          for i in $(seq 60); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 612 ] && break; sleep 2; done
           C=$(curl -fs http://127.0.0.1:20000/blockchain/cgp); echo "cgp after the vote (tip $T): $C"
-          if ! echo "$C" | grep -q recipient; then
+          if ! echo "$C$(curl -fs http://127.0.0.1:20000/blockchain/cgp/history)" | grep -q recipient; then
             echo "::error title=no winner::the scenario did not produce a payout winner, so the payout block is not tested: $C"
-            D=$( { echo "candidates of interval 4: $(curl -fs 'http://127.0.0.1:20000/blockchain/candidates?interval=4' | head -c 700)"; echo "cgp history: $(curl -fs http://127.0.0.1:20000/blockchain/cgp/history | head -c 900)"; echo "sim payout votes:"; TIP=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); echo "tip $TIP; block of each ballot = tip - confirmations + 1:"; grep -E "payout vote|nominates|allocation" /tmp/sim.txt | tail -n 12 | while read -r l; do h=$(echo "$l" | grep -oE "[0-9a-f]{64}"); c=$(curl -fs "http://127.0.0.1:20000/blockchain/transaction?hash=$h" | grep -oE '"confirmations": *[0-9]+' | grep -oE "[0-9]+$"); echo "$l | confirmations ${c:-none} -> block $([ -n "$c" ] && echo $((TIP - c + 1)))"; done; docker exec zen-devnet sh -c 'grep -i -E "payout|nominat|vote|ballot|rejected|failed|invalid" /data/logs/node0.log | grep -v GetBlockChainInfo | tail -n 25 | cut -c1-300'; } )
+            D=$( { echo "candidates of interval 6: $(curl -fs 'http://127.0.0.1:20000/blockchain/candidates?interval=6' | head -c 700)"; echo "cgp history: $(curl -fs http://127.0.0.1:20000/blockchain/cgp/history | head -c 900)"; echo "sim payout votes:"; TIP=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); echo "tip $TIP; block of each ballot = tip - confirmations + 1:"; grep -E "payout vote|nominates|allocation" /tmp/sim.txt | tail -n 12 | while read -r l; do h=$(echo "$l" | grep -oE "[0-9a-f]{64}"); c=$(curl -fs "http://127.0.0.1:20000/blockchain/transaction?hash=$h" | grep -oE '"confirmations": *[0-9]+' | grep -oE "[0-9]+$"); echo "$l | confirmations ${c:-none} -> block $([ -n "$c" ] && echo $((TIP - c + 1)))"; done; docker exec zen-devnet sh -c 'grep -i -E "payout|nominat|vote|ballot|rejected|failed|invalid" /data/logs/node0.log | grep -v GetBlockChainInfo | tail -n 25 | cut -c1-300'; } )
             printf '%s' "$D" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=no winner details::{}"
             exit 1
           fi
       - name: The chain passes the payout block and keeps mining
         run: |
           set +e
-          for i in $(seq 90); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 420 ] && break; sleep 5; done
+          for i in $(seq 90); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 620 ] && break; sleep 5; done
           CGP=$(curl -fs http://127.0.0.1:20000/blockchain/cgp)
           LOG=$(docker exec zen-devnet sh -c 'grep -E "commitments mismatch|Miner created the CGP|Could not create the CGP|No payout|failed validation" /data/logs/node0.log | tail -n 12 | cut -c1-600')
           echo "tip $T; cgp $CGP"; echo "$LOG"
           printf 'tip %s%%0Acgp %s%%0A%s' "$T" "$CGP" "$(echo "$LOG" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')" | xargs -0 -I{} echo "::notice title=cgp payout result::{}"
-          [ -n "$T" ] && [ "$T" -ge 420 ]
+          [ -n "$T" ] && [ "$T" -ge 620 ]
       - name: Sim output
         if: always()
         run: |
