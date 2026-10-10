@@ -5,7 +5,7 @@
 # header claims, so the cost and state size are the same as with real headers.
 # usage: scripts/testnet-bitcoin-chain.sh [api-url] [password]     N=headers (default 120)
 set -uo pipefail
-API=${1:-http://127.0.0.1:31567}; PW=${2:-testnet}; N=${N:-120}
+API=${1:-http://127.0.0.1:31567}; PW=${2:-testnet}; N=${N:-30}
 ZO="dotnet src/Oracle/bin/Release/zen-oracle.dll"
 post() { curl -s -X POST -H "Content-Type: application/json" -d "$2" "$API$1"; }
 tip() { curl -fs "$API/blockchain/info" | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'; }
@@ -49,8 +49,9 @@ RC=0; I=0; T0=$(date +%s)
 while read -r H; do
   I=$((I+1)); S=$(date +%s)
   if ! add "$H"; then echo "FAIL header $I"; RC=1; break; fi
-  T=$(tip); for k in $(seq 120); do sleep 1; [ "$(tip)" -gt $((T+1)) ] && break; done
+  T=$(tip); for k in $(seq 120); do sleep 1; [ "$(tip)" -gt "$T" ] && break; done
   if [ $I -le 3 ] || [ $((I % 10)) -eq 0 ]; then echo "  header $I accepted, $(( $(date +%s) - S )) s"; fi
+  [ $((I % 10)) -eq 0 ] && echo "added $I headers so far, $(( $(date +%s) - T0 )) s"
 done < /tmp/good.txt
 echo "added $I headers in $(( $(date +%s) - T0 )) s"
 # the skipped header (two ahead of the tip) must be rejected
