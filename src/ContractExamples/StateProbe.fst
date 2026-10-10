@@ -48,6 +48,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     end
 
 let cf _ _ _ _ _ _ _ =
-    352
+    369
     |> cast nat
     |> C.ret
