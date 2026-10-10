@@ -78,7 +78,9 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
        | None, _ -> incRet 255 true
        | Some _, Some tip -> hashEq tip parent
        | Some _, None -> incRet 255 false) in
-    if (match st, tipOpt with | Some _, None -> true | _ -> false) then
+    if (match state, st with | Some _, None -> true | _ -> false) then
+      RT.autoFailw "the state is there but is not a dictionary"
+    else if (match st, tipOpt with | Some _, None -> true | _ -> false) then
       RT.autoFailw "the state has no readable tip"
     else if pow && linked then
       let old = (match hdrsOpt with | Some l -> l | None -> []) in
