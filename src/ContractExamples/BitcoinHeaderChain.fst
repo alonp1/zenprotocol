@@ -18,6 +18,7 @@ module RT = Zen.ResultT
 module A = Zen.Array
 module B = Zen.Bitcoin
 module C = Zen.Cost
+module Tx = Zen.TxSkeleton
 
 val hashEq: hash -> hash -> bool `cost` 255
 let hashEq a b =
@@ -55,6 +56,15 @@ let hashEq a b =
     A.item 30 a = A.item 30 b &&
     A.item 31 a = A.item 31 b)
 
+// A transaction is checked against a contract only through inputs the contract owns (or mints): a contract that moves
+// nothing is not run when the block is validated, and its state never changes. So each accepted header mints one unit
+// of the contract's own token and locks it back to the contract.
+val withMarker: contractId -> txSkeleton -> txSkeleton `cost` 192
+let withMarker contractId txSkeleton =
+  let! asset = Zen.Asset.getDefault contractId in
+  Tx.addInput (Mint ({ asset = asset; amount = 1UL })) txSkeleton
+  >>= Tx.lockToContract asset 1UL contractId
+
 let main txSkeleton _ contractId command sender messageBody wallet state =
   let! hex =
     messageBody
@@ -86,7 +96,8 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
       let old = (match hdrsOpt with | Some l -> l | None -> []) in
       let! d0 = D.add "tip" (Hash hash) D.empty in
       let! d1 = D.add "hdrs" (Collection (List (String s :: old))) d0 in
-      let! res = CR.ofTxSkel txSkeleton in
+      let! tx = withMarker contractId txSkeleton in
+      let! res = CR.ofTxSkel tx in
       CR.setStateUpdate (Collection (Dict d1)) res
     else
       RT.autoFailw "not a valid next Bitcoin header"
@@ -94,6 +105,6 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     RT.autoFailw "header is required (160 hex characters)"
 
 let cf _ _ _ _ _ _ _ =
-    2045
+    2237
     |> cast nat
     |> C.ret
