@@ -32,11 +32,13 @@ jobs:
       - name: BitcoinHeaderChain on the devnet
         run: |
           set +e
-          bash scripts/testnet-bitcoin-chain.sh http://127.0.0.1:20000 devnet 2>&1 | tee /tmp/bitcoin-chain.txt | while IFS= read -r l; do case "$l" in *PASS*|*FAIL*|*RESULT*|*added*|*rejected*) echo "::notice title=t3::$l";; esac; done
+          bash scripts/testnet-bitcoin-chain.sh http://127.0.0.1:20000 devnet 2>&1 | tee /tmp/bitcoin-chain.txt | while IFS= read -r l; do case "$l" in *PASS*|*FAIL*|*RESULT*|*added*|*rejected*|tx\ *|mempool*) echo "::notice title=t3::$l";; esac; done
           RC=${PIPESTATUS[0]}
           cat /tmp/bitcoin-chain.txt | tail -n 60
           head -c 7000 /tmp/bitcoin-chain.txt | python3 -c "import sys;print('::notice title=bitcoin chain output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
           exit $RC
       - name: Node log
         if: always()
-        run: docker exec zt-a sh -c 'cat /data/logs/node0.log' 2>&1 | grep -i -E "contract|error|fail|fstar|verif" | tail -n 40
+        run: |
+          docker exec zt-a sh -c 'cat /data/logs/node0.log' 2>&1 | grep -i -E "contract|error|fail|fstar|verif|mempool" | tail -n 40
+          docker exec zt-a sh -c 'cat /data/logs/node0.log' 2>&1 | grep -i -E "failed validation|invalid|rejected|orphan|error" | grep -v GetBlockChainInfo | tail -n 12 | cut -c1-300 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=node errors::{}"

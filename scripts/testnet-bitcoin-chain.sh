@@ -42,7 +42,7 @@ add() {  # header -> 0 if accepted
   BODY=$($ZO body header:s=$1)
   B=$(ADDR="$ADDR" BODY="$BODY" PW="$PW" python3 -c "import json,os;print(json.dumps({'address':os.environ['ADDR'],'command':'add','messageBody':os.environ['BODY'],'options':{'returnAddress':True},'spends':[],'password':os.environ['PW']}))")
   R=$(post /wallet/contract/execute "$B")
-  echo "$R" | grep -Eq '^"[0-9a-f]{64}"$' && return 0
+  if echo "$R" | grep -Eq '^"[0-9a-f]{64}"$'; then LASTTX=$(echo "$R" | tr -d '"'); [ -z "${FIRSTTX:-}" ] && FIRSTTX=$LASTTX; return 0; fi
   echo "  rejected: $(echo "$R" | cut -c1-300)"; return 1
 }
 RC=0; I=0; T0=$(date +%s)
@@ -59,6 +59,9 @@ while read -r H; do
   [ $((I % 10)) -eq 0 ] && echo "added $I headers so far, $(( $(date +%s) - T0 )) s"
 done < /tmp/good.txt
 echo "added $I headers in $(( $(date +%s) - T0 )) s"
+# were the transactions really mined? (a transaction refused after the wallet sent it would leave the state empty)
+for h in $FIRSTTX $LASTTX; do echo "tx $h: $(curl -s "$API/blockchain/transaction?hash=$h" | grep -oE '"confirmations": *[0-9]+' || echo 'not found')"; done
+echo "mempool size: $(curl -s "$API/blockchain/mempool" | grep -o '"txHash"' | wc -l)"
 # the skipped header (two ahead of the tip) must be rejected
 if add "$BAD"; then echo "FAIL: a header that does not follow the tip was accepted"; RC=1; else echo "PASS: header that does not follow the tip rejected"; fi
 echo "RESULT=$RC"; exit $RC
