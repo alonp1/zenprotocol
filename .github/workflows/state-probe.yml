@@ -1,0 +1,44 @@
+name: state-probe
+# BitZen step T3: one testnet node, activate src/ContractExamples/StateProbe.fst and run scripts/testnet-state-probe.sh.
+on:
+  workflow_dispatch:
+  push:
+    branches: [node-upgrade-script]
+    paths: ['src/ContractExamples/StateProbe.fst', 'scripts/testnet-state-probe.sh', '.github/workflows/state-probe.yml']
+
+permissions: { contents: read }
+
+jobs:
+  bitcoin:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      MN: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Build the devnet image (local chain, blocks come fast, so adding one header per block is quick)"
+        run: set -o pipefail; docker build -f Docker/Dockerfile.devnet -t zen-devnet . 2>&1 | tail -n 40
+      - name: Start one devnet node with a miner
+        run: |
+          docker run -d --name zt-a -p 127.0.0.1:20000:20000 -e NODES=1 -e MINER_THREADS=1 zen-devnet
+          for i in $(seq 120); do sleep 5; T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p' || true); [ -n "$T" ] && [ "$T" -ge 20 ] && break; done
+          echo "tip $T"; [ -n "$T" ] && [ "$T" -ge 20 ] || { docker logs zt-a 2>&1 | tail -n 40; exit 1; }
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - name: Build the oracle tool (its body command builds message bodies)
+        run: |
+          dotnet restore src/Oracle/Oracle.fsproj -v q >/dev/null 2>&1
+          dotnet build src/Oracle/Oracle.fsproj -c Release --no-restore -v q 2>&1 | tail -n 3
+      - name: State probe on the devnet
+        run: |
+          set +e
+          bash scripts/testnet-state-probe.sh http://127.0.0.1:20000 devnet 2>&1 | tee /tmp/probe.txt | while IFS= read -r l; do case "$l" in PROBE*) echo "::notice title=t3::$l";; esac; done
+          RC=${PIPESTATUS[0]}
+          cat /tmp/probe.txt | tail -n 60
+          head -c 7000 /tmp/probe.txt | python3 -c "import sys;print('::notice title=probe output::'+'%0A'.join(l.rstrip().replace('%','%25') for l in sys.stdin))"
+          exit $RC
+      - name: Node log
+        if: always()
+        run: |
+          docker exec zt-a sh -c 'cat /data/logs/node0.log' 2>&1 | grep -i -E "contract|error|fail|fstar|verif|mempool" | tail -n 40
+          docker exec zt-a sh -c 'cat /data/logs/node0.log' 2>&1 | grep -i -E "failed validation|invalid|rejected|orphan|error" | grep -v GetBlockChainInfo | tail -n 12 | cut -c1-300 | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=node errors::{}"
