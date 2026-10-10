@@ -17,11 +17,10 @@ module Tx = Zen.TxSkeleton
 // A transaction is checked against a contract only through inputs the contract owns (or mints). A contract that moves
 // nothing is not run when the block is validated, so its state never changes. Each saving command therefore mints one
 // unit of the contract's own token and locks it back to the contract.
-val withMarker: contractId -> txSkeleton -> txSkeleton `cost` 192
 let withMarker contractId txSkeleton =
-  let! asset = Zen.Asset.getDefault contractId in
+  Zen.Asset.getDefault contractId >>= (fun asset ->
   Tx.addInput (Mint ({ asset = asset; amount = 1UL })) txSkeleton
-  >>= Tx.lockToContract asset 1UL contractId
+  >>= Tx.lockToContract asset 1UL contractId)
 
 let main txSkeleton _ contractId command sender messageBody wallet state =
   match command with
