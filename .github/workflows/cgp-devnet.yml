@@ -38,7 +38,12 @@ jobs:
           # the tally is made when the interval's last block is connected: wait a few blocks before reading the winner
           for i in $(seq 60); do T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'); [ -n "$T" ] && [ "$T" -ge 604 ] && break; sleep 2; done
           C=$(curl -fs http://127.0.0.1:20000/blockchain/cgp); echo "cgp after the vote (tip $T): $C"
-          echo "$C" | grep -q recipient || { echo "::error title=no winner::the scenario did not produce a payout winner, so the payout block is not tested: $C"; exit 1; }
+          if ! echo "$C" | grep -q recipient; then
+            echo "::error title=no winner::the scenario did not produce a payout winner, so the payout block is not tested: $C"
+            D=$( { echo "candidates: $(curl -fs http://127.0.0.1:20000/blockchain/candidates | head -c 600)"; docker exec zen-devnet sh -c 'grep -i -E "payout|nominat|vote|ballot|rejected|failed|invalid" /data/logs/node0.log | grep -v GetBlockChainInfo | tail -n 25 | cut -c1-300'; } )
+            printf '%s' "$D" | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g' | xargs -0 -I{} echo "::notice title=no winner details::{}"
+            exit 1
+          fi
       - name: The chain passes the payout block and keeps mining
         run: |
           set +e
