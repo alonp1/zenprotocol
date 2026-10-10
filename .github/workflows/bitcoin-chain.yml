@@ -16,6 +16,7 @@ jobs:
       MN: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art
     steps:
       - uses: actions/checkout@v4
+<<<<<<< HEAD
       - uses: docker/login-action@v3
         with: { registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}' }
       - name: Node image
@@ -26,6 +27,15 @@ jobs:
           tip() { curl -fs http://127.0.0.1:31567/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p'; }
           for i in $(seq 120); do sleep 10; T=$(tip || true); echo "tip: $T"; [ -n "$T" ] && [ "$T" -ge 14 ] && break; done
           [ -n "$T" ] && [ "$T" -ge 14 ]
+=======
+      - name: "Build the devnet image (local chain, blocks come fast, so adding one header per block is quick)"
+        run: set -o pipefail; docker build -f Docker/Dockerfile.devnet -t zen-devnet . 2>&1 | tail -n 40
+      - name: Start one devnet node with a miner
+        run: |
+          docker run -d --name zt-a -p 127.0.0.1:20000:20000 -e NODES=1 -e MINER_THREADS=1 zen-devnet
+          for i in $(seq 120); do sleep 5; T=$(curl -fs http://127.0.0.1:20000/blockchain/info | sed -n 's/.*"blocks": *\([0-9]*\).*/\1/p' || true); [ -n "$T" ] && [ "$T" -ge 20 ] && break; done
+          echo "tip $T"; [ -n "$T" ] && [ "$T" -ge 20 ] || { docker logs zt-a 2>&1 | tail -n 40; exit 1; }
+>>>>>>> dbb329d (Devnet (local chain only): 2 s block interval, so CI can run CGP cycles and per-block contract tests; bitcoin-chain shows build and node errors)
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '10.0.x' }
       - name: Build the oracle tool (its body command builds message bodies)
