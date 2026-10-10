@@ -3,6 +3,7 @@ module Consensus.BlockValidation
 open Consensus
 open Types
 open Infrastructure
+open Infrastructure.LogEvent
 open Result
 open Serialization
 open Chain
@@ -97,8 +98,16 @@ module Commitments =
             if commitments = block.header.commitments then
                 Ok block
             else
+                eventX "commitments mismatch in block {number} (header commitments differ from the block's own roots), {txs} transactions"
+                >> setField "number" block.header.blockNumber
+                >> setField "txs" (List.length block.transactions)
+                |> Log.warning
                 Error "commitments mismatch"
         else
+            eventX "commitments mismatch in block {number} (the merkle roots of the block do not match its transactions), {txs} transactions"
+            >> setField "number" block.header.blockNumber
+            >> setField "txs" (List.length block.transactions)
+            |> Log.warning
             Error "commitments mismatch"
 
 // TODO: Refactor to avoid chained state-passing style

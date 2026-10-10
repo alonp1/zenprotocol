@@ -3,6 +3,7 @@ module Consensus.BlockConnection
 open Consensus
 open Types
 open Infrastructure
+open Infrastructure.LogEvent
 open Result
 open Serialization
 open Chain
@@ -222,6 +223,13 @@ module Commitments =
         if commitments = env.block.header.commitments then
             Ok { state with acs = acs }
         else
+            eventX "commitments mismatch in block {number} (active contract set root differs): the block has {txs} transactions, the root computed here is {acsRoot}, the block header says {expected}, the block's own acs root field is {blockAcsRoot}"
+            >> setField "number" env.block.header.blockNumber
+            >> setField "txs" (List.length env.block.transactions)
+            >> setField "acsRoot" (Hash.toString acsMerkleRoot)
+            >> setField "expected" (Hash.toString env.block.header.commitments)
+            >> setField "blockAcsRoot" (Hash.toString env.block.activeContractSetMerkleRoot)
+            |> Log.warning
             Error "commitments mismatch"
 
 module Weight =

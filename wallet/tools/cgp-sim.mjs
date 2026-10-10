@@ -116,7 +116,7 @@ async function run() {
         if (mine) await go('payout vote ' + x.p.vote, 'Payout', candidateBallot(mine)); else say(`${x.p.name}: nominee ${x.p.vote} is not a candidate (${cands.length} candidates)`);
       }
     }
-    await new Promise(r => setTimeout(r, 15000));
+    await new Promise(r => setTimeout(r, Number(process.env.CGP_POLL_MS || 15000)));
   }
 }
 
