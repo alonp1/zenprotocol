@@ -62,9 +62,9 @@ let main txSkeleton _ contractId command sender messageBody wallet state =
     >?= D.tryFind "header"
     >?= tryString
     in
-  let st = state >!= tryDict in
-  let! tipOpt = st >?= D.tryFind "tip" >?= tryHash in
-  let! hdrsOpt = st >?= D.tryFind "hdrs" >?= tryList in
+  let! st = state >!= tryDict in
+  let! tipOpt = ret st >?= D.tryFind "tip" >?= tryHash in
+  let! hdrsOpt = ret st >?= D.tryFind "hdrs" >?= tryList in
   let! parsed = (match hex with | Some s -> B.parseHeader s | None -> incRet 120 None) in
   match hex, parsed with
   | Some s, Some h ->
